@@ -44,6 +44,10 @@ export default function SuccessPage() {
           {currentSession && (
             <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2 text-sm">
               <div className="flex justify-between">
+                <span className="text-gray-500">订单编号</span>
+                <span className="font-bold text-pink-500">{currentSession.id}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-500">尺寸规格</span>
                 <span className="font-medium">{currentSession.sizeName}</span>
               </div>
@@ -52,9 +56,9 @@ export default function SuccessPage() {
                 <span className="font-medium">{currentSession.currentCount} 张</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">订单时间</span>
+                <span className="text-gray-500">提交时间</span>
                 <span className="font-medium">
-                  {new Date(currentSession.createdAt).toLocaleString('zh-CN')}
+                  {new Date().toLocaleString('zh-CN')}
                 </span>
               </div>
             </div>

@@ -1,19 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { PHOTO_SIZES } from '@/lib/photo-sizes'
-import { useStore } from '@/lib/store'
-import { generateId, cn } from '@/lib/utils'
+import { useStore, Session } from '@/lib/store'
+import { cn } from '@/lib/utils'
 
 export default function SelectSizePage() {
   const router = useRouter()
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [showCountModal, setShowCountModal] = useState(false)
   const [targetCount, setTargetCount] = useState(50)
+  const [orderNumber, setOrderNumber] = useState<string | null>(null)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
+
+  // 获取从查询页传来的订单号
+  useEffect(() => {
+    const pendingOrder = sessionStorage.getItem('pending-order-number')
+    if (pendingOrder) {
+      setOrderNumber(pendingOrder)
+    }
+  }, [])
 
   const handleSelectSize = (sizeId: string) => {
     const size = PHOTO_SIZES.find((s) => s.id === sizeId)
@@ -28,9 +37,12 @@ export default function SelectSizePage() {
     const size = PHOTO_SIZES.find((s) => s.id === selectedSize)
     if (!size) return
 
+    // 使用订单号作为 session ID，如果没有订单号则生成一个
+    const sessionId = orderNumber || `ORDER-${Date.now()}`
+
     // 创建新的上传会话
-    const session = {
-      id: generateId(),
+    const session: Session = {
+      id: sessionId,
       sizeId: size.id,
       sizeName: size.name,
       displaySize: size.displaySize,
@@ -41,6 +53,15 @@ export default function SelectSizePage() {
       ratio: size.ratio,
       createdAt: new Date().toISOString(),
     }
+
+    // 保存到 localStorage（订单记录）
+    const savedOrders = localStorage.getItem('photo-orders')
+    const orders = savedOrders ? JSON.parse(savedOrders) : {}
+    orders[sessionId] = session
+    localStorage.setItem('photo-orders', JSON.stringify(orders))
+
+    // 清除临时存储的订单号
+    sessionStorage.removeItem('pending-order-number')
 
     setCurrentSession(session)
     clearImages()
@@ -67,6 +88,15 @@ export default function SelectSizePage() {
 
       {/* Content */}
       <div className="max-w-2xl mx-auto p-4">
+        {/* 订单号显示 */}
+        {orderNumber && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-700">
+              🆕 正在为订单 <span className="font-bold">{orderNumber}</span> 创建照片上传
+            </p>
+          </div>
+        )}
+        
         <p className="text-gray-600 mb-6 text-center">
           请选择您要冲印的照片尺寸规格
         </p>

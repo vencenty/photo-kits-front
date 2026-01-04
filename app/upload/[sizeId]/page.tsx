@@ -28,9 +28,9 @@ export default function UploadPage() {
   const [isBatchMode, setIsBatchMode] = useState(false)
 
   useEffect(() => {
-    // 如果没有 session，跳转回尺寸选择页
+    // 如果没有 session，跳转回首页查询订单
     if (!currentSession || currentSession.sizeId !== sizeId) {
-      router.push('/select-size')
+      router.push('/')
     }
   }, [currentSession, sizeId, router])
 
@@ -121,7 +121,19 @@ export default function UploadPage() {
   }
 
   const handleConfirmSubmit = () => {
-    // TODO: 提交到服务器
+    if (!currentSession) return
+    
+    // 更新订单状态到 localStorage
+    const savedOrders = localStorage.getItem('photo-orders')
+    const orders = savedOrders ? JSON.parse(savedOrders) : {}
+    orders[currentSession.id] = {
+      ...currentSession,
+      currentCount: totalPrintCount,
+      status: 'submitted',
+      submittedAt: new Date().toISOString(),
+    }
+    localStorage.setItem('photo-orders', JSON.stringify(orders))
+    
     setShowSubmitModal(false)
     router.push('/success')
   }
@@ -145,7 +157,7 @@ export default function UploadPage() {
                 {isBatchMode ? '批量编辑' : '已上传照片'}
               </h1>
               <p className="text-sm text-gray-500">
-                {currentSession.sizeName} ({currentSession.displaySize})
+                订单: {currentSession.id} · {currentSession.sizeName}
               </p>
             </div>
           </div>

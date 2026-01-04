@@ -23,7 +23,7 @@ import { PhotoSize } from './store'
 export const PHOTO_SIZES: PhotoSize[] = [
   {
     id: 'fuji-5',
-    name: '富士标准5寸',
+    name: '标准5寸',
     width: 1500,
     height: 1050,
     displaySize: '12.7×8.9cm',
@@ -40,7 +40,7 @@ export const PHOTO_SIZES: PhotoSize[] = [
   },
   {
     id: 'fuji-6',
-    name: '富士标准6寸',
+    name: '标准6寸',
     width: 1800,
     height: 1200,
     displaySize: '15.2×10.2cm',
