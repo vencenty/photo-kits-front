@@ -31,11 +31,11 @@ export interface Session {
   id: string
   sizeId: string
   sizeName: string
-  displaySize: string
   targetCount: number
   currentCount: number
   canvasWidth: number
   canvasHeight: number
+  unit: string
   ratio: number
   createdAt: string
 }
@@ -46,17 +46,12 @@ export interface PhotoSize {
   name: string
   width: number
   height: number
-  displaySize: string
+  unit: string
   ratio: number
-  minCount: number
-  price?: number
-  // 样式配置（可选）
-  color?: string          // 卡片主色调
-  bgColor?: string        // 背景颜色
   icon?: string           // 图标 emoji
   description?: string    // 描述文字
   recommended?: boolean   // 是否推荐
-  badge?: string          // 角标文字（如"热门"）
+  badge?: string          // 角标文字
 }
 
 interface StoreState {
@@ -69,6 +64,7 @@ interface StoreState {
   images: Image[]
   addImages: (images: Image[]) => void
   updateImage: (id: string, updates: Partial<Image>) => void
+  updateImages: (updates: { id: string; updates: Partial<Image> }[]) => void // 批量更新
   deleteImage: (id: string) => void
   clearImages: () => void
 
@@ -111,6 +107,17 @@ export const useStore = create<StoreState>()(
             img.id === id ? { ...img, ...updates } : img
           ),
         })),
+      // 批量更新图片 - 一次性更新多张图片
+      updateImages: (updatesList) =>
+        set((state) => {
+          const updatesMap = new Map(updatesList.map(u => [u.id, u.updates]))
+          return {
+            images: state.images.map((img) => {
+              const imgUpdates = updatesMap.get(img.id)
+              return imgUpdates ? { ...img, ...imgUpdates } : img
+            }),
+          }
+        }),
       deleteImage: (id) =>
         set((state) => ({
           images: state.images.filter((img) => img.id !== id),
@@ -149,12 +156,21 @@ export const useStore = create<StoreState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         currentSession: state.currentSession,
+        // 只保存图片元数据，不保存图片数据（base64太大会导致 QuotaExceededError）
         images: state.images.map(img => ({
-          ...img,
-          file: undefined, // 不持久化 File 对象
+          id: img.id,
+          sessionId: img.sessionId,
+          filename: img.filename,
+          width: img.width,
+          height: img.height,
+          printCount: img.printCount,
+          editState: img.editState,
+          // 不保存这些大数据:
+          // originalUrl: undefined,
+          // thumbnailUrl: undefined,
+          // file: undefined,
         })),
       }),
     }
   )
 )
-

@@ -3,16 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, Search, Loader2 } from 'lucide-react'
-import { useStore } from '@/lib/store'
 
 export default function Home() {
   const [orderNumber, setOrderNumber] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
-  
-  const currentSession = useStore((state) => state.currentSession)
-  const setCurrentSession = useStore((state) => state.setCurrentSession)
 
   const handleQuery = async () => {
     const trimmedOrder = orderNumber.trim()
@@ -25,26 +21,14 @@ export default function Home() {
     setError('')
 
     // 模拟查询延迟
-    await new Promise(resolve => setTimeout(resolve, 800))
+    await new Promise(resolve => setTimeout(resolve, 500))
 
-    // 检查本地是否有这个订单号对应的 session
-    // 从 localStorage 读取所有保存的订单
-    const savedOrders = localStorage.getItem('photo-orders')
-    const orders = savedOrders ? JSON.parse(savedOrders) : {}
-
-    if (orders[trimmedOrder]) {
-      // 订单存在，恢复 session 并跳转到上传页
-      const existingSession = orders[trimmedOrder]
-      setCurrentSession(existingSession)
-      setIsLoading(false)
-      router.push(`/upload/${existingSession.sizeId}`)
-    } else {
-      // 订单不存在，保存订单号并跳转到尺寸选择页创建订单
-      setIsLoading(false)
-      // 把订单号存储到 sessionStorage，等选择尺寸后使用
-      sessionStorage.setItem('pending-order-number', trimmedOrder)
-      router.push('/select-size')
-    }
+    // 保存订单号到 sessionStorage，供 select-size 页面使用
+    sessionStorage.setItem('pending-order-number', trimmedOrder)
+    
+    setIsLoading(false)
+    // 无论订单是否存在，都跳转到尺寸选择页
+    router.push('/select-size')
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -110,9 +94,7 @@ export default function Home() {
           {/* 说明文字 */}
           <div className="mt-4 p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500 leading-relaxed">
-              📌 输入订单编号查询：
-              <br />• 订单存在 → 继续上传照片
-              <br />• 订单不存在 → 创建新订单
+              📌 输入订单编号后，选择照片尺寸开始上传
             </p>
           </div>
         </div>
@@ -125,4 +107,3 @@ export default function Home() {
     </div>
   )
 }
-

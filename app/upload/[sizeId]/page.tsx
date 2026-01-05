@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Plus, X, Minus, Upload, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare } from 'lucide-react'
 import Image from 'next/image'
-import { useStore } from '@/lib/store'
+import { useStore, EditState } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
+
+// 裁剪模式类型
+type CropMode = 'center' | 'full' | 'lomo'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -20,12 +23,20 @@ export default function UploadPage() {
   const images = useStore((state) => state.images)
   const addImages = useStore((state) => state.addImages)
   const updateImage = useStore((state) => state.updateImage)
+  const updateImages = useStore((state) => state.updateImages)
   const deleteImage = useStore((state) => state.deleteImage)
   const selectedIds = useStore((state) => state.selectedIds)
   const toggleSelection = useStore((state) => state.toggleSelection)
   const clearSelection = useStore((state) => state.clearSelection)
+  const selectAll = useStore((state) => state.selectAll)
 
   const [isBatchMode, setIsBatchMode] = useState(false)
+  const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
+
+  // 获取相纸尺寸配置
+  const photoSize = getPhotoSizeById(sizeId)
+  // 计算相纸比例
+  const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
 
   useEffect(() => {
     // 如果没有 session，跳转回首页查询订单
@@ -46,8 +57,8 @@ export default function UploadPage() {
         // 获取原图尺寸
         const dimensions = await getImageDimensions(file)
         
-        // 压缩生成缩略图
-        const { dataUrl } = await compressImage(file, 400, 0.8)
+        // 压缩生成缩略图（用于显示）
+        const { dataUrl } = await compressImage(file, 600, 0.85)
 
         // 使用原图的 dataUrl 作为临时 URL
         const originalDataUrl = await new Promise<string>((resolve) => {
@@ -55,6 +66,17 @@ export default function UploadPage() {
           reader.onload = (e) => resolve(e.target?.result as string)
           reader.readAsDataURL(file)
         })
+
+        // 默认使用居中裁剪模式
+        const defaultEditState: EditState = {
+          mode: 'center',
+          scale: 1,
+          x: 0,
+          y: 0,
+          rotation: 0,
+          canvasWidth: currentSession.canvasWidth,
+          canvasHeight: currentSession.canvasHeight,
+        }
 
         const image: ImageType = {
           id: generateId(),
@@ -65,7 +87,7 @@ export default function UploadPage() {
           width: dimensions.width,
           height: dimensions.height,
           printCount: 1,
-          editState: null,
+          editState: defaultEditState,
           file,
         }
 
@@ -112,8 +134,52 @@ export default function UploadPage() {
     }
   }
 
+  // 全选/取消全选
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === images.length) {
+      // 已全选，取消全选
+      clearSelection()
+    } else {
+      // 全选
+      selectAll()
+    }
+  }
+
+  const isAllSelected = images.length > 0 && selectedIds.length === images.length
+
+  // 批量应用裁剪模式 - 使用批量更新
+  const handleApplyBatchCrop = (mode: CropMode) => {
+    const newEditState: EditState = {
+      mode,
+      scale: 1,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      canvasWidth: currentSession?.canvasWidth || 127,
+      canvasHeight: currentSession?.canvasHeight || 89,
+    }
+
+    if (selectedIds.length === 0) {
+      // 如果没有选中，应用到所有图片
+      const updates = images.map((img) => ({
+        id: img.id,
+        updates: { editState: newEditState },
+      }))
+      updateImages(updates)
+    } else {
+      // 应用到选中的图片
+      const updates = selectedIds.map((id) => ({
+        id,
+        updates: { editState: newEditState },
+      }))
+      updateImages(updates)
+    }
+    setBatchCropMode(mode)
+  }
+
   const totalPrintCount = images.reduce((sum, img) => sum + img.printCount, 0)
-  const canSubmit = currentSession && totalPrintCount >= currentSession.targetCount
+  // 只要有图片就可以提交
+  const canSubmit = images.length > 0
 
   const handleSubmit = () => {
     if (!canSubmit) return
@@ -138,132 +204,199 @@ export default function UploadPage() {
     router.push('/success')
   }
 
+  // 返回尺寸选择页
+  const handleBack = () => {
+    router.push('/select-size')
+  }
+
+  // 获取图片的裁剪模式
+  const getImageCropMode = (image: ImageType): CropMode => {
+    return image.editState?.mode || 'center'
+  }
+
+  // 渲染图片预览（根据裁剪模式）
+  const renderImagePreview = (image: ImageType) => {
+    const mode = getImageCropMode(image)
+    
+    // 根据模式返回不同的样式
+    if (mode === 'center') {
+      // 居中裁剪 - cover 效果
+      return (
+        <div className="absolute inset-0 bg-white">
+          <Image
+            src={image.thumbnailUrl}
+            alt={image.filename}
+            fill
+            className="object-cover"
+          />
+        </div>
+      )
+    } else if (mode === 'full') {
+      // 打印整图/两侧留白 - contain 效果
+      return (
+        <div className="absolute inset-0 bg-white flex items-center justify-center">
+          <Image
+            src={image.thumbnailUrl}
+            alt={image.filename}
+            fill
+            className="object-contain"
+          />
+        </div>
+      )
+    } else {
+      // 四周留白 - contain + 内边距效果
+      return (
+        <div className="absolute inset-0 bg-white p-2">
+          <div className="relative w-full h-full">
+            <Image
+              src={image.thumbnailUrl}
+              alt={image.filename}
+              fill
+              className="object-contain"
+            />
+          </div>
+        </div>
+      )
+    }
+  }
+
   if (!currentSession) return null
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center">
+    <div className="min-h-screen bg-[#f5f5f5] pb-32">
+      {/* Header - 仿微信小程序风格 */}
+      <div className="bg-white sticky top-0 z-10">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => router.back()}
-              className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={handleBack}
+              className="p-1 text-gray-700"
             >
               <ArrowLeft className="w-6 h-6" />
             </button>
-            <div>
-              <h1 className="text-lg font-semibold">
-                {isBatchMode ? '批量编辑' : '已上传照片'}
-              </h1>
-              <p className="text-sm text-gray-500">
-                订单: {currentSession.id} · {currentSession.sizeName}
-              </p>
-            </div>
+            <button
+              onClick={() => router.push('/')}
+              className="p-1 text-gray-700"
+            >
+              <Home className="w-6 h-6" />
+            </button>
+            <span className="text-lg font-medium ml-2">已上传照片</span>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">进度</p>
-            <p className="text-lg font-semibold">
-              <span className={totalPrintCount >= currentSession.targetCount ? 'text-green-500' : 'text-pink-500'}>
-                {totalPrintCount}
-              </span>
-              <span className="text-gray-400">/{currentSession.targetCount}</span>
-            </p>
+          <div className="text-sm text-gray-500">
+            {currentSession.sizeName}·{currentSession.canvasWidth}×{currentSession.canvasHeight}{currentSession.unit || 'mm'}
           </div>
         </div>
       </div>
 
-      {/* Alert */}
-      <div className="bg-orange-50 border-l-4 border-orange-400 p-4">
-        <div className="flex items-start max-w-4xl mx-auto">
-          <AlertCircle className="w-5 h-5 text-orange-500 mr-2 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-orange-700">
-            请进行预览或编辑，未显示部分将不会冲印；预览图已压缩，冲印时会使用原图
-          </p>
-        </div>
+      {/* 提示横幅 */}
+      <div className="bg-[#fff8f5] px-4 py-3 flex items-start gap-2">
+        <span className="text-xl">🔥</span>
+        <p className="text-sm text-[#ff6b35] leading-relaxed flex-1">
+          请进行预览或编辑，未显示部分将不会冲印；预览图已压缩，冲印时会使用原图
+        </p>
       </div>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto p-4">
+      {/* 图片列表 */}
+      <div className="px-3 pt-3">
         {images.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20">
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <Upload className="w-12 h-12 text-gray-400" />
             </div>
             <p className="text-gray-500 mb-6">还没有上传照片</p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-6 py-3 gradient-primary text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"
+              className="px-6 py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
             >
               开始上传
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-2">
             {images.map((image) => (
               <div
                 key={image.id}
-                className={`relative bg-white rounded-lg overflow-hidden shadow-sm ${
+                className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
                   isBatchMode ? 'cursor-pointer' : ''
-                } ${selectedIds.includes(image.id) ? 'ring-4 ring-pink-500' : ''}`}
+                } ${selectedIds.includes(image.id) ? 'ring-2 ring-[#ff4d6d]' : ''}`}
                 onClick={() => isBatchMode && toggleSelection(image.id)}
               >
-                {/* Image */}
-                <div className="relative aspect-[4/3]">
-                  <Image
-                    src={image.thumbnailUrl}
-                    alt={image.filename}
-                    fill
-                    className="object-cover"
-                  />
+                {/* 图片容器 */}
+                <div 
+                  className="relative bg-white"
+                  style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
+                >
+                  {renderImagePreview(image)}
+                  
+                  {/* 删除按钮 - 右上角深灰色圆形 */}
                   {!isBatchMode && (
                     <button
-                      onClick={() => handleDelete(image.id)}
-                      className="absolute top-2 right-2 w-8 h-8 bg-gray-800/60 hover:bg-gray-800 rounded-full flex items-center justify-center transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(image.id)
+                      }}
+                      className="absolute top-2 right-2 w-6 h-6 bg-[#666] rounded-full flex items-center justify-center z-10"
                     >
-                      <X className="w-5 h-5 text-white" />
+                      <X className="w-4 h-4 text-white" />
                     </button>
                   )}
-                  {isBatchMode && selectedIds.includes(image.id) && (
-                    <div className="absolute top-2 right-2 w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
+                  
+                  {/* 批量模式选中标记 */}
+                  {isBatchMode && (
+                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
+                      selectedIds.includes(image.id) 
+                        ? 'bg-[#ff4d6d]' 
+                        : 'bg-gray-400/80'
+                    }`}>
+                      {selectedIds.includes(image.id) && (
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
                     </div>
                   )}
-                </div>
 
-                {!isBatchMode && (
-                  <>
-                    {/* Count Control */}
-                    <div className="p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                  {/* 数量控制 - 图片底部内嵌 */}
+                  {!isBatchMode && (
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
+                      <div className="flex items-center bg-[#e8e8e8] rounded-full">
                         <button
-                          onClick={() => handleCountChange(image.id, -1)}
-                          className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCountChange(image.id, -1)
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-gray-600"
                         >
                           <Minus className="w-4 h-4" />
                         </button>
-                        <span className="w-8 text-center font-semibold">
+                        <span className="w-6 text-center text-sm font-medium text-gray-700">
                           {image.printCount}
                         </span>
                         <button
-                          onClick={() => handleCountChange(image.id, 1)}
-                          className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCountChange(image.id, 1)
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-gray-600"
                         >
                           <Plus className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    {/* Edit Button */}
-                    <button
-                      onClick={() => handleEdit(image.id)}
-                      className="w-full py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm font-medium transition-colors"
-                    >
-                      编辑
-                    </button>
-                  </>
+                {/* 编辑按钮 - 卡片底部独立区域 */}
+                {!isBatchMode && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEdit(image.id)
+                    }}
+                    className="w-full py-2.5 bg-[#f5f5f5] text-gray-600 text-sm font-medium"
+                  >
+                    编辑
+                  </button>
                 )}
               </div>
             ))}
@@ -271,57 +404,152 @@ export default function UploadPage() {
         )}
       </div>
 
-      {/* Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg">
-        <div className="max-w-4xl mx-auto p-4">
+      {/* 底部操作栏 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
+        <div className="px-4 py-3">
           {!isBatchMode ? (
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setIsBatchMode(true)
-                  clearSelection()
-                }}
-                className="px-6 py-3 bg-white border-2 border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-                disabled={images.length === 0}
-              >
-                批量编辑
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 py-3 gradient-primary text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Plus className="w-5 h-5" />
-                继续上传 ({totalPrintCount}/{currentSession.targetCount})
-              </button>
-            </div>
+            <>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setIsBatchMode(true)
+                    clearSelection()
+                    setBatchCropMode(null)
+                  }}
+                  className="text-[#ff4d6d] font-medium text-sm whitespace-nowrap"
+                  disabled={images.length === 0}
+                >
+                  批量编辑
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium text-base"
+                >
+                  继续上传(已上传{totalPrintCount}张)
+                </button>
+              </div>
+              
+              {/* 提交按钮 - 有图片就显示 */}
+              {canSubmit && (
+                <button
+                  onClick={handleSubmit}
+                  className="w-full mt-3 py-3 bg-green-500 text-white rounded-full font-medium"
+                >
+                  确认提交打印({totalPrintCount}张)
+                </button>
+              )}
+            </>
           ) : (
-            <div className="flex gap-3">
+            <>
+              {/* 批量编辑模式 - 全选按钮 */}
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={handleToggleSelectAll}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${
+                    isAllSelected
+                      ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
+                      : 'border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  <span>{isAllSelected ? '取消全选' : '全选'}</span>
+                </button>
+                <span className="text-sm text-gray-500">
+                  已选择 {selectedIds.length}/{images.length} 张
+                </span>
+              </div>
+
+              {/* 裁剪样式选择 */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex gap-2 flex-wrap">
+                  {/* 居中裁剪 */}
+                  <button
+                    onClick={() => handleApplyBatchCrop('center')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
+                      batchCropMode === 'center'
+                        ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
+                        : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                      batchCropMode === 'center' ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
+                    }`}>
+                      {batchCropMode === 'center' && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <span>居中裁剪</span>
+                  </button>
+
+                  {/* 打印整图 */}
+                  <button
+                    onClick={() => handleApplyBatchCrop('full')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
+                      batchCropMode === 'full'
+                        ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
+                        : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                      batchCropMode === 'full' ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
+                    }`}>
+                      {batchCropMode === 'full' && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <span>打印整图</span>
+                  </button>
+
+                  {/* 四周留白 */}
+                  <button
+                    onClick={() => handleApplyBatchCrop('lomo')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
+                      batchCropMode === 'lomo'
+                        ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
+                        : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                      batchCropMode === 'lomo' ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
+                    }`}>
+                      {batchCropMode === 'lomo' && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <span>四周留白</span>
+                  </button>
+                </div>
+
+                {/* 删除按钮 */}
+                <button
+                  onClick={handleBatchDelete}
+                  className={`text-sm whitespace-nowrap font-medium ${
+                    selectedIds.length === 0 ? 'text-gray-400' : 'text-red-500'
+                  }`}
+                  disabled={selectedIds.length === 0}
+                >
+                  删除
+                </button>
+              </div>
+
+              {/* 返回按钮 */}
               <button
                 onClick={() => {
                   setIsBatchMode(false)
                   clearSelection()
+                  setBatchCropMode(null)
                 }}
-                className="px-6 py-3 bg-white border-2 border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                className="w-full py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
               >
-                取消
+                完成
               </button>
-              <button
-                onClick={handleBatchDelete}
-                className="px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={selectedIds.length === 0}
-              >
-                删除选中 ({selectedIds.length})
-              </button>
-            </div>
-          )}
-
-          {!isBatchMode && canSubmit && (
-            <button
-              onClick={handleSubmit}
-              className="w-full mt-3 py-3 bg-green-500 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"
-            >
-              已确认，提交打印 ({totalPrintCount}/{currentSession.targetCount})
-            </button>
+            </>
           )}
         </div>
       </div>
@@ -343,7 +571,7 @@ export default function UploadPage() {
             <h3 className="text-xl font-bold mb-4 text-center">温馨提示</h3>
             <div className="space-y-3 mb-6 text-sm">
               <p className="text-blue-600">
-                本系统采用"全自动接单生产，没有人工参与设计和审核"。
+                本系统采用"<span className="text-blue-600 underline">全自动接单生产，没有人工参与设计和审核</span>"。
               </p>
               <p className="text-red-600 font-semibold">
                 预览效果即为打印效果，工厂开始生产后，订单不能修改！
@@ -355,13 +583,13 @@ export default function UploadPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowSubmitModal(false)}
-                className="flex-1 py-3 border-2 border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium hover:bg-gray-50 transition-colors"
               >
                 再检查一下
               </button>
               <button
                 onClick={handleConfirmSubmit}
-                className="flex-1 py-3 gradient-primary text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"
+                className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
               >
                 确认提交
               </button>
@@ -372,4 +600,3 @@ export default function UploadPage() {
     </div>
   )
 }
-
