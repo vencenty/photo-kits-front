@@ -37,6 +37,8 @@ export default function UploadPage() {
   const photoSize = getPhotoSizeById(sizeId)
   // 计算相纸比例
   const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
+  // 判断相纸是否为竖向（高度 > 宽度）
+  const isPaperPortrait = currentSession ? currentSession.canvasHeight > currentSession.canvasWidth : false
 
   useEffect(() => {
     // 如果没有 session，跳转回首页查询订单
@@ -44,6 +46,20 @@ export default function UploadPage() {
       router.push('/')
     }
   }, [currentSession, sizeId, router])
+
+  /**
+   * 判断图片是否需要旋转
+   * 规则：如果相纸是竖向的，而图片是横向的，则需要旋转90度
+   */
+  const shouldRotateImage = (imageWidth: number, imageHeight: number): boolean => {
+    if (!currentSession) return false
+    
+    const isPaperPortrait = currentSession.canvasHeight > currentSession.canvasWidth
+    const isImageLandscape = imageWidth > imageHeight
+    
+    // 如果相纸是竖向的，且图片是横向的，需要旋转
+    return isPaperPortrait && isImageLandscape
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -67,13 +83,16 @@ export default function UploadPage() {
           reader.readAsDataURL(file)
         })
 
+        // 判断是否需要旋转（横图在竖向相纸上自动旋转）
+        const needsRotation = shouldRotateImage(dimensions.width, dimensions.height)
+
         // 默认使用居中裁剪模式
         const defaultEditState: EditState = {
           mode: 'center',
           scale: 1,
           x: 0,
           y: 0,
-          rotation: 0,
+          rotation: needsRotation ? 90 : 0, // 横图自动旋转90度
           canvasWidth: currentSession.canvasWidth,
           canvasHeight: currentSession.canvasHeight,
         }
@@ -149,31 +168,34 @@ export default function UploadPage() {
 
   // 批量应用裁剪模式 - 使用批量更新
   const handleApplyBatchCrop = (mode: CropMode) => {
-    const newEditState: EditState = {
-      mode,
-      scale: 1,
-      x: 0,
-      y: 0,
-      rotation: 0,
-      canvasWidth: currentSession?.canvasWidth || 127,
-      canvasHeight: currentSession?.canvasHeight || 89,
-    }
+    // 获取目标图片列表
+    const targetIds = selectedIds.length === 0 ? images.map(img => img.id) : selectedIds
 
-    if (selectedIds.length === 0) {
-      // 如果没有选中，应用到所有图片
-      const updates = images.map((img) => ({
-        id: img.id,
-        updates: { editState: newEditState },
-      }))
-      updateImages(updates)
-    } else {
-      // 应用到选中的图片
-      const updates = selectedIds.map((id) => ({
+    // 为每张图片计算正确的旋转角度
+    const updates = targetIds.map((id) => {
+      const img = images.find(i => i.id === id)
+      if (!img) return null
+
+      // 保持原有的旋转设置（横图自动旋转的逻辑）
+      const currentRotation = img.editState?.rotation || 0
+      
+      const newEditState: EditState = {
+        mode,
+        scale: 1,
+        x: 0,
+        y: 0,
+        rotation: currentRotation, // 保持旋转角度
+        canvasWidth: currentSession?.canvasWidth || 127,
+        canvasHeight: currentSession?.canvasHeight || 89,
+      }
+
+      return {
         id,
         updates: { editState: newEditState },
-      }))
-      updateImages(updates)
-    }
+      }
+    }).filter(Boolean) as { id: string; updates: { editState: EditState } }[]
+
+    updateImages(updates)
     setBatchCropMode(mode)
   }
 
@@ -214,45 +236,64 @@ export default function UploadPage() {
     return image.editState?.mode || 'center'
   }
 
-  // 渲染图片预览（根据裁剪模式）
+  // 获取图片的旋转角度
+  const getImageRotation = (image: ImageType): number => {
+    return image.editState?.rotation || 0
+  }
+
+  // 渲染图片预览（根据裁剪模式和旋转角度）
   const renderImagePreview = (image: ImageType) => {
     const mode = getImageCropMode(image)
+    const rotation = getImageRotation(image)
     
+    // 旋转样式
+    const rotationStyle = rotation !== 0 ? {
+      transform: `rotate(${rotation}deg)`,
+      // 旋转后需要调整尺寸以适应容器
+      ...(rotation === 90 || rotation === -90 || rotation === 270 ? {
+        width: '100%',
+        height: '100%',
+      } : {})
+    } : {}
+
     // 根据模式返回不同的样式
     if (mode === 'center') {
       // 居中裁剪 - cover 效果
       return (
-        <div className="absolute inset-0 bg-white">
+        <div className="absolute inset-0 bg-white overflow-hidden">
           <Image
             src={image.thumbnailUrl}
             alt={image.filename}
             fill
             className="object-cover"
+            style={rotationStyle}
           />
         </div>
       )
     } else if (mode === 'full') {
       // 打印整图/两侧留白 - contain 效果
       return (
-        <div className="absolute inset-0 bg-white flex items-center justify-center">
+        <div className="absolute inset-0 bg-white flex items-center justify-center overflow-hidden">
           <Image
             src={image.thumbnailUrl}
             alt={image.filename}
             fill
             className="object-contain"
+            style={rotationStyle}
           />
         </div>
       )
     } else {
       // 四周留白 - contain + 内边距效果
       return (
-        <div className="absolute inset-0 bg-white p-2">
+        <div className="absolute inset-0 bg-white p-2 overflow-hidden">
           <div className="relative w-full h-full">
             <Image
               src={image.thumbnailUrl}
               alt={image.filename}
               fill
               className="object-contain"
+              style={rotationStyle}
             />
           </div>
         </div>
@@ -263,7 +304,7 @@ export default function UploadPage() {
   if (!currentSession) return null
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] pb-32">
+    <div className="min-h-screen bg-[#f5f5f5] pb-32 overscroll-none">
       {/* Header - 仿微信小程序风格 */}
       <div className="bg-white sticky top-0 z-10">
         <div className="flex items-center justify-between px-4 py-3">
@@ -356,6 +397,15 @@ export default function UploadPage() {
                     </div>
                   )}
 
+                  {/* 旋转标记 - 显示图片已被自动旋转 */}
+                  {!isBatchMode && getImageRotation(image) !== 0 && (
+                    <div className="absolute top-2 left-2 w-6 h-6 bg-blue-500/80 rounded-full flex items-center justify-center z-10">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                  )}
+
                   {/* 数量控制 - 图片底部内嵌 */}
                   {!isBatchMode && (
                     <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
@@ -405,8 +455,8 @@ export default function UploadPage() {
       </div>
 
       {/* 底部操作栏 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-        <div className="px-4 py-3">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20">
+        <div className="px-4 py-3 safe-area-inset-bottom">
           {!isBatchMode ? (
             <>
               <div className="flex items-center gap-3">
