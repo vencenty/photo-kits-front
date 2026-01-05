@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { useStore } from '@/lib/store'
+import { useStore, type PhotoTransform, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 
 export default function EditPage() {
@@ -15,7 +15,7 @@ export default function EditPage() {
   const currentSession = useStore((state) => state.currentSession)
   const updateImage = useStore((state) => state.updateImage)
 
-  const [image, setImage] = useState<any>(null)
+  const [image, setImage] = useState<Image | null>(null)
 
   useEffect(() => {
     const foundImage = images.find((img) => img.id === imageId)
@@ -26,8 +26,20 @@ export default function EditPage() {
     setImage(foundImage)
   }, [imageId, images, router])
 
-  const handleSave = (editState: any) => {
-    updateImage(imageId, { editState })
+  const handleSave = (transform: PhotoTransform) => {
+    // 保存变换信息，同时也更新旧的 editState 保持兼容
+    updateImage(imageId, { 
+      transform,
+      editState: {
+        mode: transform.styleType,
+        scale: 1, // 这些值已经在 transform 中了
+        x: 0,
+        y: 0,
+        rotation: 0,
+        canvasWidth: transform.outputWidth,
+        canvasHeight: transform.outputHeight,
+      }
+    })
     router.back()
   }
 

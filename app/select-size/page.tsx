@@ -2,25 +2,33 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ImageIcon } from 'lucide-react'
-import { PHOTO_SIZES } from '@/lib/photo-sizes'
+import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check } from 'lucide-react'
+import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
 
-// 每个尺寸的上传统计
-interface SizeStats {
-  [sizeId: string]: {
-    imageCount: number
-    totalPrintCount: number
-  }
+// 已添加的规格项
+interface AddedSize {
+  id: string
+  paperId: string
+  paperName: string
+  sizeId: string
+  sizeName: string
+  width: number
+  height: number
+  imageCount: number
+  totalPrintCount: number
 }
 
 export default function SelectSizePage() {
   const router = useRouter()
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
-  const [sizeStats, setSizeStats] = useState<SizeStats>({})
+  const [addedSizes, setAddedSizes] = useState<AddedSize[]>([])
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
+  const [selectedSize, setSelectedSize] = useState<string | null>(null)
+  const [showToast, setShowToast] = useState<string | null>(null)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
-  const images = useStore((state) => state.images)
 
   // 获取从查询页传来的订单号
   useEffect(() => {
@@ -30,82 +38,160 @@ export default function SelectSizePage() {
     }
   }, [])
 
-  // 计算每个尺寸的上传统计
+  // 加载已添加的规格
   useEffect(() => {
     if (!orderNumber) return
 
-    // 从 localStorage 读取该订单下所有尺寸的数据
     const savedOrders = localStorage.getItem('photo-orders')
     const orders = savedOrders ? JSON.parse(savedOrders) : {}
     
-    // 从 photo-upload-storage 读取图片数据
     const uploadStorage = localStorage.getItem('photo-upload-storage')
     const storageData = uploadStorage ? JSON.parse(uploadStorage) : { state: { images: [] } }
     const allImages = storageData.state?.images || []
 
-    const stats: SizeStats = {}
+    const sizes: AddedSize[] = []
 
-    // 遍历所有保存的订单，找到属于当前订单号的
     Object.keys(orders).forEach((orderId) => {
-      // 订单ID格式：orderNumber-sizeId 或直接是 orderNumber
-      if (orderId === orderNumber || orderId.startsWith(`${orderNumber}-`)) {
+      if (orderId.startsWith(`${orderNumber}-`)) {
         const session = orders[orderId]
         const sizeId = session.sizeId
         
-        // 计算该 session 下的图片数量
-        const sessionImages = allImages.filter((img: any) => img.sessionId === orderId)
-        const imageCount = sessionImages.length
-        const totalPrintCount = sessionImages.reduce((sum: number, img: any) => sum + (img.printCount || 1), 0)
+        // 解析相纸和尺寸信息
+        const parts = sizeId.split('-')
+        const sizeKey = parts[parts.length - 1]
+        const paperKey = parts.slice(0, -1).join('-')
+        
+        const paper = PAPER_TYPES.find(p => p.id === paperKey)
+        const size = SIZE_OPTIONS.find(s => s.id === sizeKey)
+        
+        if (paper && size) {
+          const sessionImages = allImages.filter((img: any) => img.sessionId === orderId)
+          const imageCount = sessionImages.length
+          const totalPrintCount = sessionImages.reduce((sum: number, img: any) => sum + (img.printCount || 1), 0)
 
-        if (stats[sizeId]) {
-          stats[sizeId].imageCount += imageCount
-          stats[sizeId].totalPrintCount += totalPrintCount
-        } else {
-          stats[sizeId] = { imageCount, totalPrintCount }
+          sizes.push({
+            id: sizeId,
+            paperId: paperKey,
+            paperName: paper.name,
+            sizeId: sizeKey,
+            sizeName: size.name,
+            width: size.width,
+            height: size.height,
+            imageCount,
+            totalPrintCount,
+          })
         }
       }
     })
 
-    setSizeStats(stats)
+    setAddedSizes(sizes)
   }, [orderNumber])
 
-  const handleSelectSize = (sizeId: string) => {
-    const size = PHOTO_SIZES.find((s) => s.id === sizeId)
-    if (!size) return
+  // 显示 toast 提示
+  const showToastMessage = (message: string) => {
+    setShowToast(message)
+    setTimeout(() => setShowToast(null), 2500)
+  }
 
-    // 使用 orderNumber-sizeId 作为唯一的 session ID
+  // 添加新规格（不跳转）
+  const handleAddSize = () => {
+    if (!selectedPaper || !selectedSize || !orderNumber) return
+
+    const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
+    const size = SIZE_OPTIONS.find(s => s.id === selectedSize)
+    if (!paper || !size) return
+
+    const fullSizeId = generateSizeId(selectedPaper, selectedSize)
+    
+    // 检查是否已存在
+    const exists = addedSizes.some(s => s.id === fullSizeId)
+    
+    if (exists) {
+      showToastMessage(`${paper.name} ${size.name} 规格已存在`)
+      setShowAddModal(false)
+      setSelectedPaper(null)
+      setSelectedSize(null)
+      return
+    }
+
+    // 添加新规格到列表（不跳转）
+    const newSize: AddedSize = {
+      id: fullSizeId,
+      paperId: selectedPaper,
+      paperName: paper.name,
+      sizeId: selectedSize,
+      sizeName: size.name,
+      width: size.width,
+      height: size.height,
+      imageCount: 0,
+      totalPrintCount: 0,
+    }
+
+    // 预先创建 session 并保存到 localStorage
+    const photoSize = getPhotoSizeById(fullSizeId)
+    if (photoSize) {
+      const sessionId = `${orderNumber}-${fullSizeId}`
+      const savedOrders = localStorage.getItem('photo-orders')
+      const orders = savedOrders ? JSON.parse(savedOrders) : {}
+      
+      if (!orders[sessionId]) {
+        const session: Session = {
+          id: sessionId,
+          sizeId: photoSize.id,
+          sizeName: photoSize.name,
+          targetCount: 0,
+          currentCount: 0,
+          canvasWidth: photoSize.width,
+          canvasHeight: photoSize.height,
+          unit: photoSize.unit,
+          ratio: photoSize.ratio,
+          createdAt: new Date().toISOString(),
+        }
+        orders[sessionId] = session
+        localStorage.setItem('photo-orders', JSON.stringify(orders))
+      }
+    }
+
+    setAddedSizes([...addedSizes, newSize])
+    setShowAddModal(false)
+    setSelectedPaper(null)
+    setSelectedSize(null)
+    
+    showToastMessage(`已添加 ${paper.name} ${size.name}`)
+  }
+
+  // 选择规格进入上传
+  const handleSelectSize = (sizeId: string) => {
+    const photoSize = getPhotoSizeById(sizeId)
+    if (!photoSize) return
+
     const sessionId = orderNumber ? `${orderNumber}-${sizeId}` : `ORDER-${Date.now()}-${sizeId}`
 
-    // 检查是否已存在该 session
     const savedOrders = localStorage.getItem('photo-orders')
     const orders = savedOrders ? JSON.parse(savedOrders) : {}
 
     if (orders[sessionId]) {
-      // 已存在，恢复 session
       const existingSession = orders[sessionId]
       const session = {
         ...existingSession,
-        unit: existingSession.unit || 'mm',
-        ratio: existingSession.ratio || size.ratio,
+        unit: existingSession.unit || '毫米',
+        ratio: existingSession.ratio || photoSize.ratio,
       }
       setCurrentSession(session)
-      // 不清除图片，保留已上传的
     } else {
-      // 创建新的上传会话
       const session: Session = {
         id: sessionId,
-        sizeId: size.id,
-        sizeName: size.name,
-        targetCount: 0, // 不限制数量
+        sizeId: photoSize.id,
+        sizeName: photoSize.name,
+        targetCount: 0,
         currentCount: 0,
-        canvasWidth: size.width,
-        canvasHeight: size.height,
-        unit: size.unit,
-        ratio: size.ratio,
+        canvasWidth: photoSize.width,
+        canvasHeight: photoSize.height,
+        unit: photoSize.unit,
+        ratio: photoSize.ratio,
         createdAt: new Date().toISOString(),
       }
 
-      // 保存到 localStorage
       orders[sessionId] = session
       localStorage.setItem('photo-orders', JSON.stringify(orders))
 
@@ -113,136 +199,258 @@ export default function SelectSizePage() {
       clearImages()
     }
 
-    // 清除临时存储的订单号（但保留以便返回时使用）
-    // sessionStorage.removeItem('pending-order-number')
-
-    // 直接跳转到上传页面
     router.push(`/upload/${sizeId}`)
   }
 
+  // 删除规格
+  const handleDeleteSize = (sizeId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    const sizeInfo = addedSizes.find(s => s.id === sizeId)
+    if (!sizeInfo) return
+
+    // 始终弹出确认对话框
+    const confirmMessage = sizeInfo.imageCount > 0
+      ? `确定要删除「${sizeInfo.paperName} ${sizeInfo.sizeName}」吗？\n该规格已上传 ${sizeInfo.imageCount} 张照片，删除后数据将丢失。`
+      : `确定要删除「${sizeInfo.paperName} ${sizeInfo.sizeName}」规格吗？`
+
+    if (!confirm(confirmMessage)) {
+      return
+    }
+
+    // 从 localStorage 中删除
+    const sessionId = `${orderNumber}-${sizeId}`
+    const savedOrders = localStorage.getItem('photo-orders')
+    const orders = savedOrders ? JSON.parse(savedOrders) : {}
+    delete orders[sessionId]
+    localStorage.setItem('photo-orders', JSON.stringify(orders))
+
+    // 更新列表
+    setAddedSizes(addedSizes.filter(s => s.id !== sizeId))
+    showToastMessage('已删除规格')
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f5f5f5]">
       {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center">
+      <div className="bg-white sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center px-4 py-3">
           <button
             onClick={() => router.push('/')}
-            className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="mr-3 p-1 text-gray-700"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-xl font-semibold">选择照片尺寸</h1>
+          <h1 className="text-lg font-semibold">选择照片尺寸</h1>
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-2xl mx-auto p-4">
+      <div className="p-4">
         {/* 订单号显示 */}
         {orderNumber && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-700">
               📦 订单编号：<span className="font-bold">{orderNumber}</span>
             </p>
           </div>
         )}
-        
-        <p className="text-gray-600 mb-6 text-center">
-          请选择您要冲印的照片尺寸规格
-        </p>
 
-        <div className="grid gap-4">
-          {PHOTO_SIZES.map((size) => {
-            const stats = sizeStats[size.id]
-            const hasUploads = stats && stats.imageCount > 0
+        {/* 添加规格按钮 */}
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-[#ff4d6d] hover:bg-pink-50 transition-colors active:scale-[0.98]"
+        >
+          <Plus className="w-5 h-5" />
+          <span className="font-medium">添加规格</span>
+        </button>
 
-            return (
+        {/* 已添加的规格列表 */}
+        {addedSizes.length === 0 ? (
+          <div className="py-20 text-center">
+            <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+              <ImageIcon className="w-10 h-10 text-gray-300" />
+            </div>
+            <p className="text-gray-400 mb-1">还没有添加规格</p>
+            <p className="text-sm text-gray-300">点击上方"添加规格"开始选择</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {addedSizes.map((size) => (
               <div
                 key={size.id}
-                className="relative bg-white rounded-xl p-6 shadow-sm hover:shadow-lg transition-all cursor-pointer border-2 border-transparent hover:border-pink-200 hover:scale-[1.02]"
+                className="bg-white rounded-xl overflow-hidden shadow-sm active:bg-gray-50 transition-colors"
                 onClick={() => handleSelectSize(size.id)}
               >
-                {/* 推荐标签 */}
-                {size.recommended && !hasUploads && (
-                  <div className="absolute -top-2 -right-2 px-3 py-1 bg-red-500 text-white text-xs font-semibold rounded-full shadow-md">
-                    推荐
+                <div className="flex items-center px-4 py-3">
+                  {/* 左侧信息 */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base font-bold text-gray-800">{size.paperName}</span>
+                      <span className="text-lg font-bold text-[#ff4d6d]">{size.sizeName}</span>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {size.width}×{size.height}mm
+                    </div>
                   </div>
-                )}
-                
-                {/* 角标 */}
-                {size.badge && !size.recommended && !hasUploads && (
-                  <div className="absolute -top-2 -right-2 px-3 py-1 bg-pink-500 text-white text-xs font-semibold rounded-full shadow-md">
-                    {size.badge}
-                  </div>
-                )}
 
-                {/* 已上传数量标签 */}
-                {hasUploads && (
-                  <div className="absolute -top-2 -right-2 px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-full shadow-md flex items-center gap-1">
-                    <ImageIcon className="w-3 h-3" />
-                    {stats.totalPrintCount}张
-                  </div>
-                )}
-
-                <div className="flex items-start gap-4">
-                  {/* 图标 */}
-                  {size.icon && (
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0 ${
-                      hasUploads ? 'bg-green-50' : 'bg-pink-50'
+                  {/* 右侧：上传数量 + 箭头 */}
+                  <div className="flex items-center gap-3">
+                    {/* 上传数量 */}
+                    <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                      size.totalPrintCount > 0
+                        ? 'bg-green-50 text-green-600'
+                        : 'bg-gray-100 text-gray-400'
                     }`}>
-                      {size.icon}
-                    </div>
-                  )}
-
-                  {/* 内容 */}
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-800 mb-1">
-                      {size.name}
-                    </h3>
-                    
-                    {/* 描述 */}
-                    {size.description && (
-                      <p className="text-sm text-gray-600 mb-2">
-                        {size.description}
-                      </p>
-                    )}
-                    
-                    {/* 规格信息 */}
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-medium">
-                        {size.width}×{size.height} {size.unit}
+                      <span className="flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        已上传{size.totalPrintCount}张
                       </span>
-                      
-                      {/* 已上传提示 */}
-                      {hasUploads && (
-                        <span className="px-2 py-1 bg-green-100 rounded text-green-700 font-medium">
-                          已上传 {stats.imageCount} 张照片
-                        </span>
-                      )}
                     </div>
-                  </div>
 
-                  {/* 箭头 */}
-                  <div className="flex-shrink-0 self-center">
-                    <svg 
-                      className={`w-6 h-6 ${hasUploads ? 'text-green-500' : 'text-gray-400'}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
+                    {/* 删除按钮 */}
+                    <button
+                      onClick={(e) => handleDeleteSize(size.id, e)}
+                      className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                     >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M9 5l7 7-7 7" 
-                      />
-                    </svg>
+                      <X className="w-4 h-4" />
+                    </button>
+
+                    {/* 箭头 */}
+                    <ChevronRight className="w-5 h-5 text-gray-300" />
                   </div>
                 </div>
               </div>
-            )
-          })}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {/* 底部提示 */}
+        {addedSizes.length > 0 && (
+          <p className="mt-6 text-center text-xs text-gray-400">
+            点击规格可进入上传页面
+          </p>
+        )}
       </div>
+
+      {/* Toast 提示 */}
+      {showToast && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
+          <div className="px-6 py-3 bg-black/75 text-white text-sm rounded-lg shadow-lg flex items-center gap-2">
+            <Check className="w-4 h-4" />
+            {showToast}
+          </div>
+        </div>
+      )}
+
+      {/* 添加规格弹窗 */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setShowAddModal(false)}>
+          <div 
+            className="bg-white w-full rounded-t-2xl max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 弹窗头部 */}
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0">
+              <button
+                onClick={() => {
+                  setShowAddModal(false)
+                  setSelectedPaper(null)
+                  setSelectedSize(null)
+                }}
+                className="text-gray-500 text-sm"
+              >
+                取消
+              </button>
+              <h3 className="font-semibold">添加规格</h3>
+              <button
+                onClick={handleAddSize}
+                disabled={!selectedPaper || !selectedSize}
+                className={`text-sm font-medium ${
+                  selectedPaper && selectedSize
+                    ? 'text-[#ff4d6d]'
+                    : 'text-gray-300'
+                }`}
+              >
+                添加
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto">
+              {/* 选择相纸 */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">选择相纸</h4>
+                <div className="flex flex-wrap gap-2">
+                  {PAPER_TYPES.map((paper) => (
+                    <button
+                      key={paper.id}
+                      onClick={() => setSelectedPaper(paper.id)}
+                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        selectedPaper === paper.id
+                          ? 'bg-[#ff4d6d] text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {paper.name}
+                    </button>
+                  ))}
+                </div>
+                {selectedPaper && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    {PAPER_TYPES.find(p => p.id === selectedPaper)?.description}
+                  </p>
+                )}
+              </div>
+
+              {/* 选择尺寸 */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">选择尺寸</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {SIZE_OPTIONS.map((size) => (
+                    <button
+                      key={size.id}
+                      onClick={() => setSelectedSize(size.id)}
+                      className={`py-3 rounded-lg text-sm font-medium transition-all ${
+                        selectedSize === size.id
+                          ? 'bg-[#ff4d6d] text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {size.name}
+                    </button>
+                  ))}
+                </div>
+                {selectedSize && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    尺寸：{SIZE_OPTIONS.find(s => s.id === selectedSize)?.width}×
+                    {SIZE_OPTIONS.find(s => s.id === selectedSize)?.height}mm
+                  </p>
+                )}
+              </div>
+
+              {/* 当前选择预览 */}
+              {selectedPaper && selectedSize && (
+                <div className="mt-6 p-4 bg-gradient-to-r from-pink-50 to-orange-50 rounded-xl border border-pink-100">
+                  <p className="text-sm text-gray-600">
+                    当前选择：
+                    <span className="font-bold text-[#ff4d6d]">
+                      {' '}{PAPER_TYPES.find(p => p.id === selectedPaper)?.name}{' '}
+                      {SIZE_OPTIONS.find(s => s.id === selectedSize)?.name}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {SIZE_OPTIONS.find(s => s.id === selectedSize)?.width}×
+                    {SIZE_OPTIONS.find(s => s.id === selectedSize)?.height}mm
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 底部安全区域 */}
+            <div className="h-8 bg-white" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

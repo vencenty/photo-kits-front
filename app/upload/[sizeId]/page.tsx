@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare } from 'lucide-react'
 import Image from 'next/image'
-import { useStore, EditState } from '@/lib/store'
+import { useStore, EditState, parseAffineMatrix } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
+import { PhotoCanvas, type StyleType } from '@/components/PhotoCanvas'
+import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
 
 // 裁剪模式类型
 type CropMode = 'center' | 'full' | 'lomo'
@@ -20,7 +22,9 @@ export default function UploadPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false)
 
   const currentSession = useStore((state) => state.currentSession)
-  const images = useStore((state) => state.images)
+  const allImages = useStore((state) => state.images)
+  // 过滤掉没有 thumbnailUrl 的图片（可能是从 localStorage 恢复的不完整数据）
+  const images = allImages.filter(img => img.thumbnailUrl)
   const addImages = useStore((state) => state.addImages)
   const updateImage = useStore((state) => state.updateImage)
   const updateImages = useStore((state) => state.updateImages)
@@ -49,16 +53,17 @@ export default function UploadPage() {
 
   /**
    * 判断图片是否需要旋转
-   * 规则：如果相纸是竖向的，而图片是横向的，则需要旋转90度
+   * 规则：横图（宽>高）默认旋转为竖图，正方形图片不旋转
    */
   const shouldRotateImage = (imageWidth: number, imageHeight: number): boolean => {
-    if (!currentSession) return false
+    // 正方形图片不旋转（宽高差异小于5%视为正方形）
+    const ratio = imageWidth / imageHeight
+    const isSquare = ratio >= 0.95 && ratio <= 1.05
+    if (isSquare) return false
     
-    const isPaperPortrait = currentSession.canvasHeight > currentSession.canvasWidth
+    // 横图（宽 > 高）需要旋转为竖图
     const isImageLandscape = imageWidth > imageHeight
-    
-    // 如果相纸是竖向的，且图片是横向的，需要旋转
-    return isPaperPortrait && isImageLandscape
+    return isImageLandscape
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,6 +112,7 @@ export default function UploadPage() {
           height: dimensions.height,
           printCount: 1,
           editState: defaultEditState,
+          autoRotated: needsRotation, // 横图自动旋转标记
           file,
         }
 
@@ -233,72 +239,17 @@ export default function UploadPage() {
 
   // 获取图片的裁剪模式
   const getImageCropMode = (image: ImageType): CropMode => {
+    if (image.transform?.styleType) return image.transform.styleType
     return image.editState?.mode || 'center'
   }
 
   // 获取图片的旋转角度
   const getImageRotation = (image: ImageType): number => {
-    return image.editState?.rotation || 0
-  }
-
-  // 渲染图片预览（根据裁剪模式和旋转角度）
-  const renderImagePreview = (image: ImageType) => {
-    const mode = getImageCropMode(image)
-    const rotation = getImageRotation(image)
-    
-    // 旋转样式
-    const rotationStyle = rotation !== 0 ? {
-      transform: `rotate(${rotation}deg)`,
-      // 旋转后需要调整尺寸以适应容器
-      ...(rotation === 90 || rotation === -90 || rotation === 270 ? {
-        width: '100%',
-        height: '100%',
-      } : {})
-    } : {}
-
-    // 根据模式返回不同的样式
-    if (mode === 'center') {
-      // 居中裁剪 - cover 效果
-      return (
-        <div className="absolute inset-0 bg-white overflow-hidden">
-          <Image
-            src={image.thumbnailUrl}
-            alt={image.filename}
-            fill
-            className="object-cover"
-            style={rotationStyle}
-          />
-        </div>
-      )
-    } else if (mode === 'full') {
-      // 打印整图/两侧留白 - contain 效果
-      return (
-        <div className="absolute inset-0 bg-white flex items-center justify-center overflow-hidden">
-          <Image
-            src={image.thumbnailUrl}
-            alt={image.filename}
-            fill
-            className="object-contain"
-            style={rotationStyle}
-          />
-        </div>
-      )
-    } else {
-      // 四周留白 - contain + 内边距效果
-      return (
-        <div className="absolute inset-0 bg-white p-2 overflow-hidden">
-          <div className="relative w-full h-full">
-            <Image
-              src={image.thumbnailUrl}
-              alt={image.filename}
-              fill
-              className="object-contain"
-              style={rotationStyle}
-            />
-          </div>
-        </div>
-      )
+    if (image.transform) {
+      const { rotation } = parseAffineMatrix(image.transform.matrix)
+      return rotation
     }
+    return image.editState?.rotation || 0
   }
 
   if (!currentSession) return null
@@ -367,7 +318,11 @@ export default function UploadPage() {
                   className="relative bg-white"
                   style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
                 >
-                  {renderImagePreview(image)}
+                  <PhotoPreviewCard 
+                    image={image} 
+                    aspectRatio={paperRatio}
+                    onClick={!isBatchMode ? () => handleEdit(image.id) : undefined}
+                  />
                   
                   {/* 删除按钮 - 右上角深灰色圆形 */}
                   {!isBatchMode && (

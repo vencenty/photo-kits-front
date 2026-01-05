@@ -1,7 +1,80 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
-// 编辑状态类型
+// ==================== 仿射矩阵相关 ====================
+
+/**
+ * 仿射变换矩阵
+ * 格式: [a, b, c, d, tx, ty]
+ * 
+ * 矩阵表示:
+ * | a  c  tx |
+ * | b  d  ty |
+ * | 0  0  1  |
+ */
+export type AffineMatrix = [number, number, number, number, number, number]
+
+/** 单位矩阵（无变换） */
+export const IDENTITY_MATRIX: AffineMatrix = [1, 0, 0, 1, 0, 0]
+
+/** 从 scale, rotation, position 创建仿射矩阵 */
+export function createAffineMatrix(
+  scaleX: number,
+  scaleY: number,
+  rotation: number, // 角度
+  tx: number,
+  ty: number
+): AffineMatrix {
+  const rad = (rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  
+  return [
+    scaleX * cos,   // a
+    scaleX * sin,   // b
+    -scaleY * sin,  // c
+    scaleY * cos,   // d
+    tx,             // tx
+    ty              // ty
+  ]
+}
+
+/** 从仿射矩阵解析出 scale, rotation, position */
+export function parseAffineMatrix(matrix: AffineMatrix): {
+  scaleX: number
+  scaleY: number
+  rotation: number
+  tx: number
+  ty: number
+} {
+  const [a, b, c, d, tx, ty] = matrix
+  
+  const scaleX = Math.sqrt(a * a + b * b)
+  const scaleY = Math.sqrt(c * c + d * d)
+  const rotation = Math.atan2(b, a) * (180 / Math.PI)
+  
+  return { scaleX, scaleY, rotation, tx, ty }
+}
+
+// ==================== 照片变换类型 ====================
+
+/** 照片变换信息（使用仿射矩阵） */
+export interface PhotoTransform {
+  /** 仿射变换矩阵 [a, b, c, d, tx, ty] */
+  matrix: AffineMatrix
+  /** 输出宽度（像素） */
+  outputWidth: number
+  /** 输出高度（像素） */
+  outputHeight: number
+  /** 原图宽度（像素） */
+  sourceWidth: number
+  /** 原图高度（像素） */
+  sourceHeight: number
+  /** 样式类型 */
+  styleType: 'center' | 'full' | 'lomo'
+}
+
+// 编辑状态类型（兼容旧版本）
 export interface EditState {
   mode: 'center' | 'full' | 'lomo'
   scale: number
@@ -23,6 +96,8 @@ export interface Image {
   height: number
   printCount: number
   editState: EditState | null
+  transform?: PhotoTransform // 仿射变换信息（新版本）
+  autoRotated?: boolean // 是否自动旋转（横图转竖图）
   file?: File // 前端保存原始文件对象
 }
 

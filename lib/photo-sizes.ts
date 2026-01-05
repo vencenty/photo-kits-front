@@ -1,67 +1,108 @@
 import { PhotoSize } from './store'
 
 /**
- * 照片尺寸配置
- * 
- * 配置说明：
- * - id: 唯一标识符
- * - name: 显示名称
- * - width/height: 尺寸数值
- * - unit: 单位（如 '毫米'）
- * - ratio: 宽高比
- * - icon: 图标 emoji
- * - description: 描述文字
- * - recommended: 是否推荐
- * - badge: 角标文字
+ * 相纸类型配置
  */
-
-export const PHOTO_SIZES: PhotoSize[] = [
-  {
-    id: 'fujifilm-5inch',
-    name: '标准5寸',
-    width: 89,
-    height: 127,
-    unit: '毫米',
-    ratio: 7/10,
-    icon: '📸',
-    description: '经典5寸照片，适合日常留念',
-    recommended: true,
-    badge: '热门',
-  },
-  {
-    id: 'fujifilm-6inch',
-    name: '标准6寸',
-    width: 102,
-    height: 152,
-    unit: '毫米',
-    ratio: 2/3,
-    icon: '🖼️',
-    description: '6寸大照片，细节更清晰',
-  },
-  {
-    id: 'square',
-    name: '正方形 (Ins风)',
-    width: 100,
-    height: 100,
-    unit: '毫米',
-    ratio: 1,
-    icon: '⬜',
-    description: 'Instagram风格，时尚潮流',
-    badge: '流行',
-  },
-  {
-    id: 'polaroid',
-    name: '拍立得尺寸',
-    width: 86,
-    height: 108,
-    unit: '毫米',
-    ratio: 86/108,
-    icon: '📷',
-    description: '复古拍立得，文艺范十足',
-  },
-]
-
-export function getPhotoSizeById(id: string): PhotoSize | undefined {
-  return PHOTO_SIZES.find((size) => size.id === id)
+export interface PaperType {
+  id: string
+  name: string
+  description?: string
 }
 
+export const PAPER_TYPES: PaperType[] = [
+  { id: 'fuji-glossy', name: '富士光面', description: '光泽亮丽，色彩鲜艳' },
+  { id: 'fuji-matte', name: '富士绒面', description: '柔和质感，不反光' },
+  { id: 'pantone-glossy', name: '泛太克光面', description: '专业级色彩还原' },
+]
+
+/**
+ * 照片尺寸配置
+ */
+export interface SizeOption {
+  id: string
+  name: string
+  width: number  // mm
+  height: number // mm
+  ratio: number
+}
+
+export const SIZE_OPTIONS: SizeOption[] = [
+  { "id": "3inch", "name": "3寸", "width": 63.5, "height": 89, "ratio": 63.5/89 },
+  { "id": "4inch", "name": "4寸", "width": 76, "height": 102, "ratio": 76/102 },
+  { "id": "5inch", "name": "5寸", "width": 89, "height": 127, "ratio": 89/127 },
+  { "id": "6inch", "name": "6寸", "width": 102, "height": 152, "ratio": 102/152 },
+  { "id": "7inch", "name": "7寸", "width": 127, "height": 178, "ratio": 127/178 },
+  { "id": "8inch", "name": "8寸", "width": 152, "height": 203, "ratio": 152/203 },
+  { "id": "10inch", "name": "10寸", "width": 203, "height": 254, "ratio": 203/254 },
+  { "id": "A4", "name": "A4", "width": 210, "height": 297, "ratio": 210/297 }
+]
+
+
+/**
+ * 生成完整的照片规格 ID
+ */
+export function generateSizeId(paperId: string, sizeId: string): string {
+  return `${paperId}-${sizeId}`
+}
+
+/**
+ * 解析照片规格 ID
+ */
+export function parseSizeId(fullId: string): { paperId: string; sizeId: string } | null {
+  const parts = fullId.split('-')
+  if (parts.length < 2) return null
+  
+  // 格式: fuji-glossy-5inch
+  const sizeId = parts[parts.length - 1]
+  const paperId = parts.slice(0, -1).join('-')
+  
+  return { paperId, sizeId }
+}
+
+/**
+ * 根据相纸类型和尺寸生成完整的 PhotoSize 配置
+ */
+export function createPhotoSize(paperType: PaperType, sizeOption: SizeOption): PhotoSize {
+  const id = generateSizeId(paperType.id, sizeOption.id)
+  return {
+    id,
+    name: `${paperType.name} ${sizeOption.name}`,
+    width: sizeOption.width,
+    height: sizeOption.height,
+    unit: '毫米',
+    ratio: sizeOption.ratio,
+    description: `${sizeOption.width}×${sizeOption.height}mm`,
+  }
+}
+
+/**
+ * 根据 ID 获取完整的照片规格配置
+ */
+export function getPhotoSizeById(id: string): PhotoSize | undefined {
+  const parsed = parseSizeId(id)
+  if (!parsed) return undefined
+  
+  const paperType = PAPER_TYPES.find(p => p.id === parsed.paperId)
+  const sizeOption = SIZE_OPTIONS.find(s => s.id === parsed.sizeId)
+  
+  if (!paperType || !sizeOption) return undefined
+  
+  return createPhotoSize(paperType, sizeOption)
+}
+
+/**
+ * 旧的 PHOTO_SIZES 兼容（保留用于向后兼容）
+ */
+export const PHOTO_SIZES: PhotoSize[] = [
+  {
+    id: 'fuji-glossy-5inch',
+    name: '富士光面 5寸',
+    width: 127,
+    height: 89,
+    unit: '毫米',
+    ratio: 127/89,
+    icon: '📸',
+    description: '127×89mm',
+    recommended: true,
+  },
+]
