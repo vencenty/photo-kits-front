@@ -11,6 +11,29 @@ interface PhotoPreviewCardProps {
   onClick?: () => void
 }
 
+/**
+ * 给 OSS URL 添加压缩参数
+ * 使用阿里云 OSS 图片处理服务进行压缩
+ * 参数: w_300 宽度300px, q_80 质量80%, f_webp webp格式
+ */
+function getCompressedImageUrl(url: string): string {
+  if (!url) return url
+  
+  // 如果是 data URL 或本地文件，不处理
+  if (url.startsWith('data:') || url.startsWith('blob:')) {
+    return url
+  }
+  
+  // 如果是 OSS URL，添加图片处理参数
+  // 阿里云 OSS 图片处理参数格式: ?x-oss-process=image/resize,w_300/quality,q_80/format,webp
+  if (url.includes('aliyuncs.com') || url.includes('oss-proxy') || url.includes('vencenty.cc')) {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}x-oss-process=image/resize,w_300/quality,q_80/format,webp`
+  }
+  
+  return url
+}
+
 export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 })
@@ -67,6 +90,9 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
 
   // 获取样式类型
   const styleType: StyleType = image.transform?.styleType || image.editState?.mode || 'center'
+  
+  // 获取压缩后的图片 URL（用于列表显示）
+  const compressedUrl = getCompressedImageUrl(image.thumbnailUrl)
 
   return (
     <div 
@@ -76,7 +102,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
     >
       {isClient && stageSize.width > 0 && stageSize.height > 0 && (
         <PhotoCanvas
-          imageUrl={image.thumbnailUrl}
+          imageUrl={compressedUrl}
           imageSize={{ width: image.width, height: image.height }}
           stageSize={stageSize}
           styleType={styleType}

@@ -104,6 +104,7 @@ export interface Image {
 // 会话类型
 export interface Session {
   id: string
+  orderNo: string // 订单号
   sizeId: string
   sizeName: string
   targetCount: number

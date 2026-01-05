@@ -2,14 +2,23 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare } from 'lucide-react'
-import Image from 'next/image'
+import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useStore, EditState, parseAffineMatrix } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
-import { PhotoCanvas, type StyleType } from '@/components/PhotoCanvas'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
+import { 
+  getOssSignature, 
+  uploadToOss, 
+  addPhotoToOrder, 
+  updatePhoto, 
+  deletePhotoFromOrder, 
+  submitOrder,
+  listPhotos,
+  OssSignature,
+  PhotoTransform
+} from '@/lib/api'
 
 // 裁剪模式类型
 type CropMode = 'center' | 'full' | 'lomo'
@@ -20,15 +29,24 @@ export default function UploadPage() {
   const sizeId = params.sizeId as string
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingPhotos, setIsLoadingPhotos] = useState(true)
+  const [ossSignature, setOssSignature] = useState<OssSignature | null>(null)
+  const loadedRef = useRef(false) // 防止重复加载
 
   const currentSession = useStore((state) => state.currentSession)
   const allImages = useStore((state) => state.images)
-  // 过滤掉没有 thumbnailUrl 的图片（可能是从 localStorage 恢复的不完整数据）
-  const images = allImages.filter(img => img.thumbnailUrl)
+  // 过滤当前 session 的图片（有 thumbnailUrl 或 originalUrl）
+  const images = allImages.filter(img => 
+    (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
+  )
   const addImages = useStore((state) => state.addImages)
   const updateImage = useStore((state) => state.updateImage)
   const updateImages = useStore((state) => state.updateImages)
   const deleteImage = useStore((state) => state.deleteImage)
+  const clearImages = useStore((state) => state.clearImages)
   const selectedIds = useStore((state) => state.selectedIds)
   const toggleSelection = useStore((state) => state.toggleSelection)
   const clearSelection = useStore((state) => state.clearSelection)
@@ -41,8 +59,18 @@ export default function UploadPage() {
   const photoSize = getPhotoSizeById(sizeId)
   // 计算相纸比例
   const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
-  // 判断相纸是否为竖向（高度 > 宽度）
-  const isPaperPortrait = currentSession ? currentSession.canvasHeight > currentSession.canvasWidth : false
+
+  // 获取订单号
+  const getOrderSn = useCallback(() => {
+    if (!currentSession) return ''
+    // 优先使用 orderNo 字段
+    if (currentSession.orderNo) {
+      return currentSession.orderNo
+    }
+    // 兼容旧版本：从 sessionId 解析（格式: orderSn-specId）
+    const parts = currentSession.id.split('-')
+    return parts[0] || ''
+  }, [currentSession])
 
   useEffect(() => {
     // 如果没有 session，跳转回首页查询订单
@@ -51,17 +79,104 @@ export default function UploadPage() {
     }
   }, [currentSession, sizeId, router])
 
+  // 从后端加载已上传的照片
+  useEffect(() => {
+    const loadPhotosFromServer = async () => {
+      if (!currentSession || loadedRef.current) return
+      
+      const orderSn = getOrderSn()
+      const specId = currentSession.sizeId
+      
+      if (!orderSn) {
+        setIsLoadingPhotos(false)
+        return
+      }
+
+      loadedRef.current = true
+      setIsLoadingPhotos(true)
+
+      try {
+        const result = await listPhotos(orderSn, specId)
+        
+        if (result.photos && result.photos.length > 0) {
+          // 获取当前 session 已有的图片 ID
+          const existingIds = new Set(
+            allImages
+              .filter(img => img.sessionId === currentSession.id)
+              .map(img => img.id)
+          )
+
+          // 转换后端数据为前端 Image 格式
+          const serverImages: ImageType[] = result.photos
+            .filter(photo => !existingIds.has(photo.photoId)) // 过滤掉已存在的
+            .map(photo => {
+              // 解析 editState
+              const editState: EditState = {
+                mode: (photo.cropMode as CropMode) || 'center',
+                scale: 1,
+                x: 0,
+                y: 0,
+                rotation: photo.autoRotated ? 90 : 0,
+                canvasWidth: currentSession.canvasWidth,
+                canvasHeight: currentSession.canvasHeight,
+              }
+
+              return {
+                id: photo.photoId,
+                sessionId: currentSession.id,
+                originalUrl: photo.url,
+                thumbnailUrl: photo.url, // 使用原图 URL 作为缩略图
+                filename: photo.photoId,
+                width: photo.originalWidth,
+                height: photo.originalHeight,
+                printCount: photo.quantity || 1,
+                editState,
+                transform: photo.transform ? {
+                  matrix: photo.transform.matrix,
+                  outputWidth: photo.transform.outputWidth,
+                  outputHeight: photo.transform.outputHeight,
+                  sourceWidth: photo.transform.sourceWidth,
+                  sourceHeight: photo.transform.sourceHeight,
+                  styleType: (photo.transform.styleType as 'center' | 'full' | 'lomo') || 'center',
+                } : undefined,
+                autoRotated: photo.autoRotated,
+              }
+            })
+
+          if (serverImages.length > 0) {
+            addImages(serverImages)
+          }
+        }
+      } catch (error) {
+        console.error('从服务器加载照片失败:', error)
+      } finally {
+        setIsLoadingPhotos(false)
+      }
+    }
+
+    loadPhotosFromServer()
+  }, [currentSession, getOrderSn, allImages, addImages])
+
+  // 初始化获取 OSS 签名
+  useEffect(() => {
+    const fetchSignature = async () => {
+      try {
+        const signature = await getOssSignature()
+        setOssSignature(signature)
+      } catch (error) {
+        console.error('获取 OSS 签名失败:', error)
+      }
+    }
+    fetchSignature()
+  }, [])
+
   /**
    * 判断图片是否需要旋转
-   * 规则：横图（宽>高）默认旋转为竖图，正方形图片不旋转
    */
   const shouldRotateImage = (imageWidth: number, imageHeight: number): boolean => {
-    // 正方形图片不旋转（宽高差异小于5%视为正方形）
     const ratio = imageWidth / imageHeight
     const isSquare = ratio >= 0.95 && ratio <= 1.05
     if (isSquare) return false
-    
-    // 横图（宽 > 高）需要旋转为竖图
     const isImageLandscape = imageWidth > imageHeight
     return isImageLandscape
   }
@@ -70,10 +185,35 @@ export default function UploadPage() {
     const files = e.target.files
     if (!files || files.length === 0 || !currentSession) return
 
-    const newImages: ImageType[] = []
+    setIsUploading(true)
+    const orderSn = getOrderSn()
+    const specId = currentSession.sizeId
+
+    // 如果没有签名，先获取
+    let signature = ossSignature
+    if (!signature) {
+      try {
+        console.log('开始获取 OSS 签名...')
+        signature = await getOssSignature()
+        console.log('OSS 签名获取成功:', {
+          host: signature.host,
+          dir: signature.dir,
+          hasPolicy: !!signature.policy,
+          hasSignature: !!signature.signature,
+        })
+        setOssSignature(signature)
+      } catch (error) {
+        console.error('获取 OSS 签名失败:', error)
+        setIsUploading(false)
+        alert('获取上传签名失败，请重试')
+        return
+      }
+    }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
+      setUploadProgress(`上传中 ${i + 1}/${files.length}`)
+      
       try {
         // 获取原图尺寸
         const dimensions = await getImageDimensions(file)
@@ -81,50 +221,79 @@ export default function UploadPage() {
         // 压缩生成缩略图（用于显示）
         const { dataUrl } = await compressImage(file, 600, 0.85)
 
-        // 使用原图的 dataUrl 作为临时 URL
-        const originalDataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader()
-          reader.onload = (e) => resolve(e.target?.result as string)
-          reader.readAsDataURL(file)
-        })
-
-        // 判断是否需要旋转（横图在竖向相纸上自动旋转）
+        // 判断是否需要旋转
         const needsRotation = shouldRotateImage(dimensions.width, dimensions.height)
 
-        // 默认使用居中裁剪模式
+        // 上传到 OSS（客户端直传）
+        let ossUrl = ''
+        try {
+          ossUrl = await uploadToOss(file, signature)
+          console.log('图片上传成功:', ossUrl)
+        } catch (error) {
+          console.error('上传到 OSS 失败:', error)
+          // 上传失败时使用本地预览，但标记为未上传
+          ossUrl = '' // 清空 URL，后续会用 thumbnailUrl 显示
+        }
+
+        const photoId = generateId()
+
+        // 默认编辑状态
         const defaultEditState: EditState = {
           mode: 'center',
           scale: 1,
           x: 0,
           y: 0,
-          rotation: needsRotation ? 90 : 0, // 横图自动旋转90度
+          rotation: needsRotation ? 90 : 0,
           canvasWidth: currentSession.canvasWidth,
           canvasHeight: currentSession.canvasHeight,
         }
 
         const image: ImageType = {
-          id: generateId(),
+          id: photoId,
           sessionId: currentSession.id,
-          originalUrl: originalDataUrl,
-          thumbnailUrl: dataUrl,
+          originalUrl: ossUrl || dataUrl, // OSS URL 或本地缩略图
+          thumbnailUrl: dataUrl, // 始终使用压缩后的缩略图显示
           filename: file.name,
           width: dimensions.width,
           height: dimensions.height,
           printCount: 1,
           editState: defaultEditState,
-          autoRotated: needsRotation, // 横图自动旋转标记
+          autoRotated: needsRotation,
           file,
         }
 
-        newImages.push(image)
+        // 立即添加到列表显示（上传一张显示一张）
+        addImages([image])
+
+        // 同步到后端（只有成功上传到 OSS 后才同步）
+        if (ossUrl) {
+          try {
+            await addPhotoToOrder({
+              orderSn: orderSn,
+              specId: specId,
+              photoId: photoId,
+              url: ossUrl,
+              filename: file.name,
+              originalWidth: dimensions.width,
+              originalHeight: dimensions.height,
+              quantity: 1,
+              cropMode: 'center',
+              autoRotated: needsRotation,
+            })
+            console.log('照片已同步到后端:', photoId)
+          } catch (error) {
+            console.error('同步照片到后端失败:', error)
+          }
+        } else {
+          console.warn('图片未上传到 OSS，仅本地显示:', photoId)
+        }
       } catch (error) {
         console.error('处理图片失败:', error)
       }
     }
 
-    if (newImages.length > 0) {
-      addImages(newImages)
-    }
+    setIsUploading(false)
+    setUploadProgress('')
 
     // 重置 input
     if (fileInputRef.current) {
@@ -132,17 +301,30 @@ export default function UploadPage() {
     }
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm('确定要删除这张图片吗？')) {
-      deleteImage(id)
-    }
+  const handleDelete = async (id: string) => {
+    // 直接删除，不弹确认框
+    deleteImage(id)
+    // 后台异步删除，不阻塞 UI
+    deletePhotoFromOrder(id).catch(error => {
+      console.error('删除照片失败:', error)
+    })
   }
 
-  const handleCountChange = (id: string, delta: number) => {
+  const handleCountChange = async (id: string, delta: number) => {
     const image = images.find((img) => img.id === id)
     if (image) {
       const newCount = Math.max(1, image.printCount + delta)
       updateImage(id, { printCount: newCount })
+      
+      // 同步到后端
+      try {
+        await updatePhoto({
+          photoId: id,
+          quantity: newCount,
+        })
+      } catch (error) {
+        console.error('更新照片数量失败:', error)
+      }
     }
   }
 
@@ -150,63 +332,88 @@ export default function UploadPage() {
     router.push(`/edit/${id}`)
   }
 
-  const handleBatchDelete = () => {
+  const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return
     if (confirm(`确定要删除选中的 ${selectedIds.length} 张图片吗？`)) {
-      selectedIds.forEach((id) => deleteImage(id))
+      for (const id of selectedIds) {
+        try {
+          await deletePhotoFromOrder(id)
+        } catch (error) {
+          console.error('删除照片失败:', error)
+        }
+        deleteImage(id)
+      }
       clearSelection()
       setIsBatchMode(false)
     }
   }
 
-  // 全选/取消全选
   const handleToggleSelectAll = () => {
     if (selectedIds.length === images.length) {
-      // 已全选，取消全选
       clearSelection()
     } else {
-      // 全选
       selectAll()
     }
   }
 
   const isAllSelected = images.length > 0 && selectedIds.length === images.length
 
-  // 批量应用裁剪模式 - 使用批量更新
-  const handleApplyBatchCrop = (mode: CropMode) => {
-    // 获取目标图片列表
+  // 批量应用裁剪模式
+  const handleApplyBatchCrop = async (mode: CropMode) => {
     const targetIds = selectedIds.length === 0 ? images.map(img => img.id) : selectedIds
 
-    // 为每张图片计算正确的旋转角度
     const updates = targetIds.map((id) => {
       const img = images.find(i => i.id === id)
       if (!img) return null
 
-      // 保持原有的旋转设置（横图自动旋转的逻辑）
-      const currentRotation = img.editState?.rotation || 0
+      // 获取当前旋转角度（优先从 transform 获取，兼容单独编辑过的图片）
+      let currentRotation = 0
+      if (img.transform?.matrix) {
+        const { rotation } = parseAffineMatrix(img.transform.matrix as [number, number, number, number, number, number])
+        currentRotation = rotation
+      } else if (img.editState?.rotation) {
+        currentRotation = img.editState.rotation
+      } else if (img.autoRotated) {
+        currentRotation = 90
+      }
       
       const newEditState: EditState = {
         mode,
         scale: 1,
         x: 0,
         y: 0,
-        rotation: currentRotation, // 保持旋转角度
+        rotation: currentRotation,
         canvasWidth: currentSession?.canvasWidth || 127,
         canvasHeight: currentSession?.canvasHeight || 89,
       }
 
       return {
         id,
-        updates: { editState: newEditState },
+        updates: { 
+          editState: newEditState,
+          // 清除 transform，让 PhotoCanvas 使用 editState
+          transform: undefined,
+        },
       }
-    }).filter(Boolean) as { id: string; updates: { editState: EditState } }[]
+    }).filter(Boolean) as { id: string; updates: Partial<ImageType> }[]
 
     updateImages(updates)
     setBatchCropMode(mode)
+
+    // 同步到后端
+    for (const update of updates) {
+      try {
+        await updatePhoto({
+          photoId: update.id,
+          cropMode: mode,
+        })
+      } catch (error) {
+        console.error('更新照片裁剪模式失败:', error)
+      }
+    }
   }
 
   const totalPrintCount = images.reduce((sum, img) => sum + img.printCount, 0)
-  // 只要有图片就可以提交
   const canSubmit = images.length > 0
 
   const handleSubmit = () => {
@@ -214,36 +421,67 @@ export default function UploadPage() {
     setShowSubmitModal(true)
   }
 
-  const handleConfirmSubmit = () => {
+  const handleConfirmSubmit = async () => {
     if (!currentSession) return
     
-    // 更新订单状态到 localStorage
-    const savedOrders = localStorage.getItem('photo-orders')
-    const orders = savedOrders ? JSON.parse(savedOrders) : {}
-    orders[currentSession.id] = {
-      ...currentSession,
-      currentCount: totalPrintCount,
-      status: 'submitted',
-      submittedAt: new Date().toISOString(),
+    setIsSubmitting(true)
+    const orderSn = getOrderSn()
+
+    try {
+      // 构建照片列表
+      const photos = images.map(img => ({
+        id: img.id,
+        url: img.originalUrl,
+        quantity: img.printCount,
+        transform: img.transform ? {
+          matrix: img.transform.matrix,
+          outputWidth: img.transform.outputWidth,
+          outputHeight: img.transform.outputHeight,
+          sourceWidth: img.transform.sourceWidth,
+          sourceHeight: img.transform.sourceHeight,
+        } : undefined,
+      }))
+
+      // 调用后端提交订单
+      await submitOrder({
+        orderSn: orderSn,
+        photos,
+        submitTime: new Date().toISOString(),
+        watermarkConfig: {
+          enabled: false,
+          position: 'bottom-right',
+        },
+        size: currentSession.sizeName,
+        style: '',
+        total: 0,
+        totalQuantity: totalPrintCount,
+      })
+
+      // 更新本地订单状态
+      const savedOrders = localStorage.getItem('photo-orders')
+      const orders = savedOrders ? JSON.parse(savedOrders) : {}
+      orders[currentSession.id] = {
+        ...currentSession,
+        currentCount: totalPrintCount,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+      }
+      localStorage.setItem('photo-orders', JSON.stringify(orders))
+      
+      setShowSubmitModal(false)
+      router.push('/success')
+    } catch (error) {
+      console.error('提交订单失败:', error)
+      alert('提交失败，请重试')
+    } finally {
+      setIsSubmitting(false)
     }
-    localStorage.setItem('photo-orders', JSON.stringify(orders))
-    
-    setShowSubmitModal(false)
-    router.push('/success')
   }
 
-  // 返回尺寸选择页
   const handleBack = () => {
     router.push('/select-size')
   }
 
-  // 获取图片的裁剪模式
-  const getImageCropMode = (image: ImageType): CropMode => {
-    if (image.transform?.styleType) return image.transform.styleType
-    return image.editState?.mode || 'center'
-  }
-
-  // 获取图片的旋转角度
   const getImageRotation = (image: ImageType): number => {
     if (image.transform) {
       const { rotation } = parseAffineMatrix(image.transform.matrix)
@@ -256,20 +494,14 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] pb-32 overscroll-none">
-      {/* Header - 仿微信小程序风格 */}
+      {/* Header */}
       <div className="bg-white sticky top-0 z-10">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleBack}
-              className="p-1 text-gray-700"
-            >
+            <button onClick={handleBack} className="p-1 text-gray-700">
               <ArrowLeft className="w-6 h-6" />
             </button>
-            <button
-              onClick={() => router.push('/')}
-              className="p-1 text-gray-700"
-            >
+            <button onClick={() => router.push('/')} className="p-1 text-gray-700">
               <Home className="w-6 h-6" />
             </button>
             <span className="text-lg font-medium ml-2">已上传照片</span>
@@ -288,9 +520,22 @@ export default function UploadPage() {
         </p>
       </div>
 
+      {/* 上传进度 */}
+      {isUploading && (
+        <div className="bg-blue-50 px-4 py-3 flex items-center gap-2">
+          <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+          <p className="text-sm text-blue-600">{uploadProgress}</p>
+        </div>
+      )}
+
       {/* 图片列表 */}
       <div className="px-3 pt-3">
-        {images.length === 0 ? (
+        {isLoadingPhotos ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
+            <Loader2 className="w-12 h-12 text-[#ff4d6d] animate-spin mb-4" />
+            <p className="text-gray-500">正在加载照片...</p>
+          </div>
+        ) : images.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <Upload className="w-12 h-12 text-gray-400" />
@@ -298,7 +543,8 @@ export default function UploadPage() {
             <p className="text-gray-500 mb-6">还没有上传照片</p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-6 py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
+              disabled={isUploading}
+              className="px-6 py-3 bg-[#ff4d6d] text-white rounded-full font-medium disabled:opacity-50"
             >
               开始上传
             </button>
@@ -313,7 +559,6 @@ export default function UploadPage() {
                 } ${selectedIds.includes(image.id) ? 'ring-2 ring-[#ff4d6d]' : ''}`}
                 onClick={() => isBatchMode && toggleSelection(image.id)}
               >
-                {/* 图片容器 */}
                 <div 
                   className="relative bg-white"
                   style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
@@ -324,7 +569,6 @@ export default function UploadPage() {
                     onClick={!isBatchMode ? () => handleEdit(image.id) : undefined}
                   />
                   
-                  {/* 删除按钮 - 右上角深灰色圆形 */}
                   {!isBatchMode && (
                     <button
                       onClick={(e) => {
@@ -337,12 +581,9 @@ export default function UploadPage() {
                     </button>
                   )}
                   
-                  {/* 批量模式选中标记 */}
                   {isBatchMode && (
                     <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
-                      selectedIds.includes(image.id) 
-                        ? 'bg-[#ff4d6d]' 
-                        : 'bg-gray-400/80'
+                      selectedIds.includes(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
                     }`}>
                       {selectedIds.includes(image.id) && (
                         <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -352,16 +593,7 @@ export default function UploadPage() {
                     </div>
                   )}
 
-                  {/* 旋转标记 - 显示图片已被自动旋转 */}
-                  {!isBatchMode && getImageRotation(image) !== 0 && (
-                    <div className="absolute top-2 left-2 w-6 h-6 bg-blue-500/80 rounded-full flex items-center justify-center z-10">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    </div>
-                  )}
 
-                  {/* 数量控制 - 图片底部内嵌 */}
                   {!isBatchMode && (
                     <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
                       <div className="flex items-center bg-[#e8e8e8] rounded-full">
@@ -391,7 +623,6 @@ export default function UploadPage() {
                   )}
                 </div>
 
-                {/* 编辑按钮 - 卡片底部独立区域 */}
                 {!isBatchMode && (
                   <button
                     onClick={(e) => {
@@ -428,17 +659,19 @@ export default function UploadPage() {
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium text-base"
+                  disabled={isUploading}
+                  className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium text-base disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}
                   继续上传(已上传{totalPrintCount}张)
                 </button>
               </div>
               
-              {/* 提交按钮 - 有图片就显示 */}
               {canSubmit && (
                 <button
                   onClick={handleSubmit}
-                  className="w-full mt-3 py-3 bg-green-500 text-white rounded-full font-medium"
+                  disabled={isSubmitting}
+                  className="w-full mt-3 py-3 bg-green-500 text-white rounded-full font-medium disabled:opacity-50"
                 >
                   确认提交打印({totalPrintCount}张)
                 </button>
@@ -446,7 +679,6 @@ export default function UploadPage() {
             </>
           ) : (
             <>
-              {/* 批量编辑模式 - 全选按钮 */}
               <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={handleToggleSelectAll}
@@ -464,74 +696,32 @@ export default function UploadPage() {
                 </span>
               </div>
 
-              {/* 裁剪样式选择 */}
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex gap-2 flex-wrap">
-                  {/* 居中裁剪 */}
-                  <button
-                    onClick={() => handleApplyBatchCrop('center')}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
-                      batchCropMode === 'center'
-                        ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
-                        : 'border-gray-300 text-gray-600'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                      batchCropMode === 'center' ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
-                    }`}>
-                      {batchCropMode === 'center' && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <span>居中裁剪</span>
-                  </button>
-
-                  {/* 打印整图 */}
-                  <button
-                    onClick={() => handleApplyBatchCrop('full')}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
-                      batchCropMode === 'full'
-                        ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
-                        : 'border-gray-300 text-gray-600'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                      batchCropMode === 'full' ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
-                    }`}>
-                      {batchCropMode === 'full' && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <span>打印整图</span>
-                  </button>
-
-                  {/* 四周留白 */}
-                  <button
-                    onClick={() => handleApplyBatchCrop('lomo')}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
-                      batchCropMode === 'lomo'
-                        ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
-                        : 'border-gray-300 text-gray-600'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                      batchCropMode === 'lomo' ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
-                    }`}>
-                      {batchCropMode === 'lomo' && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <span>四周留白</span>
-                  </button>
+                  {(['center', 'full', 'lomo'] as CropMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => handleApplyBatchCrop(mode)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
+                        batchCropMode === mode
+                          ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
+                          : 'border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                        batchCropMode === mode ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
+                      }`}>
+                        {batchCropMode === mode && (
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                      <span>{mode === 'center' ? '居中裁剪' : mode === 'full' ? '打印整图' : '四周留白'}</span>
+                    </button>
+                  ))}
                 </div>
 
-                {/* 删除按钮 */}
                 <button
                   onClick={handleBatchDelete}
                   className={`text-sm whitespace-nowrap font-medium ${
@@ -543,7 +733,6 @@ export default function UploadPage() {
                 </button>
               </div>
 
-              {/* 返回按钮 */}
               <button
                 onClick={() => {
                   setIsBatchMode(false)
@@ -588,14 +777,17 @@ export default function UploadPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowSubmitModal(false)}
-                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium hover:bg-gray-50 transition-colors"
+                disabled={isSubmitting}
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 再检查一下
               </button>
               <button
                 onClick={handleConfirmSubmit}
-                className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
+                disabled={isSubmitting}
+                className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
+                {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
                 确认提交
               </button>
             </div>

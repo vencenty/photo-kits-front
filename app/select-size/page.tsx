@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check } from 'lucide-react'
+import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2 } from 'lucide-react'
 import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
+import { addSpec, deleteSpec, createOrder, listSpecs, SpecInfo } from '@/lib/api'
 
-// 已添加的规格项
+// 已添加的规格项（包含数据库 ID）
 interface AddedSize {
-  id: string
+  dbId: number        // 数据库 ID，用于删除
+  id: string          // sessionId
   paperId: string
   paperName: string
   sizeId: string
@@ -27,6 +29,9 @@ export default function SelectSizePage() {
   const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [showToast, setShowToast] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
 
@@ -38,54 +43,47 @@ export default function SelectSizePage() {
     }
   }, [])
 
-  // 加载已添加的规格
-  useEffect(() => {
+  // 从服务端加载已添加的规格
+  const loadSpecs = useCallback(async () => {
     if (!orderNumber) return
 
-    const savedOrders = localStorage.getItem('photo-orders')
-    const orders = savedOrders ? JSON.parse(savedOrders) : {}
-    
-    const uploadStorage = localStorage.getItem('photo-upload-storage')
-    const storageData = uploadStorage ? JSON.parse(uploadStorage) : { state: { images: [] } }
-    const allImages = storageData.state?.images || []
-
-    const sizes: AddedSize[] = []
-
-    Object.keys(orders).forEach((orderId) => {
-      if (orderId.startsWith(`${orderNumber}-`)) {
-        const session = orders[orderId]
-        const sizeId = session.sizeId
-        
-        // 解析相纸和尺寸信息
-        const parts = sizeId.split('-')
-        const sizeKey = parts[parts.length - 1]
-        const paperKey = parts.slice(0, -1).join('-')
-        
-        const paper = PAPER_TYPES.find(p => p.id === paperKey)
-        const size = SIZE_OPTIONS.find(s => s.id === sizeKey)
-        
-        if (paper && size) {
-          const sessionImages = allImages.filter((img: any) => img.sessionId === orderId)
-          const imageCount = sessionImages.length
-          const totalPrintCount = sessionImages.reduce((sum: number, img: any) => sum + (img.printCount || 1), 0)
-
-          sizes.push({
-            id: sizeId,
-            paperId: paperKey,
-            paperName: paper.name,
-            sizeId: sizeKey,
-            sizeName: size.name,
-            width: size.width,
-            height: size.height,
-            imageCount,
-            totalPrintCount,
-          })
-        }
-      }
-    })
-
-    setAddedSizes(sizes)
+    setIsLoading(true)
+    try {
+      // 先尝试创建/获取订单
+      await createOrder(orderNumber)
+      
+      // 从后端获取规格列表
+      const response = await listSpecs(orderNumber)
+      const specs = response.specs || []
+      
+      // 从后端数据构建 AddedSize 列表
+      const sizes: AddedSize[] = specs.map((spec: SpecInfo) => ({
+        dbId: spec.id,
+        id: spec.sessionId,
+        paperId: spec.paperType,
+        paperName: spec.paperName,
+        sizeId: spec.sizeId,
+        sizeName: spec.sizeName,
+        width: spec.canvasWidth,
+        height: spec.canvasHeight,
+        imageCount: spec.photoCount || 0,
+        totalPrintCount: spec.printCount || 0,
+      }))
+      setAddedSizes(sizes)
+    } catch (error) {
+      console.error('加载规格失败:', error)
+      showToastMessage('加载规格失败，请重试')
+    } finally {
+      setIsLoading(false)
+    }
   }, [orderNumber])
+
+  // 加载规格
+  useEffect(() => {
+    if (orderNumber) {
+      loadSpecs()
+    }
+  }, [orderNumber, loadSpecs])
 
   // 显示 toast 提示
   const showToastMessage = (message: string) => {
@@ -93,8 +91,8 @@ export default function SelectSizePage() {
     setTimeout(() => setShowToast(null), 2500)
   }
 
-  // 添加新规格（不跳转）
-  const handleAddSize = () => {
+  // 添加新规格
+  const handleAddSize = async () => {
     if (!selectedPaper || !selectedSize || !orderNumber) return
 
     const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
@@ -114,120 +112,104 @@ export default function SelectSizePage() {
       return
     }
 
-    // 添加新规格到列表（不跳转）
-    const newSize: AddedSize = {
-      id: fullSizeId,
-      paperId: selectedPaper,
-      paperName: paper.name,
-      sizeId: selectedSize,
-      sizeName: size.name,
-      width: size.width,
-      height: size.height,
-      imageCount: 0,
-      totalPrintCount: 0,
-    }
+    setIsAdding(true)
+    try {
+      // 调用后端 API 添加规格
+      const result = await addSpec(orderNumber, {
+        sessionId: fullSizeId,
+        paperType: selectedPaper,
+        paperName: paper.name,
+        sizeId: selectedSize,
+        sizeName: size.name,
+        canvasWidth: size.width,
+        canvasHeight: size.height,
+      })
 
-    // 预先创建 session 并保存到 localStorage
-    const photoSize = getPhotoSizeById(fullSizeId)
-    if (photoSize) {
-      const sessionId = `${orderNumber}-${fullSizeId}`
-      const savedOrders = localStorage.getItem('photo-orders')
-      const orders = savedOrders ? JSON.parse(savedOrders) : {}
-      
-      if (!orders[sessionId]) {
-        const session: Session = {
-          id: sessionId,
-          sizeId: photoSize.id,
-          sizeName: photoSize.name,
-          targetCount: 0,
-          currentCount: 0,
-          canvasWidth: photoSize.width,
-          canvasHeight: photoSize.height,
-          unit: photoSize.unit,
-          ratio: photoSize.ratio,
-          createdAt: new Date().toISOString(),
-        }
-        orders[sessionId] = session
-        localStorage.setItem('photo-orders', JSON.stringify(orders))
+      // 添加到列表（使用后端返回的数据）
+      const newSize: AddedSize = {
+        dbId: result.id,
+        id: fullSizeId,
+        paperId: selectedPaper,
+        paperName: paper.name,
+        sizeId: selectedSize,
+        sizeName: size.name,
+        width: size.width,
+        height: size.height,
+        imageCount: 0,
+        totalPrintCount: 0,
       }
-    }
 
-    setAddedSizes([...addedSizes, newSize])
-    setShowAddModal(false)
-    setSelectedPaper(null)
-    setSelectedSize(null)
-    
-    showToastMessage(`已添加 ${paper.name} ${size.name}`)
+      setAddedSizes([...addedSizes, newSize])
+      showToastMessage(`已添加 ${paper.name} ${size.name}`)
+    } catch (error) {
+      console.error('添加规格失败:', error)
+      showToastMessage('添加失败，请重试')
+    } finally {
+      setIsAdding(false)
+      setShowAddModal(false)
+      setSelectedPaper(null)
+      setSelectedSize(null)
+    }
   }
 
   // 选择规格进入上传
-  const handleSelectSize = (sizeId: string) => {
-    const photoSize = getPhotoSizeById(sizeId)
+  const handleSelectSize = (size: AddedSize) => {
+    const photoSize = getPhotoSizeById(size.id)
     if (!photoSize) return
 
-    const sessionId = orderNumber ? `${orderNumber}-${sizeId}` : `ORDER-${Date.now()}-${sizeId}`
+    const currentOrderNo = orderNumber || `ORDER-${Date.now()}`
+    const sessionId = `${currentOrderNo}-${size.id}`
 
-    const savedOrders = localStorage.getItem('photo-orders')
-    const orders = savedOrders ? JSON.parse(savedOrders) : {}
-
-    if (orders[sessionId]) {
-      const existingSession = orders[sessionId]
-      const session = {
-        ...existingSession,
-        unit: existingSession.unit || '毫米',
-        ratio: existingSession.ratio || photoSize.ratio,
-      }
-      setCurrentSession(session)
-    } else {
-      const session: Session = {
-        id: sessionId,
-        sizeId: photoSize.id,
-        sizeName: photoSize.name,
-        targetCount: 0,
-        currentCount: 0,
-        canvasWidth: photoSize.width,
-        canvasHeight: photoSize.height,
-        unit: photoSize.unit,
-        ratio: photoSize.ratio,
-        createdAt: new Date().toISOString(),
-      }
-
-      orders[sessionId] = session
-      localStorage.setItem('photo-orders', JSON.stringify(orders))
-
-      setCurrentSession(session)
-      clearImages()
+    // 构建 session 用于上传页面
+    const session: Session = {
+      id: sessionId,
+      orderNo: currentOrderNo,
+      sizeId: size.id,
+      sizeName: `${size.paperName} ${size.sizeName}`,
+      targetCount: 0,
+      currentCount: size.imageCount,
+      canvasWidth: size.width,
+      canvasHeight: size.height,
+      unit: '毫米',
+      ratio: size.width / size.height,
+      createdAt: new Date().toISOString(),
     }
 
-    router.push(`/upload/${sizeId}`)
+    setCurrentSession(session)
+    clearImages()
+
+    router.push(`/upload/${size.id}`)
   }
 
   // 删除规格
-  const handleDeleteSize = (sizeId: string, e: React.MouseEvent) => {
+  const handleDeleteSize = async (size: AddedSize, e: React.MouseEvent) => {
     e.stopPropagation()
     
-    const sizeInfo = addedSizes.find(s => s.id === sizeId)
-    if (!sizeInfo) return
+    if (!orderNumber) return
 
     // 始终弹出确认对话框
-    const confirmMessage = sizeInfo.imageCount > 0
-      ? `确定要删除「${sizeInfo.paperName} ${sizeInfo.sizeName}」吗？\n该规格已上传 ${sizeInfo.imageCount} 张照片，删除后数据将丢失。`
-      : `确定要删除「${sizeInfo.paperName} ${sizeInfo.sizeName}」规格吗？`
+    const confirmMessage = size.imageCount > 0
+      ? `确定要删除「${size.paperName} ${size.sizeName}」吗？\n该规格已上传 ${size.imageCount} 张照片，删除后数据将丢失。`
+      : `确定要删除「${size.paperName} ${size.sizeName}」规格吗？`
 
     if (!confirm(confirmMessage)) {
       return
     }
 
-    // 从 localStorage 中删除
-    const sessionId = `${orderNumber}-${sizeId}`
-    const savedOrders = localStorage.getItem('photo-orders')
-    const orders = savedOrders ? JSON.parse(savedOrders) : {}
-    delete orders[sessionId]
-    localStorage.setItem('photo-orders', JSON.stringify(orders))
+    setIsDeleting(size.id)
+    try {
+      // 调用后端 API 删除规格
+      await deleteSpec(orderNumber, size.dbId)
 
-    // 更新列表
-    setAddedSizes(addedSizes.filter(s => s.id !== sizeId))
-    showToastMessage('已删除规格')
+      // 更新列表
+      setAddedSizes(addedSizes.filter(s => s.id !== size.id))
+      showToastMessage('已删除规格')
+    } catch (error) {
+      console.error('删除规格失败:', error)
+      showToastMessage('删除失败，请重试')
+    } finally {
+      setIsDeleting(null)
+    }
   }
 
   return (
@@ -265,8 +247,16 @@ export default function SelectSizePage() {
           <span className="font-medium">添加规格</span>
         </button>
 
+        {/* 加载中 */}
+        {isLoading && (
+          <div className="py-20 text-center">
+            <Loader2 className="w-10 h-10 mx-auto mb-4 text-[#ff4d6d] animate-spin" />
+            <p className="text-gray-400">加载中...</p>
+          </div>
+        )}
+
         {/* 已添加的规格列表 */}
-        {addedSizes.length === 0 ? (
+        {!isLoading && addedSizes.length === 0 ? (
           <div className="py-20 text-center">
             <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
               <ImageIcon className="w-10 h-10 text-gray-300" />
@@ -274,13 +264,13 @@ export default function SelectSizePage() {
             <p className="text-gray-400 mb-1">还没有添加规格</p>
             <p className="text-sm text-gray-300">点击上方"添加规格"开始选择</p>
           </div>
-        ) : (
+        ) : !isLoading && (
           <div className="space-y-3">
             {addedSizes.map((size) => (
               <div
                 key={size.id}
                 className="bg-white rounded-xl overflow-hidden shadow-sm active:bg-gray-50 transition-colors"
-                onClick={() => handleSelectSize(size.id)}
+                onClick={() => handleSelectSize(size)}
               >
                 <div className="flex items-center px-4 py-3">
                   {/* 左侧信息 */}
@@ -310,10 +300,15 @@ export default function SelectSizePage() {
 
                     {/* 删除按钮 */}
                     <button
-                      onClick={(e) => handleDeleteSize(size.id, e)}
-                      className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      onClick={(e) => handleDeleteSize(size, e)}
+                      disabled={isDeleting === size.id}
+                      className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
                     >
-                      <X className="w-4 h-4" />
+                      {isDeleting === size.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <X className="w-4 h-4" />
+                      )}
                     </button>
 
                     {/* 箭头 */}
@@ -326,7 +321,7 @@ export default function SelectSizePage() {
         )}
 
         {/* 底部提示 */}
-        {addedSizes.length > 0 && (
+        {!isLoading && addedSizes.length > 0 && (
           <p className="mt-6 text-center text-xs text-gray-400">
             点击规格可进入上传页面
           </p>
@@ -365,13 +360,14 @@ export default function SelectSizePage() {
               <h3 className="font-semibold">添加规格</h3>
               <button
                 onClick={handleAddSize}
-                disabled={!selectedPaper || !selectedSize}
-                className={`text-sm font-medium ${
-                  selectedPaper && selectedSize
+                disabled={!selectedPaper || !selectedSize || isAdding}
+                className={`text-sm font-medium flex items-center gap-1 ${
+                  selectedPaper && selectedSize && !isAdding
                     ? 'text-[#ff4d6d]'
                     : 'text-gray-300'
                 }`}
               >
+                {isAdding && <Loader2 className="w-4 h-4 animate-spin" />}
                 添加
               </button>
             </div>

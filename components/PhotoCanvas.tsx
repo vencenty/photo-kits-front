@@ -236,9 +236,27 @@ export function PhotoCanvas({
     if (!imageUrl) return
     
     const img = document.createElement('img')
-    img.crossOrigin = 'anonymous'
-    img.onload = () => setImage(img)
-    img.onerror = () => console.error('图片加载失败:', imageUrl)
+    
+    // 只对非 data URL 设置跨域（data URL 不需要跨域）
+    if (!imageUrl.startsWith('data:')) {
+      img.crossOrigin = 'anonymous'
+    }
+    
+    img.onload = () => {
+      setImage(img)
+    }
+    
+    img.onerror = (e) => {
+      console.error('图片加载失败:', imageUrl, e)
+      // 如果跨域失败，尝试不设置 crossOrigin 重新加载
+      if (img.crossOrigin) {
+        const retryImg = document.createElement('img')
+        retryImg.onload = () => setImage(retryImg)
+        retryImg.onerror = () => console.error('图片重试加载也失败:', imageUrl)
+        retryImg.src = imageUrl
+      }
+    }
+    
     img.src = imageUrl
     
     return () => {
