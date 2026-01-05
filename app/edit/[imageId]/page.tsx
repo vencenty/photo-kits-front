@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type PhotoTransform, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
+import { updatePhoto } from '@/lib/api'
 
 export default function EditPage() {
   const router = useRouter()
@@ -13,26 +14,30 @@ export default function EditPage() {
 
   const images = useStore((state) => state.images)
   const currentSession = useStore((state) => state.currentSession)
+  const hasHydrated = useStore((state) => state._hasHydrated)
   const updateImage = useStore((state) => state.updateImage)
 
   const [image, setImage] = useState<Image | null>(null)
 
   useEffect(() => {
+    // 等待 hydration 完成
+    if (!hasHydrated) return
+    
     const foundImage = images.find((img) => img.id === imageId)
     if (!foundImage) {
       router.push('/')
       return
     }
     setImage(foundImage)
-  }, [imageId, images, router])
+  }, [imageId, images, router, hasHydrated])
 
-  const handleSave = (transform: PhotoTransform) => {
-    // 保存变换信息，同时也更新旧的 editState 保持兼容
+  const handleSave = async (transform: PhotoTransform) => {
+    // 保存变换信息到本地 store
     updateImage(imageId, { 
       transform,
       editState: {
         mode: transform.styleType,
-        scale: 1, // 这些值已经在 transform 中了
+        scale: 1,
         x: 0,
         y: 0,
         rotation: 0,
@@ -40,13 +45,33 @@ export default function EditPage() {
         canvasHeight: transform.outputHeight,
       }
     })
+    
+    // 同步保存到后端（异步执行，不阻塞UI）
+    try {
+      await updatePhoto({
+        photoId: imageId,
+        cropMode: transform.styleType,
+        transform: {
+          matrix: transform.matrix,
+          outputWidth: transform.outputWidth,
+          outputHeight: transform.outputHeight,
+          sourceWidth: transform.sourceWidth,
+          sourceHeight: transform.sourceHeight,
+          styleType: transform.styleType,
+        },
+      })
+      console.log('编辑状态已同步到后端:', imageId)
+    } catch (error) {
+      console.error('同步编辑状态到后端失败:', error)
+    }
+    
     router.back()
   }
 
-  if (!image || !currentSession) {
+  if (!hasHydrated || !image || !currentSession) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-white">加载中...</p>
+        <Loader2 className="w-10 h-10 text-white animate-spin" />
       </div>
     )
   }

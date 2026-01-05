@@ -35,11 +35,19 @@ export default function SelectSizePage() {
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
 
-  // 获取从查询页传来的订单号
+  // 获取从查询页传来的订单号（优先从 sessionStorage，其次从 localStorage）
   useEffect(() => {
     const pendingOrder = sessionStorage.getItem('pending-order-number')
     if (pendingOrder) {
       setOrderNumber(pendingOrder)
+      // 同时保存到 localStorage，支持刷新后恢复
+      localStorage.setItem('current-order-number', pendingOrder)
+    } else {
+      // 刷新时从 localStorage 恢复
+      const savedOrder = localStorage.getItem('current-order-number')
+      if (savedOrder) {
+        setOrderNumber(savedOrder)
+      }
     }
   }, [])
 

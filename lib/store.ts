@@ -131,6 +131,10 @@ export interface PhotoSize {
 }
 
 interface StoreState {
+  // Hydration 状态（用于解决刷新后跳转问题）
+  _hasHydrated: boolean
+  setHasHydrated: (state: boolean) => void
+
   // Session 相关
   currentSession: Session | null
   setCurrentSession: (session: Session) => void
@@ -160,6 +164,10 @@ interface StoreState {
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
+      // Hydration 状态
+      _hasHydrated: false,
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
+
       // Session
       currentSession: null,
       setCurrentSession: (session) => set({ currentSession: session }),
@@ -241,12 +249,18 @@ export const useStore = create<StoreState>()(
           height: img.height,
           printCount: img.printCount,
           editState: img.editState,
+          transform: img.transform, // 保存变换信息（用于恢复编辑状态）
+          autoRotated: img.autoRotated, // 保存自动旋转状态
           // 不保存这些大数据:
           // originalUrl: undefined,
           // thumbnailUrl: undefined,
           // file: undefined,
         })),
       }),
+      // Hydration 完成后设置标志
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

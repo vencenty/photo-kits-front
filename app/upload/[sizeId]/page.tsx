@@ -37,6 +37,7 @@ export default function UploadPage() {
   const loadedRef = useRef(false) // 防止重复加载
 
   const currentSession = useStore((state) => state.currentSession)
+  const hasHydrated = useStore((state) => state._hasHydrated)
   const allImages = useStore((state) => state.images)
   // 过滤当前 session 的图片（有 thumbnailUrl 或 originalUrl）
   const images = allImages.filter(img => 
@@ -73,11 +74,14 @@ export default function UploadPage() {
   }, [currentSession])
 
   useEffect(() => {
+    // 等待 hydration 完成后再判断
+    if (!hasHydrated) return
+    
     // 如果没有 session，跳转回首页查询订单
     if (!currentSession || currentSession.sizeId !== sizeId) {
       router.push('/')
     }
-  }, [currentSession, sizeId, router])
+  }, [currentSession, sizeId, router, hasHydrated])
 
   // 从后端加载已上传的照片
   useEffect(() => {
@@ -99,20 +103,58 @@ export default function UploadPage() {
         const result = await listPhotos(orderSn, specId)
         
         if (result.photos && result.photos.length > 0) {
-          // 获取当前 session 已有的图片 ID
-          const existingIds = new Set(
+          // 获取当前 session 已有的图片
+          const existingImagesMap = new Map(
             allImages
               .filter(img => img.sessionId === currentSession.id)
-              .map(img => img.id)
+              .map(img => [img.id, img])
           )
 
-          // 转换后端数据为前端 Image 格式
-          const serverImages: ImageType[] = result.photos
-            .filter(photo => !existingIds.has(photo.photoId)) // 过滤掉已存在的
-            .map(photo => {
-              // 解析 editState
+          // 需要新增的照片
+          const newImages: ImageType[] = []
+          // 需要更新的照片（已存在但需要更新 transform 和 URL）
+          const imagesToUpdate: { id: string; updates: Partial<ImageType> }[] = []
+
+          result.photos.forEach(photo => {
+            // 构建 transform 数据
+            const serverTransform = photo.transform ? {
+              matrix: photo.transform.matrix as [number, number, number, number, number, number],
+              outputWidth: photo.transform.outputWidth,
+              outputHeight: photo.transform.outputHeight,
+              sourceWidth: photo.transform.sourceWidth,
+              sourceHeight: photo.transform.sourceHeight,
+              styleType: (photo.transform.styleType as 'center' | 'full' | 'lomo') || 'center',
+            } : undefined
+
+            const existingImage = existingImagesMap.get(photo.photoId)
+
+            if (existingImage) {
+              // 已存在的图片，更新 URL 和 transform（服务器数据优先）
+              const updates: Partial<ImageType> = {
+                originalUrl: photo.url,
+                thumbnailUrl: existingImage.thumbnailUrl || photo.url,
+                printCount: photo.quantity || existingImage.printCount || 1,
+              }
+              
+              // 服务器有 transform 数据时，使用服务器数据
+              if (serverTransform) {
+                updates.transform = serverTransform
+                updates.editState = {
+                  mode: serverTransform.styleType,
+                  scale: 1,
+                  x: 0,
+                  y: 0,
+                  rotation: photo.autoRotated ? 90 : 0,
+                  canvasWidth: currentSession.canvasWidth,
+                  canvasHeight: currentSession.canvasHeight,
+                }
+              }
+              
+              imagesToUpdate.push({ id: photo.photoId, updates })
+            } else {
+              // 新照片，添加到列表
               const editState: EditState = {
-                mode: (photo.cropMode as CropMode) || 'center',
+                mode: serverTransform?.styleType || (photo.cropMode as CropMode) || 'center',
                 scale: 1,
                 x: 0,
                 y: 0,
@@ -121,30 +163,30 @@ export default function UploadPage() {
                 canvasHeight: currentSession.canvasHeight,
               }
 
-              return {
+              newImages.push({
                 id: photo.photoId,
                 sessionId: currentSession.id,
                 originalUrl: photo.url,
-                thumbnailUrl: photo.url, // 使用原图 URL 作为缩略图
+                thumbnailUrl: photo.url,
                 filename: photo.photoId,
                 width: photo.originalWidth,
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
                 editState,
-                transform: photo.transform ? {
-                  matrix: photo.transform.matrix,
-                  outputWidth: photo.transform.outputWidth,
-                  outputHeight: photo.transform.outputHeight,
-                  sourceWidth: photo.transform.sourceWidth,
-                  sourceHeight: photo.transform.sourceHeight,
-                  styleType: (photo.transform.styleType as 'center' | 'full' | 'lomo') || 'center',
-                } : undefined,
+                transform: serverTransform,
                 autoRotated: photo.autoRotated,
-              }
-            })
+              })
+            }
+          })
 
-          if (serverImages.length > 0) {
-            addImages(serverImages)
+          // 批量更新已存在的图片
+          if (imagesToUpdate.length > 0) {
+            updateImages(imagesToUpdate)
+          }
+
+          // 添加新图片
+          if (newImages.length > 0) {
+            addImages(newImages)
           }
         }
       } catch (error) {
@@ -155,7 +197,7 @@ export default function UploadPage() {
     }
 
     loadPhotosFromServer()
-  }, [currentSession, getOrderSn, allImages, addImages])
+  }, [currentSession, getOrderSn, allImages, addImages, updateImages])
 
   // 初始化获取 OSS 签名
   useEffect(() => {
@@ -490,7 +532,14 @@ export default function UploadPage() {
     return image.editState?.rotation || 0
   }
 
-  if (!currentSession) return null
+  // 等待 hydration 和 session 加载
+  if (!hasHydrated || !currentSession) {
+    return (
+      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-[#ff4d6d] animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] pb-32 overscroll-none">
