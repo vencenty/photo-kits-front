@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Home, Image } from 'lucide-react'
 import { useStore } from '@/lib/store'
+import { GlobalLoading } from '@/components/GlobalLoading'
 
 export default function SuccessPage() {
   const router = useRouter()
@@ -90,6 +91,9 @@ export default function SuccessPage() {
           </p>
         </div>
       </div>
+
+      {/* 全局 Loading */}
+      <GlobalLoading />
     </div>
   )
 }

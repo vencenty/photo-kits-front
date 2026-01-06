@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type PhotoTransform, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
+import { GlobalLoading } from '@/components/GlobalLoading'
 import { updatePhoto } from '@/lib/api'
 import { mapCropModeToServer } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
@@ -18,6 +19,7 @@ export default function EditPage() {
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
   const updateImage = useStore((state) => state.updateImage)
+  const setApiLoading = useStore((state) => state.setApiLoading)
   const addImages = useStore((state) => state.addImages)
 
   const [image, setImage] = useState<Image | null>(null)
@@ -93,6 +95,7 @@ export default function EditPage() {
     
     // 同步保存到后端（异步执行，不阻塞UI）
     try {
+      setApiLoading(true, '保存编辑中...')
       await updatePhoto({
         photoId: imageId,
         cropMode: mapCropModeToServer(transform.styleType),
@@ -108,6 +111,8 @@ export default function EditPage() {
       console.log('编辑状态已同步到后端:', imageId)
     } catch (error) {
       console.error('同步编辑状态到后端失败:', error)
+    } finally {
+      setApiLoading(false, '')
     }
     
     router.back()
@@ -144,6 +149,9 @@ export default function EditPage() {
         onSave={handleSave}
         onCancel={() => router.back()}
       />
+
+      {/* 全局 Loading */}
+      <GlobalLoading />
     </div>
   )
 }

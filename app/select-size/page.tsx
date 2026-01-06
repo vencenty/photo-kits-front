@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2 } from 'luc
 import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
 import { addSpec, deleteSpec, createOrder, listSpecs, SpecInfo } from '@/lib/api'
+import { GlobalLoading } from '@/components/GlobalLoading'
 
 // 已添加的规格项（包含数据库 ID）
 interface AddedSize {
@@ -34,6 +35,7 @@ export default function SelectSizePage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
+  const setApiLoading = useStore((state) => state.setApiLoading)
 
   // 获取从查询页传来的订单号（优先从 sessionStorage，其次从 localStorage）
   useEffect(() => {
@@ -57,6 +59,7 @@ export default function SelectSizePage() {
 
     setIsLoading(true)
     try {
+      setApiLoading(true, '加载规格列表...')
       // 先尝试创建/获取订单
       await createOrder(orderNumber)
       
@@ -83,6 +86,7 @@ export default function SelectSizePage() {
       showToastMessage('加载规格失败，请重试')
     } finally {
       setIsLoading(false)
+      setApiLoading(false, '')
     }
   }, [orderNumber])
 
@@ -122,6 +126,7 @@ export default function SelectSizePage() {
 
     setIsAdding(true)
     try {
+      setApiLoading(true, '添加规格中...')
       // 调用后端 API 添加规格
       const result = await addSpec(orderNumber, {
         sessionId: fullSizeId,
@@ -157,6 +162,7 @@ export default function SelectSizePage() {
       setShowAddModal(false)
       setSelectedPaper(null)
       setSelectedSize(null)
+      setApiLoading(false, '')
     }
   }
 
@@ -206,6 +212,7 @@ export default function SelectSizePage() {
 
     setIsDeleting(size.id)
     try {
+      setApiLoading(true, '删除规格中...')
       // 调用后端 API 删除规格
       await deleteSpec(orderNumber, size.dbId)
 
@@ -217,6 +224,7 @@ export default function SelectSizePage() {
       showToastMessage('删除失败，请重试')
     } finally {
       setIsDeleting(null)
+      setApiLoading(false, '')
     }
   }
 
@@ -455,6 +463,9 @@ export default function SelectSizePage() {
           </div>
         </div>
       )}
+
+      {/* 全局 Loading */}
+      <GlobalLoading />
     </div>
   )
 }

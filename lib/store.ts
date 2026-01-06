@@ -99,6 +99,11 @@ export interface Image {
   transform?: PhotoTransform // 仿射变换信息（新版本）
   autoRotated?: boolean // 是否自动旋转（横图转竖图）
   file?: File // 前端保存原始文件对象
+  // 上传状态跟踪
+  uploadStatus?: {
+    ossUploaded: boolean // 是否已上传到 OSS
+    backendSynced: boolean // 是否已同步到后端
+  }
 }
 
 // 会话类型
@@ -159,6 +164,11 @@ interface StoreState {
   uploadProgress: number
   setUploadProgress: (progress: number) => void
   setIsUploading: (isUploading: boolean) => void
+  
+  // 全局 API Loading 状态
+  apiLoading: boolean
+  apiLoadingMessage: string
+  setApiLoading: (loading: boolean, message?: string) => void
 }
 
 export const useStore = create<StoreState>()(
@@ -234,6 +244,11 @@ export const useStore = create<StoreState>()(
       uploadProgress: 0,
       setUploadProgress: (progress) => set({ uploadProgress: progress }),
       setIsUploading: (isUploading) => set({ isUploading }),
+      
+      // 全局 API Loading 状态
+      apiLoading: false,
+      apiLoadingMessage: '',
+      setApiLoading: (loading, message = '') => set({ apiLoading: loading, apiLoadingMessage: message }),
     }),
     {
       name: 'photo-upload-storage',

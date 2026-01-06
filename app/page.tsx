@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, Search, Loader2 } from 'lucide-react'
+import { GlobalLoading } from '@/components/GlobalLoading'
 
 export default function Home() {
   const [orderNumber, setOrderNumber] = useState('')
@@ -104,6 +105,9 @@ export default function Home() {
           tips：请在订单支付成功1分钟后查询制作
         </p>
       </div>
+
+      {/* 全局 Loading */}
+      <GlobalLoading />
     </div>
   )
 }

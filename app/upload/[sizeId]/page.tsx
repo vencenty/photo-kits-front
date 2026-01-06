@@ -9,6 +9,7 @@ import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
+import { GlobalLoading } from '@/components/GlobalLoading'
 import { 
   getOssSignature, 
   uploadToOss, 
@@ -41,6 +42,7 @@ export default function UploadPage() {
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
   const allImages = useStore((state) => state.images)
+  const setApiLoading = useStore((state) => state.setApiLoading)
   // 过滤当前 session 的图片（有 thumbnailUrl 或 originalUrl）
   const images = allImages.filter(img => 
     (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
@@ -190,6 +192,7 @@ export default function UploadPage() {
       setIsLoadingPhotos(true)
 
       try {
+        setApiLoading(true, '加载照片列表...')
         const result = await listPhotos(orderSn, specId)
         
         if (result.photos && result.photos.length > 0) {
@@ -228,6 +231,11 @@ export default function UploadPage() {
                 originalUrl: photo.url,
                 thumbnailUrl: existingImage.thumbnailUrl || photo.url,
                 printCount: photo.quantity || existingImage.printCount || 1,
+                // 从服务器加载的照片，标记为已上传
+                uploadStatus: {
+                  ossUploaded: true,
+                  backendSynced: true,
+                },
               }
               
               // 服务器有 transform 数据时，使用服务器数据
@@ -271,6 +279,11 @@ export default function UploadPage() {
                 editState,
                 transform: serverTransform,
                 autoRotated: photo.autoRotated,
+                // 从服务器加载的照片，标记为已上传
+                uploadStatus: {
+                  ossUploaded: true,
+                  backendSynced: true,
+                },
               })
             }
           })
@@ -289,6 +302,7 @@ export default function UploadPage() {
         console.error('从服务器加载照片失败:', error)
       } finally {
         setIsLoadingPhotos(false)
+        setApiLoading(false, '')
       }
     }
 
@@ -299,14 +313,17 @@ export default function UploadPage() {
   useEffect(() => {
     const fetchSignature = async () => {
       try {
+        setApiLoading(true, '获取上传签名...')
         const signature = await getOssSignature()
         setOssSignature(signature)
       } catch (error) {
         console.error('获取 OSS 签名失败:', error)
+      } finally {
+        setApiLoading(false, '')
       }
     }
     fetchSignature()
-  }, [])
+  }, [setApiLoading])
 
   /**
    * 判断图片是否需要旋转
@@ -360,6 +377,7 @@ export default function UploadPage() {
     if (!signature) {
       try {
         console.log('开始获取 OSS 签名...')
+        setApiLoading(true, '获取上传签名...')
         signature = await getOssSignature()
         console.log('OSS 签名获取成功:', {
           host: signature.host,
@@ -373,6 +391,8 @@ export default function UploadPage() {
         setIsUploading(false)
         alert('获取上传签名失败，请重试')
         return
+      } finally {
+        setApiLoading(false, '')
       }
     }
 
@@ -426,6 +446,10 @@ export default function UploadPage() {
           editState: defaultEditState,
           autoRotated: needsRotation,
           file,
+          uploadStatus: {
+            ossUploaded: !!ossUrl,
+            backendSynced: false,
+          },
         }
 
         // 立即添加到列表显示（上传一张显示一张）
@@ -434,6 +458,7 @@ export default function UploadPage() {
         // 同步到后端（只有成功上传到 OSS 后才同步）
         if (ossUrl) {
           try {
+            setApiLoading(true, `同步照片 ${i + 1}/${validFiles.length}...`)
             await addPhotoToOrder({
               orderSn: orderSn,
               specId: specId,
@@ -446,9 +471,25 @@ export default function UploadPage() {
               cropMode: mapCropModeToServer('center'),
               autoRotated: needsRotation,
             })
+            // 更新上传状态
+            updateImage(photoId, {
+              uploadStatus: {
+                ossUploaded: true,
+                backendSynced: true,
+              },
+            })
             console.log('照片已同步到后端:', photoId)
           } catch (error) {
             console.error('同步照片到后端失败:', error)
+            // 更新上传状态为失败
+            updateImage(photoId, {
+              uploadStatus: {
+                ossUploaded: true,
+                backendSynced: false,
+              },
+            })
+          } finally {
+            setApiLoading(false, '')
           }
         } else {
           console.warn('图片未上传到 OSS，仅本地显示:', photoId)
@@ -467,13 +508,24 @@ export default function UploadPage() {
     }
   }
 
+  // 检查是否有未完成上传的图片
+  const hasUnfinishedUploads = images.some(img => {
+    const status = img.uploadStatus
+    return !status || !status.ossUploaded || !status.backendSynced
+  })
+
   const handleDelete = async (id: string) => {
     // 直接删除，不弹确认框
     deleteImage(id)
     // 后台异步删除，不阻塞 UI
-    deletePhotoFromOrder(id).catch(error => {
+    try {
+      setApiLoading(true, '删除照片中...')
+      await deletePhotoFromOrder(id)
+    } catch (error) {
       console.error('删除照片失败:', error)
-    })
+    } finally {
+      setApiLoading(false, '')
+    }
   }
 
   const handleCountChange = async (id: string, delta: number) => {
@@ -484,53 +536,67 @@ export default function UploadPage() {
       
       // 同步到后端
       try {
+        setApiLoading(true, '更新数量中...')
         await updatePhoto({
           photoId: id,
           quantity: newCount,
         })
       } catch (error) {
         console.error('更新照片数量失败:', error)
+      } finally {
+        setApiLoading(false, '')
       }
     }
   }
 
   const handleEdit = (id: string) => {
+    // 检查图片是否已完成上传
+    const image = images.find((img) => img.id === id)
+    if (!image) return
+    
+    const status = image.uploadStatus
+    if (!status || !status.ossUploaded || !status.backendSynced) {
+      alert('照片尚未上传完成，请等待上传完成后再编辑')
+      return
+    }
+    
     // 最佳实践：点击编辑时，将图片数据保存到 sessionStorage
     // 这样即使刷新页面，编辑页也能获取到数据（sessionStorage 在标签页关闭前一直存在）
-    const image = images.find((img) => img.id === id)
-    if (image) {
-      // 只保存必要的数据（URL、尺寸、transform 等）
-      const imageData = {
-        id: image.id,
-        sessionId: image.sessionId,
-        originalUrl: image.originalUrl,
-        thumbnailUrl: image.thumbnailUrl,
-        filename: image.filename,
-        width: image.width,
-        height: image.height,
-        printCount: image.printCount,
-        editState: image.editState,
-        transform: image.transform,
-        autoRotated: image.autoRotated,
-      }
-      sessionStorage.setItem(`edit-image-${id}`, JSON.stringify(imageData))
+    const imageData = {
+      id: image.id,
+      sessionId: image.sessionId,
+      originalUrl: image.originalUrl,
+      thumbnailUrl: image.thumbnailUrl,
+      filename: image.filename,
+      width: image.width,
+      height: image.height,
+      printCount: image.printCount,
+      editState: image.editState,
+      transform: image.transform,
+      autoRotated: image.autoRotated,
     }
+    sessionStorage.setItem(`edit-image-${id}`, JSON.stringify(imageData))
     router.push(`/edit/${id}`)
   }
 
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return
     if (confirm(`确定要删除选中的 ${selectedIds.length} 张图片吗？`)) {
-      for (const id of selectedIds) {
-        try {
-          await deletePhotoFromOrder(id)
-        } catch (error) {
-          console.error('删除照片失败:', error)
+      try {
+        setApiLoading(true, `删除 ${selectedIds.length} 张照片...`)
+        for (const id of selectedIds) {
+          try {
+            await deletePhotoFromOrder(id)
+          } catch (error) {
+            console.error('删除照片失败:', error)
+          }
+          deleteImage(id)
         }
-        deleteImage(id)
+        clearSelection()
+        setIsBatchMode(false)
+      } finally {
+        setApiLoading(false, '')
       }
-      clearSelection()
-      setIsBatchMode(false)
     }
   }
 
@@ -588,6 +654,7 @@ export default function UploadPage() {
 
     // 使用批量 API 同步到后端（一次性更新所有照片，而不是循环调用）
     try {
+      setApiLoading(true, `批量更新 ${targetIds.length} 张照片...`)
       const result = await batchUpdatePhotos({
         photoIds: targetIds,
         cropMode: mapCropModeToServer(mode),
@@ -595,8 +662,8 @@ export default function UploadPage() {
       console.log(`批量更新成功: ${result.updatedCount} 张照片`)
     } catch (error) {
       console.error('批量更新照片裁剪模式失败:', error)
-      // 如果批量更新失败，可以回退到单个更新（可选）
-      // 但通常批量更新失败是网络或服务器问题，单个更新也会失败
+    } finally {
+      setApiLoading(false, '')
     }
   }
 
@@ -630,6 +697,7 @@ export default function UploadPage() {
       }))
 
       // 调用后端提交订单
+      setApiLoading(true, '提交订单中...')
       await submitOrder({
         orderSn: orderSn,
         photos,
@@ -662,6 +730,7 @@ export default function UploadPage() {
       alert('提交失败，请重试')
     } finally {
       setIsSubmitting(false)
+      setApiLoading(false, '')
     }
   }
 
@@ -719,6 +788,14 @@ export default function UploadPage() {
         <div className="bg-blue-50 px-4 py-3 flex items-center gap-2">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
           <p className="text-sm text-blue-600">{uploadProgress}</p>
+        </div>
+      )}
+      
+      {/* 未完成上传提示 */}
+      {hasUnfinishedUploads && !isUploading && (
+        <div className="bg-yellow-50 px-4 py-3 flex items-center gap-2">
+          <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />
+          <p className="text-sm text-yellow-600">有照片正在上传中，请等待上传完成后再编辑</p>
         </div>
       )}
 
@@ -788,11 +865,13 @@ export default function UploadPage() {
                           className="relative bg-white"
                           style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
                         >
-                          <PhotoPreviewCard 
-                            image={image} 
-                            aspectRatio={paperRatio}
-                            onClick={!isBatchMode ? () => handleEdit(image.id) : undefined}
-                          />
+                  <PhotoPreviewCard 
+                    image={image} 
+                    aspectRatio={paperRatio}
+                    onClick={!isBatchMode && image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced 
+                      ? () => handleEdit(image.id) 
+                      : undefined}
+                  />
                           
                           {!isBatchMode && (
                             <button
@@ -853,9 +932,10 @@ export default function UploadPage() {
                               e.stopPropagation()
                               handleEdit(image.id)
                             }}
-                            className="w-full py-2.5 bg-[#f5f5f5] text-gray-600 text-sm font-medium"
+                            disabled={!image.uploadStatus?.ossUploaded || !image.uploadStatus?.backendSynced}
+                            className="w-full py-2.5 bg-[#f5f5f5] text-gray-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            编辑
+                            {image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced ? '编辑' : '上传中...'}
                           </button>
                         )}
                       </div>
@@ -870,18 +950,22 @@ export default function UploadPage() {
 
       {/* 底部操作栏 */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20">
-        <div className="px-4 py-3 safe-area-inset-bottom">
+        <div className="px-4 pt-3 pb-4 safe-area-inset-bottom" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px) + 1rem)' }}>
           {!isBatchMode ? (
             <>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
+                    if (hasUnfinishedUploads) {
+                      alert('有照片尚未上传完成，请等待上传完成后再进行批量编辑')
+                      return
+                    }
                     setIsBatchMode(true)
                     clearSelection()
                     setBatchCropMode(null)
                   }}
-                  className="text-[#ff4d6d] font-medium text-sm whitespace-nowrap"
-                  disabled={images.length === 0}
+                  className="text-[#ff4d6d] font-medium text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={images.length === 0 || hasUnfinishedUploads}
                 >
                   批量编辑
                 </button>
@@ -899,7 +983,7 @@ export default function UploadPage() {
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="w-full mt-3 py-3 bg-green-500 text-white rounded-full font-medium disabled:opacity-50"
+                  className="w-full mt-3 mb-1 py-3 bg-green-500 text-white rounded-full font-medium disabled:opacity-50"
                 >
                   确认提交打印({totalPrintCount}张)
                 </button>
@@ -1022,6 +1106,9 @@ export default function UploadPage() {
           </div>
         </div>
       )}
+
+      {/* 全局 Loading */}
+      <GlobalLoading />
     </div>
   )
 }
