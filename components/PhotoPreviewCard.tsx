@@ -12,9 +12,14 @@ interface PhotoPreviewCardProps {
 }
 
 /**
- * 给 OSS URL 添加压缩参数
+ * 给 OSS URL 添加压缩和格式转换参数
  * 使用阿里云 OSS 图片处理服务进行压缩
- * 参数: w_300 宽度300px, q_80 质量80%, f_webp webp格式
+ * - HEIC/HEIF/WebP 等都会转换为 JPG
+ * - 缩略图压缩到 300px 宽度
+ * - 质量 80%
+ * 
+ * 注意: 阿里云 OSS 图片处理对 HEIC/HEIF 格式需要开通「图片高级处理」功能
+ * 源文件最大支持 20MB
  */
 function getCompressedImageUrl(url: string): string {
   if (!url) return url
@@ -25,10 +30,11 @@ function getCompressedImageUrl(url: string): string {
   }
   
   // 如果是 OSS URL，添加图片处理参数
-  // 阿里云 OSS 图片处理参数格式: ?x-oss-process=image/resize,w_300/quality,q_80/format,webp
+  // 阿里云 OSS 图片处理参数格式: ?x-oss-process=image/resize,w_300/quality,q_80/format,jpg
+  // format,jpg 确保输出为 JPG 格式（支持 HEIC/HEIF/WebP 等输入格式）
   if (url.includes('aliyuncs.com') || url.includes('oss-proxy') || url.includes('vencenty.cc')) {
     const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}x-oss-process=image/resize,w_300/quality,q_80/format,webp`
+    return `${url}${separator}x-oss-process=image/resize,s_300/format,jpg`
   }
   
   return url

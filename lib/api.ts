@@ -353,6 +353,23 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
   })
 }
 
+export interface BatchUpdatePhotosParams {
+  photoIds: string[]
+  cropMode?: string
+  transform?: PhotoTransform
+}
+
+/**
+ * 批量更新照片
+ * 后端路由: PUT /api/order/photos/batch
+ */
+export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promise<{ updatedCount: number; message: string }> {
+  return request<{ updatedCount: number; message: string }>('/api/order/photos/batch', {
+    method: 'PUT',
+    body: JSON.stringify(params),
+  })
+}
+
 /**
  * 删除照片
  * 后端路由: DELETE /api/order/photo

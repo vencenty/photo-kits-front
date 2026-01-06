@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type PhotoTransform, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { updatePhoto } from '@/lib/api'
+import { mapCropModeToServer } from '@/lib/utils'
 
 export default function EditPage() {
   const router = useRouter()
@@ -50,7 +51,7 @@ export default function EditPage() {
     try {
       await updatePhoto({
         photoId: imageId,
-        cropMode: transform.styleType,
+        cropMode: mapCropModeToServer(transform.styleType),
         transform: {
           matrix: transform.matrix,
           outputWidth: transform.outputWidth,

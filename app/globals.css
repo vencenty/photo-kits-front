@@ -46,4 +46,14 @@
   .safe-area-inset-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  
+  /* 隐藏滚动条但保持滚动功能 */
+  .hide-scrollbar {
+    -ms-overflow-style: none;  /* IE 和 Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari, Opera */
+  }
 }

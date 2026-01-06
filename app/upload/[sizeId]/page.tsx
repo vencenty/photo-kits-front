@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, parseAffineMatrix } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
-import { generateId, compressImage, getImageDimensions } from '@/lib/utils'
+import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
 import { 
@@ -16,6 +17,7 @@ import {
   deletePhotoFromOrder, 
   submitOrder,
   listPhotos,
+  batchUpdatePhotos,
   OssSignature,
   PhotoTransform
 } from '@/lib/api'
@@ -56,10 +58,98 @@ export default function UploadPage() {
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
 
+  // 虚拟滚动相关
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const COLUMNS = 3
+  const GAP = 8 // gap-2 = 8px
+
   // 获取相纸尺寸配置
   const photoSize = getPhotoSizeById(sizeId)
   // 计算相纸比例
   const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
+
+  // 计算行数
+  const rowCount = Math.ceil(images.length / COLUMNS)
+
+  // 动态计算行高（基于容器宽度和相纸比例）
+  const getRowHeight = useCallback((index: number) => {
+    // 如果已经有实际测量的高度，使用实际高度
+    const rowElement = rowRefs.current.get(index)
+    if (rowElement) {
+      const height = rowElement.getBoundingClientRect().height
+      if (height > 0) {
+        return height
+      }
+    }
+    
+    // 否则使用估算高度
+    if (!scrollContainerRef.current) {
+      // 如果容器还没有渲染，使用一个保守的估算值
+      // 假设屏幕宽度约 375px（移动端），卡片宽度约 115px
+      const estimatedCardWidth = 115
+      const estimatedCardHeight = estimatedCardWidth / paperRatio + 50 // 50px 包含编辑按钮和间距
+      return estimatedCardHeight + GAP
+    }
+    
+    const containerWidth = scrollContainerRef.current.offsetWidth - 24 // px-3 = 12px * 2
+    if (containerWidth <= 0) {
+      // 容器宽度无效，使用保守估算
+      const estimatedCardWidth = 115
+      const estimatedCardHeight = estimatedCardWidth / paperRatio + 50
+      return estimatedCardHeight + GAP
+    }
+    
+    const cardWidth = (containerWidth - GAP * (COLUMNS - 1)) / COLUMNS
+    // 卡片高度 = 图片区域（基于宽高比）+ 编辑按钮高度（py-2.5 ≈ 40px）+ 额外边距（10px）
+    const cardHeight = cardWidth / paperRatio + 50
+    return cardHeight + GAP
+  }, [paperRatio])
+
+  // 虚拟滚动器
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: getRowHeight,
+    overscan: 3, // 上下各多渲染 3 行，滚动更平滑
+  })
+
+  // 使用 ResizeObserver 监听行高变化并触发重新测量
+  useEffect(() => {
+    if (rowRefs.current.size === 0) return
+    
+    const observer = new ResizeObserver(() => {
+      // 当行高变化时，重新测量所有行（更安全，避免单个元素测量的问题）
+      rowVirtualizer.measure()
+    })
+    
+    // 观察所有已渲染的行
+    rowRefs.current.forEach((element) => {
+      observer.observe(element)
+    })
+    
+    return () => {
+      observer.disconnect()
+    }
+  }, [rowVirtualizer, images.length])
+
+  // 窗口大小变化时重新测量行高
+  useEffect(() => {
+    const handleResize = () => {
+      rowVirtualizer.measure()
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [rowVirtualizer])
+
+  // 当图片列表变化时，重新测量
+  useEffect(() => {
+    // 延迟测量，确保 DOM 已更新
+    const timer = setTimeout(() => {
+      rowVirtualizer.measure()
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [images.length, rowVirtualizer])
 
   // 获取订单号
   const getOrderSn = useCallback(() => {
@@ -117,13 +207,17 @@ export default function UploadPage() {
 
           result.photos.forEach(photo => {
             // 构建 transform 数据
+            // 如果服务器返回的 styleType 是后端的值（cover/full/lomo），需要转换为前端值
+            const serverStyleType = photo.transform?.styleType 
+              ? mapCropModeFromServer(photo.transform.styleType) 
+              : undefined
             const serverTransform = photo.transform ? {
               matrix: photo.transform.matrix as [number, number, number, number, number, number],
               outputWidth: photo.transform.outputWidth,
               outputHeight: photo.transform.outputHeight,
               sourceWidth: photo.transform.sourceWidth,
               sourceHeight: photo.transform.sourceHeight,
-              styleType: (photo.transform.styleType as 'center' | 'full' | 'lomo') || 'center',
+              styleType: (serverStyleType as 'center' | 'full' | 'lomo') || 'center',
             } : undefined
 
             const existingImage = existingImagesMap.get(photo.photoId)
@@ -153,8 +247,10 @@ export default function UploadPage() {
               imagesToUpdate.push({ id: photo.photoId, updates })
             } else {
               // 新照片，添加到列表
+              // 如果服务器返回了 cropMode，需要转换为前端的 mode
+              const serverCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
               const editState: EditState = {
-                mode: serverTransform?.styleType || (photo.cropMode as CropMode) || 'center',
+                mode: serverTransform?.styleType || serverCropMode || 'center',
                 scale: 1,
                 x: 0,
                 y: 0,
@@ -227,6 +323,34 @@ export default function UploadPage() {
     const files = e.target.files
     if (!files || files.length === 0 || !currentSession) return
 
+    // 文件大小限制：20MB
+    const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+    const validFiles: File[] = []
+    const oversizedFiles: string[] = []
+    
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].size > MAX_FILE_SIZE) {
+        oversizedFiles.push(files[i].name)
+      } else {
+        validFiles.push(files[i])
+      }
+    }
+    
+    // 提示用户有文件过大
+    if (oversizedFiles.length > 0) {
+      const fileList = oversizedFiles.slice(0, 5).join('\n')
+      const moreText = oversizedFiles.length > 5 ? `\n...等${oversizedFiles.length}个文件` : ''
+      alert(`以下文件超过20MB限制，已跳过：\n${fileList}${moreText}`)
+    }
+    
+    if (validFiles.length === 0) {
+      // 重置 input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+
     setIsUploading(true)
     const orderSn = getOrderSn()
     const specId = currentSession.sizeId
@@ -252,9 +376,9 @@ export default function UploadPage() {
       }
     }
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      setUploadProgress(`上传中 ${i + 1}/${files.length}`)
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i]
+      setUploadProgress(`上传中 ${i + 1}/${validFiles.length}`)
       
       try {
         // 获取原图尺寸
@@ -319,7 +443,7 @@ export default function UploadPage() {
               originalWidth: dimensions.width,
               originalHeight: dimensions.height,
               quantity: 1,
-              cropMode: 'center',
+              cropMode: mapCropModeToServer('center'),
               autoRotated: needsRotation,
             })
             console.log('照片已同步到后端:', photoId)
@@ -442,16 +566,17 @@ export default function UploadPage() {
     updateImages(updates)
     setBatchCropMode(mode)
 
-    // 同步到后端
-    for (const update of updates) {
-      try {
-        await updatePhoto({
-          photoId: update.id,
-          cropMode: mode,
-        })
-      } catch (error) {
-        console.error('更新照片裁剪模式失败:', error)
-      }
+    // 使用批量 API 同步到后端（一次性更新所有照片，而不是循环调用）
+    try {
+      const result = await batchUpdatePhotos({
+        photoIds: targetIds,
+        cropMode: mapCropModeToServer(mode),
+      })
+      console.log(`批量更新成功: ${result.updatedCount} 张照片`)
+    } catch (error) {
+      console.error('批量更新照片裁剪模式失败:', error)
+      // 如果批量更新失败，可以回退到单个更新（可选）
+      // 但通常批量更新失败是网络或服务器问题，单个更新也会失败
     }
   }
 
@@ -599,92 +724,126 @@ export default function UploadPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {images.map((image) => (
-              <div
-                key={image.id}
-                className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
-                  isBatchMode ? 'cursor-pointer' : ''
-                } ${selectedIds.includes(image.id) ? 'ring-2 ring-[#ff4d6d]' : ''}`}
-                onClick={() => isBatchMode && toggleSelection(image.id)}
-              >
-                <div 
-                  className="relative bg-white"
-                  style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
-                >
-                  <PhotoPreviewCard 
-                    image={image} 
-                    aspectRatio={paperRatio}
-                    onClick={!isBatchMode ? () => handleEdit(image.id) : undefined}
-                  />
-                  
-                  {!isBatchMode && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(image.id)
-                      }}
-                      className="absolute top-2 right-2 w-6 h-6 bg-[#666] rounded-full flex items-center justify-center z-10"
-                    >
-                      <X className="w-4 h-4 text-white" />
-                    </button>
-                  )}
-                  
-                  {isBatchMode && (
-                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
-                      selectedIds.includes(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
-                    }`}>
-                      {selectedIds.includes(image.id) && (
-                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                  )}
-
-
-                  {!isBatchMode && (
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
-                      <div className="flex items-center bg-[#e8e8e8] rounded-full">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCountChange(image.id, -1)
-                          }}
-                          className="w-7 h-7 flex items-center justify-center text-gray-600"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="w-6 text-center text-sm font-medium text-gray-700">
-                          {image.printCount}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCountChange(image.id, 1)
-                          }}
-                          className="w-7 h-7 flex items-center justify-center text-gray-600"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {!isBatchMode && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleEdit(image.id)
+          <div 
+            ref={scrollContainerRef}
+            className="overflow-auto hide-scrollbar"
+            style={{ height: 'calc(100vh - 280px)' }} // 减去 header + footer 高度
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const startIndex = virtualRow.index * COLUMNS
+                const rowImages = images.slice(startIndex, startIndex + COLUMNS)
+                
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={(el) => {
+                      if (el) {
+                        rowRefs.current.set(virtualRow.index, el)
+                      } else {
+                        rowRefs.current.delete(virtualRow.index)
+                      }
                     }}
-                    className="w-full py-2.5 bg-[#f5f5f5] text-gray-600 text-sm font-medium"
+                    className="absolute left-0 right-0 grid grid-cols-3 gap-2"
+                    style={{
+                      top: `${virtualRow.start}px`,
+                    }}
                   >
-                    编辑
-                  </button>
-                )}
-              </div>
-            ))}
+                    {rowImages.map((image) => (
+                      <div
+                        key={image.id}
+                        className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
+                          isBatchMode ? 'cursor-pointer' : ''
+                        } ${selectedIds.includes(image.id) ? 'ring-2 ring-[#ff4d6d]' : ''}`}
+                        onClick={() => isBatchMode && toggleSelection(image.id)}
+                      >
+                        <div 
+                          className="relative bg-white"
+                          style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
+                        >
+                          <PhotoPreviewCard 
+                            image={image} 
+                            aspectRatio={paperRatio}
+                            onClick={!isBatchMode ? () => handleEdit(image.id) : undefined}
+                          />
+                          
+                          {!isBatchMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(image.id)
+                              }}
+                              className="absolute top-2 right-2 w-6 h-6 bg-[#666] rounded-full flex items-center justify-center z-10"
+                            >
+                              <X className="w-4 h-4 text-white" />
+                            </button>
+                          )}
+                          
+                          {isBatchMode && (
+                            <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
+                              selectedIds.includes(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
+                            }`}>
+                              {selectedIds.includes(image.id) && (
+                                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                          )}
+
+                          {!isBatchMode && (
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
+                              <div className="flex items-center bg-[#e8e8e8] rounded-full">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleCountChange(image.id, -1)
+                                  }}
+                                  className="w-7 h-7 flex items-center justify-center text-gray-600"
+                                >
+                                  <Minus className="w-4 h-4" />
+                                </button>
+                                <span className="w-6 text-center text-sm font-medium text-gray-700">
+                                  {image.printCount}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleCountChange(image.id, 1)
+                                  }}
+                                  className="w-7 h-7 flex items-center justify-center text-gray-600"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {!isBatchMode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEdit(image.id)
+                            }}
+                            className="w-full py-2.5 bg-[#f5f5f5] text-gray-600 text-sm font-medium"
+                          >
+                            编辑
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -801,7 +960,7 @@ export default function UploadPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/jpg,image/png,image/heic,image/heif,image/webp,.heic,.heif"
         multiple
         onChange={handleFileSelect}
         className="hidden"

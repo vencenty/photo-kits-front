@@ -108,3 +108,36 @@ export function getImageDimensions(file: File): Promise<{ width: number; height:
   })
 }
 
+// 裁剪模式类型
+export type CropMode = 'center' | 'full' | 'lomo'
+
+/**
+ * 将前端的裁剪模式转换为后端的 cropMode
+ * - center (居中裁剪) → cover
+ * - full (打印整图) → full
+ * - lomo (四周留白) → lomo
+ */
+export function mapCropModeToServer(mode: CropMode | string): string {
+  const modeMap: Record<string, string> = {
+    center: 'cover',
+    full: 'full',
+    lomo: 'lomo',
+  }
+  return modeMap[mode] || mode
+}
+
+/**
+ * 将后端的 cropMode 转换为前端的模式
+ * - cover → center (居中裁剪)
+ * - full → full (打印整图)
+ * - lomo → lomo (四周留白)
+ */
+export function mapCropModeFromServer(cropMode: string): CropMode {
+  const modeMap: Record<string, CropMode> = {
+    cover: 'center',
+    full: 'full',
+    lomo: 'lomo',
+  }
+  return modeMap[cropMode] || (cropMode as CropMode)
+}
+
