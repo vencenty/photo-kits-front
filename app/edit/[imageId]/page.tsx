@@ -7,6 +7,7 @@ import { useStore, type PhotoTransform, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { updatePhoto } from '@/lib/api'
 import { mapCropModeToServer } from '@/lib/utils'
+import type { Image as ImageType } from '@/lib/store'
 
 export default function EditPage() {
   const router = useRouter()
@@ -17,20 +18,63 @@ export default function EditPage() {
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
   const updateImage = useStore((state) => state.updateImage)
+  const addImages = useStore((state) => state.addImages)
 
   const [image, setImage] = useState<Image | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     // 等待 hydration 完成
-    if (!hasHydrated) return
+    if (!hasHydrated || !currentSession) return
+
+    // 最佳实践：按优先级查找图片数据
+    // 1. 优先从 store 中查找（最快，无网络请求）
+    // 2. 如果 store 中没有或没有 URL，从 sessionStorage 查找（点击编辑时保存的）
+    // 3. 如果都没有，跳转到列表页
     
-    const foundImage = images.find((img) => img.id === imageId)
-    if (!foundImage) {
-      router.push('/')
+    let foundImage = images.find((img) => img.id === imageId)
+    const hasValidUrl = foundImage && (foundImage.originalUrl || foundImage.thumbnailUrl)
+    
+    // 如果 store 中没有或没有有效的 URL，尝试从 sessionStorage 读取
+    if (!foundImage || !hasValidUrl) {
+      try {
+        const sessionData = sessionStorage.getItem(`edit-image-${imageId}`)
+        if (sessionData) {
+          const imageData = JSON.parse(sessionData) as ImageType
+          // 如果 store 中有图片但缺少 URL，更新它
+          if (foundImage) {
+            updateImage(imageId, {
+              originalUrl: imageData.originalUrl,
+              thumbnailUrl: imageData.thumbnailUrl,
+            })
+            foundImage = { ...foundImage, ...imageData }
+          } else {
+            // 添加到 store
+            addImages([imageData])
+            foundImage = imageData
+          }
+        }
+      } catch (error) {
+        console.error('从 sessionStorage 读取图片数据失败:', error)
+      }
+    }
+    
+    // 检查最终是否有有效的图片数据
+    const finalHasValidUrl = foundImage && (foundImage.originalUrl || foundImage.thumbnailUrl)
+    
+    if (!foundImage || !finalHasValidUrl) {
+      // 如果还是没有，跳转到列表页
+      setIsLoading(false)
+      setTimeout(() => {
+        router.push(`/upload/${currentSession.sizeId}`)
+      }, 0)
       return
     }
+    
+    // 找到完整的图片数据，直接使用
+    setIsLoading(false)
     setImage(foundImage)
-  }, [imageId, images, router, hasHydrated])
+  }, [imageId, images, router, hasHydrated, currentSession, addImages, updateImage])
 
   const handleSave = async (transform: PhotoTransform) => {
     // 保存变换信息到本地 store
@@ -69,7 +113,7 @@ export default function EditPage() {
     router.back()
   }
 
-  if (!hasHydrated || !image || !currentSession) {
+  if (!hasHydrated || isLoading || !image || !currentSession) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-white animate-spin" />

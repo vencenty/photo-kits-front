@@ -495,6 +495,26 @@ export default function UploadPage() {
   }
 
   const handleEdit = (id: string) => {
+    // 最佳实践：点击编辑时，将图片数据保存到 sessionStorage
+    // 这样即使刷新页面，编辑页也能获取到数据（sessionStorage 在标签页关闭前一直存在）
+    const image = images.find((img) => img.id === id)
+    if (image) {
+      // 只保存必要的数据（URL、尺寸、transform 等）
+      const imageData = {
+        id: image.id,
+        sessionId: image.sessionId,
+        originalUrl: image.originalUrl,
+        thumbnailUrl: image.thumbnailUrl,
+        filename: image.filename,
+        width: image.width,
+        height: image.height,
+        printCount: image.printCount,
+        editState: image.editState,
+        transform: image.transform,
+        autoRotated: image.autoRotated,
+      }
+      sessionStorage.setItem(`edit-image-${id}`, JSON.stringify(imageData))
+    }
     router.push(`/edit/${id}`)
   }
 

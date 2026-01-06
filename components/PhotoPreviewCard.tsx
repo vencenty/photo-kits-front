@@ -4,40 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import { PhotoCanvas, type StyleType } from './PhotoCanvas'
 import type { Image as ImageType, PhotoTransform } from '@/lib/store'
+import { getListImageUrl } from '@/lib/image-config'
 
 interface PhotoPreviewCardProps {
   image: ImageType
   aspectRatio: number // 相纸宽高比
   onClick?: () => void
-}
-
-/**
- * 给 OSS URL 添加压缩和格式转换参数
- * 使用阿里云 OSS 图片处理服务进行压缩
- * - HEIC/HEIF/WebP 等都会转换为 JPG
- * - 缩略图压缩到 300px 宽度
- * - 质量 80%
- * 
- * 注意: 阿里云 OSS 图片处理对 HEIC/HEIF 格式需要开通「图片高级处理」功能
- * 源文件最大支持 20MB
- */
-function getCompressedImageUrl(url: string): string {
-  if (!url) return url
-  
-  // 如果是 data URL 或本地文件，不处理
-  if (url.startsWith('data:') || url.startsWith('blob:')) {
-    return url
-  }
-  
-  // 如果是 OSS URL，添加图片处理参数
-  // 阿里云 OSS 图片处理参数格式: ?x-oss-process=image/resize,w_300/quality,q_80/format,jpg
-  // format,jpg 确保输出为 JPG 格式（支持 HEIC/HEIF/WebP 等输入格式）
-  if (url.includes('aliyuncs.com') || url.includes('oss-proxy') || url.includes('vencenty.cc')) {
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}x-oss-process=image/resize,s_300/format,jpg`
-  }
-  
-  return url
 }
 
 export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCardProps) {
@@ -98,7 +70,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   const styleType: StyleType = image.transform?.styleType || image.editState?.mode || 'center'
   
   // 获取压缩后的图片 URL（用于列表显示）
-  const compressedUrl = getCompressedImageUrl(image.thumbnailUrl)
+  const compressedUrl = getListImageUrl(image.thumbnailUrl)
 
   return (
     <div 

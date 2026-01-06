@@ -16,6 +16,7 @@ import {
   getMinScale,
   calculateInitialAttrs,
 } from './PhotoCanvas'
+import { getEditImageUrl } from '@/lib/image-config'
 
 // 配置常量
 const WHITE_MARGIN_PERCENT = 5
@@ -193,13 +194,24 @@ export default function ImageEditor({
 
   // 加载图片
   useEffect(() => {
-    const imageUrl = photoData.thumbnailUrl || photoData.originalUrl
-    if (!imageUrl) return
+    const originalUrl = photoData.thumbnailUrl || photoData.originalUrl
+    if (!originalUrl) return
+    
+    // 使用编辑页压缩配置
+    const imageUrl = getEditImageUrl(originalUrl)
     
     const img = document.createElement('img')
     img.crossOrigin = 'anonymous'
     img.onload = () => setImage(img)
-    img.onerror = () => console.error('图片加载失败')
+    img.onerror = () => {
+      // 如果压缩后的 URL 加载失败，降级使用原图
+      if (imageUrl !== originalUrl) {
+        const fallbackImg = document.createElement('img')
+        fallbackImg.crossOrigin = 'anonymous'
+        fallbackImg.onload = () => setImage(fallbackImg)
+        fallbackImg.src = originalUrl
+      }
+    }
     img.src = imageUrl
     
     return () => {
