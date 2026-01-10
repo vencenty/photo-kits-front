@@ -154,6 +154,45 @@ function constrainPosition(
   const scaledWidth = (image.width * cos + image.height * sin) * scale
   const scaledHeight = (image.width * sin + image.height * cos) * scale
   
+  // 留白模式：允许图片在有效区域内自由移动，只要不超出边界
+  if (styleType === 'lomo') {
+    // 分别处理 X 轴和 Y 轴的约束
+    
+    // X 轴约束
+    let constrainedX: number
+    if (scaledWidth > effectiveWidth) {
+      // 图片宽度大于有效区域，需要居中约束（防止超出边界）
+      const centerX = marginX + effectiveWidth / 2
+      const maxOffsetX = (scaledWidth - effectiveWidth) / 2
+      constrainedX = Math.max(centerX - maxOffsetX, Math.min(centerX + maxOffsetX, x))
+    } else {
+      // 图片宽度小于等于有效区域，允许在有效区域内自由移动
+      const minX = marginX + scaledWidth / 2
+      const maxX = marginX + effectiveWidth - scaledWidth / 2
+      constrainedX = Math.max(minX, Math.min(maxX, x))
+    }
+    
+    // Y 轴约束
+    let constrainedY: number
+    if (scaledHeight > effectiveHeight) {
+      // 图片高度大于有效区域，需要居中约束（防止超出边界）
+      const centerY = marginY + effectiveHeight / 2
+      const maxOffsetY = (scaledHeight - effectiveHeight) / 2
+      constrainedY = Math.max(centerY - maxOffsetY, Math.min(centerY + maxOffsetY, y))
+    } else {
+      // 图片高度小于等于有效区域，允许在有效区域内自由移动
+      const minY = marginY + scaledHeight / 2
+      const maxY = marginY + effectiveHeight - scaledHeight / 2
+      constrainedY = Math.max(minY, Math.min(maxY, y))
+    }
+    
+    return {
+      x: constrainedX,
+      y: constrainedY,
+    }
+  }
+  
+  // 其他模式（center, full）：使用原来的约束逻辑
   const centerX = marginX + effectiveWidth / 2
   const centerY = marginY + effectiveHeight / 2
   
