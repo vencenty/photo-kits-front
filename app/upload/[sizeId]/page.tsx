@@ -19,6 +19,7 @@ import {
   submitOrder,
   listPhotos,
   batchUpdatePhotos,
+  getOrderDetail,
   OssSignature,
   PhotoTransform
 } from '@/lib/api'
@@ -38,6 +39,7 @@ export default function UploadPage() {
   const [isLoadingPhotos, setIsLoadingPhotos] = useState(true)
   const [ossSignature, setOssSignature] = useState<OssSignature | null>(null)
   const loadedRef = useRef(false) // 防止重复加载
+  const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁单
 
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
@@ -317,6 +319,16 @@ export default function UploadPage() {
 
       try {
         setApiLoading(true, '加载照片列表...')
+        
+        // 检查订单状态
+        try {
+          const orderDetail = await getOrderDetail(orderSn)
+          // 状态2（生产中）表示客户已确认/锁单
+          setIsOrderLocked(orderDetail.status === 2)
+        } catch (error) {
+          console.error('获取订单状态失败:', error)
+        }
+        
         const result = await listPhotos(orderSn, specId)
         
         if (result.photos && result.photos.length > 0) {
@@ -463,6 +475,15 @@ export default function UploadPage() {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0 || !currentSession) return
+    
+    // 检查订单是否已锁单
+    if (isOrderLocked) {
+      alert('订单已锁单，无法继续上传照片。如需修改，请联系客服。')
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
 
     // 文件大小限制：20MB
     const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
@@ -639,6 +660,11 @@ export default function UploadPage() {
   })
 
   const handleDelete = async (id: string) => {
+    // 检查订单是否已锁单
+    if (isOrderLocked) {
+      alert('订单已锁单，无法删除照片。如需修改，请联系客服。')
+      return
+    }
     // 直接删除，不弹确认框
     deleteImage(id)
     // 后台异步删除，不阻塞 UI
@@ -653,6 +679,12 @@ export default function UploadPage() {
   }
 
   const handleCountChange = async (id: string, delta: number) => {
+    // 检查订单是否已锁单
+    if (isOrderLocked) {
+      alert('订单已锁单，无法修改照片数量。如需修改，请联系客服。')
+      return
+    }
+    
     const image = images.find((img) => img.id === id)
     if (image) {
       const newCount = Math.max(1, image.printCount + delta)
@@ -674,6 +706,11 @@ export default function UploadPage() {
   }
 
   const handleEdit = (id: string) => {
+    // 检查订单是否已锁单
+    if (isOrderLocked) {
+      alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
+      return
+    }
     // 检查图片是否已完成上传
     const image = images.find((img) => img.id === id)
     if (!image) return
@@ -832,6 +869,13 @@ export default function UploadPage() {
 
   const handleSubmit = () => {
     if (!canSubmit) return
+    
+    // 检查订单是否已锁单
+    if (isOrderLocked) {
+      alert('订单已锁单，无法提交。如需修改，请联系客服。')
+      return
+    }
+    
     setShowSubmitModal(true)
   }
 
@@ -973,13 +1017,19 @@ export default function UploadPage() {
               <Upload className="w-12 h-12 text-gray-400" />
             </div>
             <p className="text-gray-500 mb-6">还没有上传照片</p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="px-6 py-3 bg-[#ff4d6d] text-white rounded-full font-medium disabled:opacity-50"
-            >
-              开始上传
-            </button>
+            {isOrderLocked ? (
+              <div className="px-6 py-3 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center">
+                订单已锁单，正在制作中
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="px-6 py-3 bg-[#ff4d6d] text-white rounded-full font-medium disabled:opacity-50"
+              >
+                开始上传
+              </button>
+            )}
           </div>
         ) : (
           <div 
@@ -1136,29 +1186,37 @@ export default function UploadPage() {
           {!isBatchMode ? (
             <>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    if (hasUnfinishedUploads) {
-                      alert('有照片尚未上传完成，请等待上传完成后再进行批量编辑')
-                      return
-                    }
-                    setIsBatchMode(true)
-                    clearSelection()
-                    setBatchCropMode(null)
-                  }}
-                  className="text-[#ff4d6d] font-medium text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={images.length === 0 || hasUnfinishedUploads}
-                >
-                  批量编辑
-                </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium text-base disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}
-                  继续上传(已上传{totalPrintCount}张)
-                </button>
+                {isOrderLocked ? (
+                  <div className="flex-1 py-3 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center">
+                    订单已锁单，正在制作中
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (hasUnfinishedUploads) {
+                          alert('有照片尚未上传完成，请等待上传完成后再进行批量编辑')
+                          return
+                        }
+                        setIsBatchMode(true)
+                        clearSelection()
+                        setBatchCropMode(null)
+                      }}
+                      className="text-[#ff4d6d] font-medium text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={images.length === 0 || hasUnfinishedUploads}
+                    >
+                      批量编辑
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium text-base disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}
+                      继续上传(已上传{totalPrintCount}张)
+                    </button>
+                  </>
+                )}
               </div>
               
               {canSubmit && (

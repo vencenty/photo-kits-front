@@ -6,7 +6,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type PhotoTransform, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { updatePhoto } from '@/lib/api'
+import { updatePhoto, getOrderDetail } from '@/lib/api'
 import { mapCropModeToServer } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
 
@@ -24,6 +24,32 @@ export default function EditPage() {
 
   const [image, setImage] = useState<Image | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isOrderLocked, setIsOrderLocked] = useState(false)
+
+  // 检查订单状态
+  useEffect(() => {
+    const checkOrderStatus = async () => {
+      if (!currentSession?.orderNo) return
+      
+      try {
+        const orderDetail = await getOrderDetail(currentSession.orderNo)
+        // 状态2（生产中）表示客户已确认/锁单
+        setIsOrderLocked(orderDetail.status === 2)
+        
+        // 如果已锁单，提示并返回
+        if (orderDetail.status === 2) {
+          alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
+          router.back()
+        }
+      } catch (error) {
+        console.error('获取订单状态失败:', error)
+      }
+    }
+    
+    if (currentSession?.orderNo) {
+      checkOrderStatus()
+    }
+  }, [currentSession, router])
 
   useEffect(() => {
     // 等待 hydration 完成
@@ -79,6 +105,11 @@ export default function EditPage() {
   }, [imageId, images, router, hasHydrated, currentSession, addImages, updateImage])
 
   const handleSave = async (transform: PhotoTransform) => {
+    // 检查订单是否已锁单
+    if (isOrderLocked) {
+      alert('订单已锁单，无法保存编辑。如需修改，请联系客服。')
+      return
+    }
     // 保存变换信息到本地 store
     updateImage(imageId, { 
       transform,

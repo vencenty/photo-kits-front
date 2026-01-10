@@ -444,3 +444,16 @@ export async function submitOrderStatus(orderNo: string): Promise<{ code: number
     method: 'PUT',
   })
 }
+
+/**
+ * 锁单（客户确认，状态改为生产中/客户已确认）
+ * 后端路由: PUT /api/order/:orderNo/lock
+ * 注意：使用状态2（生产中）表示客户已确认/锁单
+ */
+export async function lockOrder(orderNo: string): Promise<{ code: number; message: string }> {
+  // 使用 submitOrderStatus，但实际应该创建一个新的 lock 接口
+  // 暂时使用 submitOrderStatus，后续可以改为专门的 lock 接口
+  return request<{ code: number; message: string }>(`/api/order/${orderNo}/submit`, {
+    method: 'PUT',
+  })
+}

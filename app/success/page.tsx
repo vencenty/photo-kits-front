@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { listSpecs, SpecInfo } from '@/lib/api'
+import { listSpecs, SpecInfo, lockOrder, getOrderDetail } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 
 // 闪光动画样式
@@ -58,6 +58,9 @@ export default function SuccessPage() {
   const [allSizes, setAllSizes] = useState<SizeSummary[]>([])
   const [isLoadingSizes, setIsLoadingSizes] = useState(true)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
+  const [orderStatus, setOrderStatus] = useState<number | null>(null)
+  const [isLocking, setIsLocking] = useState(false)
+  const [isLocked, setIsLocked] = useState(false)
 
   // 获取订单号
   useEffect(() => {
@@ -121,6 +124,24 @@ export default function SuccessPage() {
     loadAllSizes()
   }, [orderNumber, setApiLoading])
 
+  // 加载订单状态
+  useEffect(() => {
+    const loadOrderStatus = async () => {
+      if (!orderNumber) return
+
+      try {
+        const orderDetail = await getOrderDetail(orderNumber)
+        setOrderStatus(orderDetail.status)
+        // 状态2（生产中）表示客户已确认/锁单
+        setIsLocked(orderDetail.status === 2)
+      } catch (error) {
+        console.error('加载订单状态失败:', error)
+      }
+    }
+
+    loadOrderStatus()
+  }, [orderNumber])
+
   // 点击规格跳转到上传页面
   const handleSelectSize = useCallback((size: SizeSummary) => {
     const photoSize = getPhotoSizeById(size.id)
@@ -150,6 +171,30 @@ export default function SuccessPage() {
     router.push(`/upload/${size.id}`)
   }, [orderNumber, setCurrentSession, clearImages, router])
 
+  // 锁单功能
+  const handleLockOrder = async () => {
+    if (!orderNumber || isLocked) return
+
+    if (!confirm('确认锁单吗？锁单后将无法再编辑订单，只能查看。')) {
+      return
+    }
+
+    setIsLocking(true)
+    try {
+      setApiLoading(true, '锁单中...')
+      await lockOrder(orderNumber)
+      setIsLocked(true)
+      setOrderStatus(2) // 状态2表示客户已确认/锁单
+      alert('锁单成功！订单已确认，可以开始制作了。')
+    } catch (error) {
+      console.error('锁单失败:', error)
+      alert('锁单失败，请重试')
+    } finally {
+      setIsLocking(false)
+      setApiLoading(false, '')
+    }
+  }
+
   const handleViewImages = () => {
     if (currentSession?.sizeId) {
       router.push(`/upload/${currentSession.sizeId}`)
@@ -177,7 +222,7 @@ export default function SuccessPage() {
         </div>
 
         {/* Success Message */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6 border-4 border-red-500">
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6 ">
           <h1 className="text-2xl font-bold text-center text-gray-800 mb-3">
             照片提交成功
           </h1>
@@ -187,7 +232,7 @@ export default function SuccessPage() {
               animation: 'blink 1.5s ease-in-out infinite, pulse-glow 2s ease-in-out infinite',
             }}
           >
-            ⚠️ 请把红框区域内截图告诉客服核实制作。
+           确认无问题，点击锁单后，店铺安排制作。
           </p>
 
           {/* 订单信息 */}
@@ -284,9 +329,33 @@ export default function SuccessPage() {
 
           {/* Action Buttons */}
           <div className="space-y-3">
+            {isLocked ? (
+              <div className="w-full py-3 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-5 h-5" />
+                订单已锁单，正在制作中
+              </div>
+            ) : (
+              <button
+                onClick={handleLockOrder}
+                disabled={isLocking || !orderNumber}
+                className="w-full py-3 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLocking ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    锁单中...
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-5 h-5" />
+                    确认无问题，锁单进行制作
+                  </>
+                )}
+              </button>
+            )}
             <button
               onClick={handleViewImages}
-              className="w-full py-3 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-white border-2 border-gray-300 text-gray-600 font-medium rounded-lg shadow-sm hover:bg-gray-50 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
               <Image className="w-5 h-5" />
               查看已上传照片
