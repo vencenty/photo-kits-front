@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { RotateCw, ZoomIn, ZoomOut, Check, Lightbulb, RefreshCw } from 'lucide-react'
+import { RotateCw, ZoomIn, ZoomOut, Check, Lightbulb, RefreshCw, Download, Loader2 } from 'lucide-react'
 import { 
   PhotoTransform, 
   createAffineMatrix, 
@@ -45,6 +45,7 @@ interface KonvaCanvasProps {
   onDragEnd: (x: number, y: number) => void
   onWheel: (deltaY: number) => void
   dragBoundFunc: (pos: { x: number; y: number }) => { x: number; y: number }
+  stageRef?: React.RefObject<any>
 }
 
 function KonvaCanvas({
@@ -60,6 +61,7 @@ function KonvaCanvas({
   onDragEnd,
   onWheel,
   dragBoundFunc,
+  stageRef,
 }: KonvaCanvasProps) {
   const [konvaComponents, setKonvaComponents] = useState<{
     Stage: any
@@ -95,6 +97,7 @@ function KonvaCanvas({
 
   return (
     <Stage
+      ref={stageRef}
       width={stageSize.width}
       height={stageSize.height}
       onWheel={(e: any) => {
@@ -181,8 +184,10 @@ export default function ImageEditor({
   })
   const [hasChanges, setHasChanges] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   
   const containerRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<any>(null)
 
   // 计算相纸比例
   const aspectRatio = canvasWidth / canvasHeight
@@ -422,6 +427,44 @@ export default function ImageEditor({
     onSave(transform)
   }, [image, imageAttrs, stageSize, mode, onSave])
 
+  // 下载编辑后的图片
+  const handleDownload = useCallback(async () => {
+    if (!image || !stageRef.current) return
+    
+    setIsDownloading(true)
+    try {
+      const stage = stageRef.current
+      
+      // 方法1：直接使用 Konva Stage 的 toDataURL（最简单，与显示完全一致）
+      // 但这是基于压缩图的，如果需要原图质量，使用方法2
+      const dataURL = stage.toDataURL({
+        pixelRatio: 2, // 提高清晰度
+        mimeType: 'image/png',
+        quality: 1,
+      })
+      
+      // 创建下载链接
+      const link = document.createElement('a')
+      link.download = `edited-${mode}-${Date.now()}.png`
+      link.href = dataURL
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      console.log('图片已下载（基于当前显示）:', {
+        mode,
+        stageSize,
+        imageAttrs,
+        imageSize: { width: image.width, height: image.height },
+      })
+    } catch (error) {
+      console.error('下载图片失败:', error)
+      alert('下载失败，请重试')
+    } finally {
+      setIsDownloading(false)
+    }
+  }, [image, mode, stageSize, imageAttrs])
+
   // 计算有效区域
   const margin = mode === 'lomo' ? WHITE_MARGIN_PERCENT / 100 : 0
   const effectiveX = stageSize.width * margin
@@ -434,6 +477,20 @@ export default function ImageEditor({
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      {/* 下载按钮 */}
+      <button
+        onClick={handleDownload}
+        disabled={isDownloading || !image}
+        className="absolute top-4 left-4 z-50 w-10 h-10 bg-gray-800/80 hover:bg-gray-700/80 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title="下载编辑后的图片"
+      >
+        {isDownloading ? (
+          <Loader2 className="w-5 h-5 text-white animate-spin" />
+        ) : (
+          <Download className="w-5 h-5 text-white" />
+        )}
+      </button>
+
       {/* 提示信息 */}
       <div className="px-4 py-3 pt-16">
         <div className="flex items-center justify-center gap-2 text-sm">
@@ -466,6 +523,7 @@ export default function ImageEditor({
                   onDragEnd={handleDragEnd}
                   onWheel={handleWheel}
                   dragBoundFunc={dragBoundFunc}
+                  stageRef={stageRef}
                 />
               )}
             </div>
