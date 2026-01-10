@@ -67,12 +67,18 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
 // ==================== 类型定义 ====================
 
 export interface PhotoTransform {
-  matrix: number[]
+  matrix?: number[] // 兼容旧版本
   outputWidth: number
   outputHeight: number
   sourceWidth: number
   sourceHeight: number
   styleType?: string
+  // 简化参数（新版本，优先使用）
+  rotateAngle?: number // 旋转角度（仅0/90/180/270°）
+  scale?: number // 等比例缩放
+  translateX?: number // X平移（px）
+  translateY?: number // Y平移（px）
+  originalUrl?: string // 原图地址（服务端能访问的路径）
 }
 
 export interface SpecInfo {

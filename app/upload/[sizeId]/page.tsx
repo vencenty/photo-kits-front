@@ -847,12 +847,13 @@ export default function UploadPage() {
         id: img.id,
         url: img.originalUrl,
         quantity: img.printCount,
-        transform: img.transform ? {
+        transform: img.transform && img.transform.matrix ? {
           matrix: img.transform.matrix,
           outputWidth: img.transform.outputWidth,
           outputHeight: img.transform.outputHeight,
           sourceWidth: img.transform.sourceWidth,
           sourceHeight: img.transform.sourceHeight,
+          styleType: img.transform.styleType || 'center', // 添加 styleType 字段，默认为 center
         } : undefined,
       }))
 
@@ -899,8 +900,8 @@ export default function UploadPage() {
   }
 
   const getImageRotation = (image: ImageType): number => {
-    if (image.transform) {
-      const { rotation } = parseAffineMatrix(image.transform.matrix)
+    if (image.transform?.matrix) {
+      const { rotation } = parseAffineMatrix(image.transform.matrix as [number, number, number, number, number, number])
       return rotation
     }
     return image.editState?.rotation || 0

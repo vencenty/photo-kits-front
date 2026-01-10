@@ -60,8 +60,8 @@ export function parseAffineMatrix(matrix: AffineMatrix): {
 
 /** 照片变换信息（使用仿射矩阵） */
 export interface PhotoTransform {
-  /** 仿射变换矩阵 [a, b, c, d, tx, ty] */
-  matrix: AffineMatrix
+  /** 仿射变换矩阵 [a, b, c, d, tx, ty]（兼容旧版本） */
+  matrix?: AffineMatrix
   /** 输出宽度（像素） */
   outputWidth: number
   /** 输出高度（像素） */
@@ -72,6 +72,12 @@ export interface PhotoTransform {
   sourceHeight: number
   /** 样式类型 */
   styleType: 'center' | 'full' | 'lomo'
+  /** 简化参数（新版本，优先使用） */
+  rotateAngle?: number // 旋转角度（仅0/90/180/270°）
+  scale?: number // 等比例缩放
+  translateX?: number // X平移（px）
+  translateY?: number // Y平移（px）
+  originalUrl?: string // 原图地址（服务端能访问的路径）
 }
 
 // 编辑状态类型（兼容旧版本）

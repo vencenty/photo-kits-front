@@ -1,17 +1,159 @@
 'use client'
 
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Home, Image } from 'lucide-react'
-import { useStore } from '@/lib/store'
+import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
+import { useStore, Session } from '@/lib/store'
 import { GlobalLoading } from '@/components/GlobalLoading'
+import { listSpecs, SpecInfo } from '@/lib/api'
+import { getPhotoSizeById } from '@/lib/photo-sizes'
+
+// 闪光动画样式
+const shimmerStyle = `
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes blink {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.6);
+    }
+  }
+`
+
+interface SizeSummary {
+  id: string
+  sizeId: string
+  paperName: string
+  sizeName: string
+  totalPrintCount: number
+  imageCount: number
+  width: number
+  height: number
+}
 
 export default function SuccessPage() {
   const router = useRouter()
   const currentSession = useStore((state) => state.currentSession)
   const clearSession = useStore((state) => state.clearSession)
+  const setCurrentSession = useStore((state) => state.setCurrentSession)
+  const clearImages = useStore((state) => state.clearImages)
+  const setApiLoading = useStore((state) => state.setApiLoading)
+  
+  const [allSizes, setAllSizes] = useState<SizeSummary[]>([])
+  const [isLoadingSizes, setIsLoadingSizes] = useState(true)
+  const [orderNumber, setOrderNumber] = useState<string | null>(null)
+
+  // 获取订单号
+  useEffect(() => {
+    // 优先从 currentSession 获取
+    if (currentSession?.orderNo) {
+      setOrderNumber(currentSession.orderNo)
+      return
+    }
+    
+    // 从 localStorage 获取
+    const savedOrder = localStorage.getItem('current-order-number')
+    if (savedOrder) {
+      setOrderNumber(savedOrder)
+      return
+    }
+    
+    // 从 sessionId 解析（兼容旧版本）
+    if (currentSession?.id) {
+      const parts = currentSession.id.split('-')
+      if (parts.length > 1) {
+        setOrderNumber(parts[0])
+      }
+    }
+  }, [currentSession])
+
+  // 加载所有规格
+  useEffect(() => {
+    const loadAllSizes = async () => {
+      if (!orderNumber) {
+        setIsLoadingSizes(false)
+        return
+      }
+
+      setIsLoadingSizes(true)
+      try {
+        setApiLoading(true, '加载规格列表...')
+        const response = await listSpecs(orderNumber)
+        const specs = response.specs || []
+        
+        // 转换为 SizeSummary 格式
+        const sizes: SizeSummary[] = specs.map((spec: SpecInfo) => ({
+          id: spec.sessionId,
+          sizeId: spec.sizeId,
+          paperName: spec.paperName,
+          sizeName: spec.sizeName,
+          totalPrintCount: spec.printCount || 0,
+          imageCount: spec.photoCount || 0,
+          width: spec.canvasWidth,
+          height: spec.canvasHeight,
+        }))
+        
+        setAllSizes(sizes)
+      } catch (error) {
+        console.error('加载规格列表失败:', error)
+      } finally {
+        setIsLoadingSizes(false)
+        setApiLoading(false, '')
+      }
+    }
+
+    loadAllSizes()
+  }, [orderNumber, setApiLoading])
+
+  // 点击规格跳转到上传页面
+  const handleSelectSize = useCallback((size: SizeSummary) => {
+    const photoSize = getPhotoSizeById(size.id)
+    if (!photoSize) return
+
+    const currentOrderNo = orderNumber || `ORDER-${Date.now()}`
+    const sessionId = `${currentOrderNo}-${size.id}`
+
+    // 构建 session 用于上传页面
+    const session: Session = {
+      id: sessionId,
+      orderNo: currentOrderNo,
+      sizeId: size.id,
+      sizeName: `${size.paperName} ${size.sizeName}`,
+      targetCount: 0,
+      currentCount: size.imageCount,
+      canvasWidth: size.width,
+      canvasHeight: size.height,
+      unit: '毫米',
+      ratio: size.width / size.height,
+      createdAt: new Date().toISOString(),
+    }
+
+    setCurrentSession(session)
+    clearImages()
+
+    router.push(`/upload/${size.id}`)
+  }, [orderNumber, setCurrentSession, clearImages, router])
 
   const handleViewImages = () => {
-    router.push(`/upload/${currentSession?.sizeId}`)
+    if (currentSession?.sizeId) {
+      router.push(`/upload/${currentSession.sizeId}`)
+    }
   }
 
   const handleBackHome = () => {
@@ -20,7 +162,9 @@ export default function SuccessPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50 flex items-center justify-center p-6">
+    <>
+      <style>{shimmerStyle}</style>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         {/* Success Icon */}
         <div className="flex justify-center mb-6">
@@ -33,35 +177,108 @@ export default function SuccessPage() {
         </div>
 
         {/* Success Message */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6 border-4 border-red-500">
           <h1 className="text-2xl font-bold text-center text-gray-800 mb-3">
             照片提交成功
           </h1>
-          <p className="text-center text-gray-600 mb-6">
-            工厂即将开始制作
+          <p 
+            className="text-center text-red-600 font-bold mb-6 px-4 py-3 bg-red-50 border-2 border-red-400 rounded-lg inline-block mx-auto"
+            style={{
+              animation: 'blink 1.5s ease-in-out infinite, pulse-glow 2s ease-in-out infinite',
+            }}
+          >
+            ⚠️ 请把红框区域内截图告诉客服核实制作。
           </p>
 
-          {/* Session Info */}
-          {currentSession && (
+          {/* 订单信息 */}
+          {orderNumber && (
             <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">订单编号</span>
-                <span className="font-bold text-pink-500">{currentSession.id}</span>
+                <span className="font-bold text-pink-500">{orderNumber}</span>
               </div>
+              {currentSession && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">当前规格</span>
+                  <span className="font-medium">{currentSession.sizeName}</span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span className="text-gray-500">尺寸规格</span>
-                <span className="font-medium">{currentSession.sizeName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">打印数量</span>
-                <span className="font-medium">{currentSession.currentCount} 张</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">提交时间</span>
+                <span className="text-gray-500">最后一次提交时间</span>
                 <span className="font-medium">
                   {new Date().toLocaleString('zh-CN')}
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* 所有规格摘要 */}
+          {orderNumber && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                所有规格摘要
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  （点击可继续上传）
+                </span>
+              </h3>
+              {isLoadingSizes ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 text-pink-500 animate-spin mr-2" />
+                  <span className="text-sm text-gray-500">加载中...</span>
+                </div>
+              ) : allSizes.length === 0 ? (
+                <div className="text-center py-4 text-sm text-gray-400">
+                  暂无规格信息
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {allSizes.map((size) => {
+                    const isCurrentSize = currentSession?.sizeId === size.id
+                    return (
+                      <button
+                        key={size.id}
+                        onClick={() => handleSelectSize(size)}
+                        className={`w-full bg-white border rounded-lg p-3 transition-all active:scale-[0.98] text-left ${
+                          isCurrentSize
+                            ? 'border-pink-400 bg-pink-50 shadow-sm'
+                            : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium text-gray-800">
+                                {size.paperName}
+                              </span>
+                              <span className="text-sm font-bold text-pink-500">
+                                {size.sizeName}
+                              </span>
+                              {isCurrentSize && (
+                                <span className="px-1.5 py-0.5 bg-pink-100 text-pink-600 text-xs rounded">
+                                  刚提交
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {size.width}×{size.height}mm
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                              size.totalPrintCount > 0
+                                ? 'bg-green-50 text-green-600'
+                                : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {size.totalPrintCount} 张
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-300" />
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -95,6 +312,7 @@ export default function SuccessPage() {
       {/* 全局 Loading */}
       <GlobalLoading />
     </div>
+    </>
   )
 }
 

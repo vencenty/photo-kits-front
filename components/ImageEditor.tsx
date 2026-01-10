@@ -409,13 +409,40 @@ export default function ImageEditor({
     setHasChanges(true)
   }, [image, stageSize, mode, photoData.autoRotated])
 
+  // 规范化旋转角度到 0/90/180/270
+  const normalizeRotation = (angle: number): number => {
+    // 将角度规范化到 0-360 范围
+    let normalized = ((angle % 360) + 360) % 360
+    // 四舍五入到最近的 90 度倍数
+    return Math.round(normalized / 90) * 90
+  }
+
   // 保存
   const handleSave = useCallback(() => {
     if (!image) return
     
+    // 规范化旋转角度到 0/90/180/270
+    const rotateAngle = normalizeRotation(imageAttrs.rotation)
+    
+    // 提取简单参数
+    const scale = imageAttrs.scaleX // 等比例缩放（scaleX 和 scaleY 应该相等）
+    const translateX = imageAttrs.x // X平移
+    const translateY = imageAttrs.y // Y平移
+    
+    // 获取原图地址
+    const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+    
+    // 为了兼容性，仍然计算矩阵（但服务端可以优先使用简单参数）
     const matrix = imageAttrsToMatrix(imageAttrs)
     
     const transform: PhotoTransform = {
+      // 简化参数（优先使用）
+      rotateAngle,
+      scale,
+      translateX,
+      translateY,
+      originalUrl,
+      // 兼容旧版本的矩阵
       matrix,
       outputWidth: stageSize.width,
       outputHeight: stageSize.height,
@@ -425,7 +452,7 @@ export default function ImageEditor({
     }
     
     onSave(transform)
-  }, [image, imageAttrs, stageSize, mode, onSave])
+  }, [image, imageAttrs, stageSize, mode, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 下载编辑后的图片
   const handleDownload = useCallback(async () => {
@@ -435,27 +462,73 @@ export default function ImageEditor({
     try {
       const stage = stageRef.current
       
-      // 方法1：直接使用 Konva Stage 的 toDataURL（最简单，与显示完全一致）
-      // 但这是基于压缩图的，如果需要原图质量，使用方法2
-      const dataURL = stage.toDataURL({
+      // 导出整个 Stage
+      const fullDataURL = stage.toDataURL({
         pixelRatio: 2, // 提高清晰度
         mimeType: 'image/png',
         quality: 1,
       })
       
+      let finalDataURL = fullDataURL
+      let downloadWidth = stageSize.width * 2 // pixelRatio = 2
+      let downloadHeight = stageSize.height * 2
+      
+      // 如果是留白模式，裁剪掉白边，只保留有效区域
+      if (mode === 'lomo') {
+        const margin = WHITE_MARGIN_PERCENT / 100
+        const marginX = stageSize.width * margin * 2 // 考虑 pixelRatio
+        const marginY = stageSize.height * margin * 2
+        const effectiveWidth = stageSize.width * (1 - margin * 2) * 2
+        const effectiveHeight = stageSize.height * (1 - margin * 2) * 2
+        
+        // 创建临时 Canvas 来裁剪
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = effectiveWidth
+        tempCanvas.height = effectiveHeight
+        const tempCtx = tempCanvas.getContext('2d')
+        
+        if (tempCtx) {
+          // 加载完整图片
+          const fullImg = new Image()
+          await new Promise((resolve, reject) => {
+            fullImg.onload = resolve
+            fullImg.onerror = reject
+            fullImg.src = fullDataURL
+          })
+          
+          // 只绘制有效区域（裁剪掉白边）
+          tempCtx.drawImage(
+            fullImg,
+            marginX, // 源图片的起始 x
+            marginY, // 源图片的起始 y
+            effectiveWidth, // 裁剪宽度
+            effectiveHeight, // 裁剪高度
+            0, // 目标 x
+            0, // 目标 y
+            effectiveWidth, // 目标宽度
+            effectiveHeight // 目标高度
+          )
+          
+          finalDataURL = tempCanvas.toDataURL('image/png', 1.0)
+          downloadWidth = effectiveWidth
+          downloadHeight = effectiveHeight
+        }
+      }
+      
       // 创建下载链接
       const link = document.createElement('a')
-      link.download = `edited-${mode}-${Date.now()}.png`
-      link.href = dataURL
+      link.download = `edited-${mode}${mode === 'lomo' ? '-no-border' : ''}-${Date.now()}.png`
+      link.href = finalDataURL
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       
-      console.log('图片已下载（基于当前显示）:', {
+      console.log('图片已下载:', {
         mode,
         stageSize,
+        downloadSize: { width: downloadWidth, height: downloadHeight },
         imageAttrs,
-        imageSize: { width: image.width, height: image.height },
+        hasWhiteBorder: mode === 'lomo' ? '已裁剪' : '无白边',
       })
     } catch (error) {
       console.error('下载图片失败:', error)
