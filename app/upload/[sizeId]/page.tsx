@@ -59,6 +59,7 @@ export default function UploadPage() {
 
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
+  const [isRestoringScroll, setIsRestoringScroll] = useState(false) // 是否正在恢复滚动位置
 
   // 虚拟滚动相关
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -152,6 +153,129 @@ export default function UploadPage() {
     }, 100)
     return () => clearTimeout(timer)
   }, [images.length, rowVirtualizer])
+
+  // 恢复滚动位置（从编辑页返回时）- 无感恢复方案
+  // 使用 useLayoutEffect 确保在浏览器 paint 前完成定位
+  useEffect(() => {
+    if (!hasHydrated || !currentSession || images.length === 0 || isLoadingPhotos) return
+    if (!scrollContainerRef.current || !rowVirtualizer) return
+    
+    const scrollKey = `upload-list-scroll-${currentSession.id || sizeId}`
+    const savedData = sessionStorage.getItem(scrollKey)
+    
+    if (savedData) {
+      try {
+        const scrollData = JSON.parse(savedData)
+        const container = scrollContainerRef.current
+        
+        // 步骤1：隐藏内容，防止用户看到中间态
+        setIsRestoringScroll(true)
+        
+        // 步骤2：锁定滚动容器，防止意外滚动
+        const originalOverflow = container.style.overflow
+        const originalScrollBehavior = container.style.scrollBehavior
+        container.style.overflow = 'hidden'
+        container.style.scrollBehavior = 'auto'
+        
+        // 步骤3：等待虚拟滚动初始化完成
+        const restoreScroll = () => {
+          if (!container || !rowVirtualizer) return
+          
+          try {
+            // 方案A：使用 index + offset（推荐）
+            if (scrollData.index !== undefined && scrollData.offset !== undefined) {
+              console.log('恢复滚动位置:', scrollData)
+              
+              // 先强制测量所有行，确保虚拟滚动器有准确的数据
+              rowVirtualizer.measure()
+              
+              // 使用 scrollToIndex 定位到目标行
+              rowVirtualizer.scrollToIndex(scrollData.index, {
+                align: 'start',
+              })
+              
+              // 等待虚拟滚动器完成测量和渲染
+              // 使用多个 RAF 确保虚拟滚动已完成
+              const applyOffset = () => {
+                if (!container || !rowVirtualizer) return
+                
+                // 再次测量，确保数据最新
+                rowVirtualizer.measure()
+                
+                // 获取虚拟 items
+                const virtualItems = rowVirtualizer.getVirtualItems()
+                const targetItem = virtualItems.find(
+                  item => item.index === scrollData.index
+                )
+                
+                if (targetItem) {
+                  // 使用虚拟滚动器的 start 值 + offset
+                  const finalScrollTop = targetItem.start + scrollData.offset
+                  container.scrollTop = finalScrollTop
+                  console.log('恢复完成，最终位置:', finalScrollTop, '目标:', scrollData)
+                  
+                  // 恢复并显示
+                  container.style.overflow = originalOverflow
+                  container.style.scrollBehavior = originalScrollBehavior
+                  setIsRestoringScroll(false)
+                  sessionStorage.removeItem(scrollKey)
+                } else {
+                  // 如果找不到目标 item，再等一帧
+                  console.warn('找不到目标 item，等待下一帧')
+                  requestAnimationFrame(applyOffset)
+                }
+              }
+              
+              // 三重 RAF 确保虚拟滚动完成
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(applyOffset)
+                })
+              })
+            } else if (scrollData.scrollTop !== undefined) {
+              console.log('恢复滚动位置（降级）:', scrollData.scrollTop)
+              // 方案B：降级使用 scrollTop（备用方案）
+              container.scrollTop = scrollData.scrollTop
+              
+              requestAnimationFrame(() => {
+                container.style.overflow = originalOverflow
+                container.style.scrollBehavior = originalScrollBehavior
+                setIsRestoringScroll(false)
+                sessionStorage.removeItem(scrollKey)
+              })
+            }
+          } catch (error) {
+            console.error('恢复滚动位置失败:', error)
+            // 恢复状态
+            container.style.overflow = originalOverflow
+            container.style.scrollBehavior = originalScrollBehavior
+            setIsRestoringScroll(false)
+            sessionStorage.removeItem(scrollKey)
+          }
+        }
+        
+        // 延迟执行，确保虚拟滚动已初始化
+        const timer = setTimeout(() => {
+          // 使用 requestAnimationFrame 确保在渲染前执行
+          requestAnimationFrame(restoreScroll)
+        }, 150) // 增加延迟，确保虚拟滚动完全初始化
+        
+        return () => {
+          clearTimeout(timer)
+          // 清理时恢复状态
+          if (container) {
+            container.style.overflow = originalOverflow
+            container.style.scrollBehavior = originalScrollBehavior
+          }
+          setIsRestoringScroll(false)
+        }
+      } catch (error) {
+        console.error('解析滚动位置数据失败:', error)
+        sessionStorage.removeItem(scrollKey)
+        setIsRestoringScroll(false)
+      }
+    }
+  }, [hasHydrated, currentSession, sizeId, images.length, isLoadingPhotos, rowVirtualizer])
 
   // 获取订单号
   const getOrderSn = useCallback(() => {
@@ -560,6 +684,42 @@ export default function UploadPage() {
       return
     }
     
+    // 保存当前滚动位置（使用 index + offset 方案）
+    if (scrollContainerRef.current && rowVirtualizer) {
+      const scrollTop = scrollContainerRef.current.scrollTop
+      
+      // 计算当前可见的第一个 item 的 index
+      const virtualItems = rowVirtualizer.getVirtualItems()
+      if (virtualItems.length > 0) {
+        const firstVisibleItem = virtualItems[0]
+        const firstVisibleIndex = firstVisibleItem.index
+        
+        // 计算 offset（使用虚拟滚动器的 start 值，更准确）
+        // start 是虚拟滚动器计算的位置，比 offsetTop 更可靠
+        const offset = scrollTop - firstVisibleItem.start
+        
+        // 保存 index 和 offset
+        const scrollData = {
+          index: firstVisibleIndex,
+          offset: offset,
+          scrollTop: scrollTop, // 备用方案
+        }
+        console.log('保存滚动位置:', scrollData)
+        sessionStorage.setItem(
+          `upload-list-scroll-${currentSession?.id || sizeId}`,
+          JSON.stringify(scrollData)
+        )
+      } else {
+        // 降级方案：只保存 scrollTop
+        const scrollData = { scrollTop }
+        console.log('保存滚动位置（降级）:', scrollData)
+        sessionStorage.setItem(
+          `upload-list-scroll-${currentSession?.id || sizeId}`,
+          JSON.stringify(scrollData)
+        )
+      }
+    }
+    
     // 最佳实践：点击编辑时，将图片数据保存到 sessionStorage
     // 这样即使刷新页面，编辑页也能获取到数据（sessionStorage 在标签页关闭前一直存在）
     const imageData = {
@@ -831,6 +991,9 @@ export default function UploadPage() {
                 height: `${rowVirtualizer.getTotalSize()}px`,
                 width: '100%',
                 position: 'relative',
+                visibility: isRestoringScroll ? 'hidden' : 'visible', // 恢复期间隐藏内容
+                opacity: isRestoringScroll ? 0 : 1, // 双重保障
+                transition: isRestoringScroll ? 'none' : 'opacity 0.1s ease-in', // 恢复完成后淡入
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -856,7 +1019,7 @@ export default function UploadPage() {
                     {rowImages.map((image) => (
                       <div
                         key={image.id}
-                        className={`bg-white rounded-lg overflow-hidden border border-gray-100 transition-all ${
+                        className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
                           isBatchMode ? 'cursor-pointer' : ''
                         }`}
                         style={{
