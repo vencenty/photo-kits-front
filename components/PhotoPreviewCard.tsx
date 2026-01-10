@@ -75,8 +75,8 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   return (
     <div 
       ref={containerRef}
-      className="absolute inset-0 cursor-pointer"
-      onClick={onClick}
+      className="absolute inset-0"
+      style={{ pointerEvents: onClick ? 'auto' : 'none' }}
     >
       {isClient && stageSize.width > 0 && stageSize.height > 0 && (
         <PhotoCanvas
@@ -87,6 +87,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           transform={image.transform}
           autoRotated={image.autoRotated}
           editable={false}
+          onClick={onClick}
         />
       )}
     </div>

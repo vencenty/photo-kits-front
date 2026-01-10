@@ -848,7 +848,7 @@ export default function UploadPage() {
                         rowRefs.current.delete(virtualRow.index)
                       }
                     }}
-                    className="absolute left-0 right-0 grid grid-cols-3 gap-2"
+                    className="absolute left-0 right-0 grid grid-cols-3 gap-2.5"
                     style={{
                       top: `${virtualRow.start}px`,
                     }}
@@ -856,10 +856,22 @@ export default function UploadPage() {
                     {rowImages.map((image) => (
                       <div
                         key={image.id}
-                        className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
+                        className={`bg-white rounded-lg overflow-hidden border border-gray-100 transition-all ${
                           isBatchMode ? 'cursor-pointer' : ''
-                        } ${selectedIds.includes(image.id) ? 'ring-2 ring-[#ff4d6d]' : ''}`}
-                        onClick={() => isBatchMode && toggleSelection(image.id)}
+                        }`}
+                        style={{
+                          ...(selectedIds.includes(image.id) && isBatchMode 
+                            ? { 
+                                outline: '2px solid #ff4d6d',
+                                outlineOffset: '2px' // outline与元素之间的间距
+                              }
+                            : {})
+                        }}
+                        onClick={() => {
+                          if (isBatchMode) {
+                            toggleSelection(image.id)
+                          }
+                        }}
                       >
                         <div 
                           className="relative bg-white"
@@ -868,9 +880,13 @@ export default function UploadPage() {
                   <PhotoPreviewCard 
                     image={image} 
                     aspectRatio={paperRatio}
-                    onClick={!isBatchMode && image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced 
-                      ? () => handleEdit(image.id) 
-                      : undefined}
+                    onClick={
+                      isBatchMode 
+                        ? () => toggleSelection(image.id)
+                        : (image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced 
+                          ? () => handleEdit(image.id) 
+                          : undefined)
+                    }
                   />
                           
                           {!isBatchMode && (
@@ -886,9 +902,11 @@ export default function UploadPage() {
                           )}
                           
                           {isBatchMode && (
-                            <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
-                              selectedIds.includes(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
-                            }`}>
+                            <div 
+                              className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 pointer-events-none ${
+                                selectedIds.includes(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
+                              }`}
+                            >
                               {selectedIds.includes(image.id) && (
                                 <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
