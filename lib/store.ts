@@ -62,26 +62,22 @@ export function parseAffineMatrix(matrix: AffineMatrix): {
 export interface PhotoTransform {
   /** 仿射变换矩阵 [a, b, c, d, tx, ty]（兼容旧版本） */
   matrix?: AffineMatrix
-  /** 输出宽度（像素） */
+  /** 输出宽度（像素）- 前端显示尺寸 */
   outputWidth: number
-  /** 输出高度（像素） */
+  /** 输出高度（像素）- 前端显示尺寸 */
   outputHeight: number
   /** 原图宽度（像素） */
   sourceWidth: number
   /** 原图高度（像素） */
   sourceHeight: number
   /** 样式类型 */
-  styleType: 'center' | 'full' | 'lomo'
-  /** 简化参数（新版本，优先使用） */
+  styleType: 'cover' | 'full' | 'lomo'
+  /** 变换参数（用于前端回显） */
   rotateAngle?: number // 旋转角度（仅0/90/180/270°）
   scale?: number // 等比例缩放
   translateX?: number // X平移（px）
   translateY?: number // Y平移（px）
-  offsetX?: number // 原图坐标系中的X偏移量（px），用于服务端直接裁剪
-  offsetY?: number // 原图坐标系中的Y偏移量（px），用于服务端直接裁剪
-  canvasWidth?: number // 相纸宽度（mm），用于计算相纸比例
-  canvasHeight?: number // 相纸高度（mm），用于计算相纸比例
-  originalUrl?: string // 原图地址（服务端能访问的路径）
+  originalUrl?: string // 原图地址
 }
 
 /** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
@@ -103,12 +99,12 @@ export interface CropInfo {
   /** 原图地址（服务端能访问的路径） */
   originalUrl: string
   /** 样式类型（可选） */
-  styleType?: 'center' | 'full' | 'lomo'
+  styleType?: 'cover' | 'full' | 'lomo'
 }
 
 // 编辑状态类型（兼容旧版本）
 export interface EditState {
-  mode: 'center' | 'full' | 'lomo'
+  mode: 'cover' | 'full' | 'lomo'
   scale: number
   x: number
   y: number

@@ -24,7 +24,7 @@ export interface ImageAttrs {
   offsetY: number
 }
 
-export type StyleType = 'center' | 'full' | 'lomo'
+export type StyleType = 'cover' | 'full' | 'lomo'
 
 interface PhotoCanvasProps {
   /** 图片URL */
@@ -192,7 +192,7 @@ function constrainPosition(
     }
   }
   
-  // 其他模式（center, full）：使用原来的约束逻辑
+  // 其他模式（cover, full）：使用原来的约束逻辑
   const centerX = marginX + effectiveWidth / 2
   const centerY = marginY + effectiveHeight / 2
   

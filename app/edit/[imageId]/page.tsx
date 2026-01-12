@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type PhotoTransform, type CropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { updatePhoto, getOrderDetail } from '@/lib/api'
+import { updatePhoto, getPhotoDetail } from '@/lib/api'
 import { mapCropModeToServer } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
 
@@ -25,36 +25,54 @@ export default function EditPage() {
   const [image, setImage] = useState<Image | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isOrderLocked, setIsOrderLocked] = useState(false)
+  
+  // 使用 ref 跟踪是否已经初始化，避免无限循环
+  const initializedRef = useRef(false)
+  const lastImageIdRef = useRef<string | null>(null)
+  const orderStatusCheckedRef = useRef<string | null>(null) // 跟踪已检查过订单状态的 photo_id
 
-  // 检查订单状态
+  // 检查订单状态（根据 photo_id 获取照片信息和订单状态）- 只调用一次
   useEffect(() => {
     const checkOrderStatus = async () => {
-      if (!currentSession?.orderNo) return
+      if (!imageId) return
+      
+      // 如果已经检查过这个 photo_id，不再重复调用
+      if (orderStatusCheckedRef.current === imageId) {
+        return
+      }
       
       try {
-        const orderDetail = await getOrderDetail(currentSession.orderNo)
+        orderStatusCheckedRef.current = imageId // 标记为已检查
+        const photoDetail = await getPhotoDetail(imageId)
         // 状态2（生产中）表示客户已确认/锁单
-        setIsOrderLocked(orderDetail.status === 2)
+        setIsOrderLocked(photoDetail.orderStatus === 2)
         
         // 如果已锁单，提示并返回
-        if (orderDetail.status === 2) {
+        if (photoDetail.orderStatus === 2) {
           alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
           router.back()
         }
       } catch (error) {
-        console.error('获取订单状态失败:', error)
+        console.error('获取照片详情失败:', error)
+        // 即使失败也标记为已检查，避免重复调用
       }
     }
     
-    if (currentSession?.orderNo) {
+    if (imageId && orderStatusCheckedRef.current !== imageId) {
       checkOrderStatus()
     }
-  }, [currentSession, router])
+  }, [imageId, router])
 
   useEffect(() => {
     // 等待 hydration 完成
     if (!hasHydrated || !currentSession) return
-
+    
+    // 如果 imageId 改变，重置初始化状态
+    if (lastImageIdRef.current !== imageId) {
+      initializedRef.current = false
+      lastImageIdRef.current = imageId
+    }
+    
     // 最佳实践：按优先级查找图片数据
     // 1. 优先从 store 中查找（最快，无网络请求）
     // 2. 如果 store 中没有或没有 URL，从 sessionStorage 查找（点击编辑时保存的）
@@ -63,27 +81,93 @@ export default function EditPage() {
     let foundImage = images.find((img) => img.id === imageId)
     const hasValidUrl = foundImage && (foundImage.originalUrl || foundImage.thumbnailUrl)
     
+    // 如果已经初始化过，且找到了有效的图片，直接设置（避免重复处理）
+    if (initializedRef.current && foundImage && hasValidUrl) {
+      // 只在图片数据真正改变时才更新 state
+      if (image?.id !== foundImage.id || 
+          image?.originalUrl !== foundImage.originalUrl ||
+          image?.transform !== foundImage.transform) {
+        setImage(foundImage)
+      }
+      return
+    }
+    
     // 如果 store 中没有或没有有效的 URL，尝试从 sessionStorage 读取
     if (!foundImage || !hasValidUrl) {
       try {
         const sessionData = sessionStorage.getItem(`edit-image-${imageId}`)
         if (sessionData) {
           const imageData = JSON.parse(sessionData) as ImageType
-          // 如果 store 中有图片但缺少 URL，更新它
+          // 如果 store 中有图片但缺少 URL 或编辑状态，更新它
           if (foundImage) {
-            updateImage(imageId, {
-              originalUrl: imageData.originalUrl,
-              thumbnailUrl: imageData.thumbnailUrl,
-            })
-            foundImage = { ...foundImage, ...imageData }
+            // 只在真正需要更新时才调用 updateImage（避免循环）
+            const needsUpdate = 
+              (!foundImage.originalUrl && imageData.originalUrl) ||
+              (!foundImage.thumbnailUrl && imageData.thumbnailUrl) ||
+              (!foundImage.transform && imageData.transform) ||
+              (!foundImage.cropInfo && imageData.cropInfo) ||
+              (!foundImage.editState && imageData.editState)
+            
+            if (needsUpdate && !initializedRef.current) {
+              updateImage(imageId, {
+                originalUrl: imageData.originalUrl || foundImage.originalUrl,
+                thumbnailUrl: imageData.thumbnailUrl || foundImage.thumbnailUrl,
+                transform: imageData.transform || foundImage.transform,
+                cropInfo: imageData.cropInfo || foundImage.cropInfo,
+                editState: imageData.editState || foundImage.editState,
+              })
+            }
+            foundImage = { 
+              ...foundImage, 
+              ...imageData,
+              // 确保 URL 优先使用 sessionStorage 中的数据
+              originalUrl: imageData.originalUrl || foundImage.originalUrl,
+              thumbnailUrl: imageData.thumbnailUrl || foundImage.thumbnailUrl,
+            }
           } else {
-            // 添加到 store
-            addImages([imageData])
+            // 添加到 store（只添加一次，避免循环）
+            if (!initializedRef.current) {
+              addImages([imageData])
+            }
             foundImage = imageData
           }
         }
       } catch (error) {
         console.error('从 sessionStorage 读取图片数据失败:', error)
+      }
+    } else {
+      // store 中有图片，但需要确保编辑状态是最新的
+      // 如果 sessionStorage 中有更新的数据，使用它（只检查一次）
+      if (!initializedRef.current) {
+        try {
+          const sessionData = sessionStorage.getItem(`edit-image-${imageId}`)
+          if (sessionData) {
+            const imageData = JSON.parse(sessionData) as ImageType
+            // 合并编辑状态（sessionStorage 中的数据可能更新）
+            // 只在真正需要更新时才调用 updateImage
+            const needsUpdate = 
+              (imageData.transform && (!foundImage.transform || 
+                JSON.stringify(foundImage.transform) !== JSON.stringify(imageData.transform))) ||
+              (imageData.editState && (!foundImage.editState || 
+                JSON.stringify(foundImage.editState) !== JSON.stringify(imageData.editState)))
+            
+            if (needsUpdate) {
+              updateImage(imageId, {
+                transform: imageData.transform,
+                cropInfo: imageData.cropInfo,
+                editState: imageData.editState,
+              })
+              foundImage = {
+                ...foundImage,
+                transform: imageData.transform || foundImage.transform,
+                cropInfo: imageData.cropInfo || foundImage.cropInfo,
+                editState: imageData.editState || foundImage.editState,
+              }
+            }
+          }
+        } catch (error) {
+          console.error('从 sessionStorage 读取图片数据失败:', error)
+        }
       }
     }
     
@@ -102,19 +186,25 @@ export default function EditPage() {
     // 找到完整的图片数据，直接使用
     setIsLoading(false)
     setImage(foundImage)
-  }, [imageId, images, router, hasHydrated, currentSession, addImages, updateImage])
+    initializedRef.current = true
+  }, [imageId, images, hasHydrated, currentSession, router, image, updateImage, addImages])
 
-  const handleSave = async (transform: PhotoTransform, cropInfo: CropInfo) => {
+  const handleSave = async (transform: PhotoTransform | undefined, cropInfo: CropInfo | undefined) => {
     // 检查订单是否已锁单
     if (isOrderLocked) {
       alert('订单已锁单，无法保存编辑。如需修改，请联系客服。')
       return
     }
+    
+    // 确定模式（从 transform 或当前图片的 transform 中获取）
+    const mode = transform?.styleType || image?.transform?.styleType || 'cover'
+    
     // 保存变换信息到本地 store
+    // 即使 transform 是 undefined，也要确保 editState 包含正确的 mode（从 cropMode 或其他地方获取）
     updateImage(imageId, { 
-      transform,
-      cropInfo,
-      editState: {
+      transform: transform || undefined,
+      cropInfo: cropInfo || undefined,
+      editState: transform ? {
         mode: transform.styleType,
         scale: 1,
         x: 0,
@@ -122,7 +212,15 @@ export default function EditPage() {
         rotation: 0,
         canvasWidth: transform.outputWidth,
         canvasHeight: transform.outputHeight,
-      }
+      } : (mode ? {
+        mode: mode as 'cover' | 'full' | 'lomo',
+        scale: 1,
+        x: 0,
+        y: 0,
+        rotation: 0,
+        canvasWidth: currentSession?.canvasWidth || 127,
+        canvasHeight: currentSession?.canvasHeight || 89,
+      } : null),
     })
     
     // 同步保存到后端（异步执行，不阻塞UI）
@@ -130,26 +228,24 @@ export default function EditPage() {
       setApiLoading(true, '保存编辑中...')
       await updatePhoto({
         photoId: imageId,
-        cropMode: mapCropModeToServer(transform.styleType),
-        transform: {
+        cropMode: mapCropModeToServer(mode),
+        // transform 用于前端回显（包括 lomo 和 full 模式）
+        // cropInfo 只用于 cover 模式的服务端处理
+        transform: transform ? {
           matrix: transform.matrix,
           outputWidth: transform.outputWidth,
           outputHeight: transform.outputHeight,
           sourceWidth: transform.sourceWidth,
           sourceHeight: transform.sourceHeight,
           styleType: transform.styleType,
-          // 包含新的简化参数字段
+          // 变换参数（用于前端回显）
           rotateAngle: transform.rotateAngle,
           scale: transform.scale,
           translateX: transform.translateX,
           translateY: transform.translateY,
-          offsetX: transform.offsetX,
-          offsetY: transform.offsetY,
-          canvasWidth: transform.canvasWidth,
-          canvasHeight: transform.canvasHeight,
           originalUrl: transform.originalUrl,
-        },
-        cropInfo: {
+        } : undefined,
+        cropInfo: cropInfo ? {
           canvasWidth: cropInfo.canvasWidth,
           canvasHeight: cropInfo.canvasHeight,
           sourceWidth: cropInfo.sourceWidth,
@@ -159,7 +255,7 @@ export default function EditPage() {
           rotateAngle: cropInfo.rotateAngle,
           originalUrl: cropInfo.originalUrl,
           styleType: cropInfo.styleType,
-        },
+        } : undefined,
       })
       console.log('编辑状态已同步到后端:', imageId)
     } catch (error) {

@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { listSpecs, SpecInfo, lockOrder, getOrderDetail } from '@/lib/api'
+import { lockOrder, getOrderDetail } from '@/lib/api'
+import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 
 // 闪光动画样式
@@ -86,9 +87,9 @@ export default function SuccessPage() {
     }
   }, [currentSession])
 
-  // 加载所有规格
+  // 加载订单详情（包含规格列表，不包含照片列表）
   useEffect(() => {
-    const loadAllSizes = async () => {
+    const loadOrderDetail = async () => {
       if (!orderNumber) {
         setIsLoadingSizes(false)
         return
@@ -96,9 +97,17 @@ export default function SuccessPage() {
 
       setIsLoadingSizes(true)
       try {
-        setApiLoading(true, '加载规格列表...')
-        const response = await listSpecs(orderNumber)
-        const specs = response.specs || []
+        setApiLoading(true, '加载订单详情...')
+        // 只获取订单详情和规格列表，不获取照片列表（includePhotos=false）
+        const orderDetail = await getOrderDetail(orderNumber, false)
+        
+        // 设置订单状态
+        setOrderStatus(orderDetail.status)
+        // 状态2（生产中）表示客户已确认/锁单
+        setIsLocked(orderDetail.status === 2)
+        
+        // 从订单详情中获取规格列表
+        const specs = orderDetail.specs || []
         
         // 转换为 SizeSummary 格式
         const sizes: SizeSummary[] = specs.map((spec: SpecInfo) => ({
@@ -114,33 +123,15 @@ export default function SuccessPage() {
         
         setAllSizes(sizes)
       } catch (error) {
-        console.error('加载规格列表失败:', error)
+        console.error('加载订单详情失败:', error)
       } finally {
         setIsLoadingSizes(false)
         setApiLoading(false, '')
       }
     }
 
-    loadAllSizes()
+    loadOrderDetail()
   }, [orderNumber, setApiLoading])
-
-  // 加载订单状态
-  useEffect(() => {
-    const loadOrderStatus = async () => {
-      if (!orderNumber) return
-
-      try {
-        const orderDetail = await getOrderDetail(orderNumber)
-        setOrderStatus(orderDetail.status)
-        // 状态2（生产中）表示客户已确认/锁单
-        setIsLocked(orderDetail.status === 2)
-      } catch (error) {
-        console.error('加载订单状态失败:', error)
-      }
-    }
-
-    loadOrderStatus()
-  }, [orderNumber])
 
   // 点击规格跳转到上传页面
   const handleSelectSize = useCallback((size: SizeSummary) => {
@@ -348,7 +339,7 @@ export default function SuccessPage() {
                 ) : (
                   <>
                     <Image className="w-5 h-5" />
-                    确认无问题，锁单进行制作
+                    确认提交制作
                   </>
                 )}
               </button>

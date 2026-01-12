@@ -67,7 +67,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   }
 
   // 获取样式类型
-  const styleType: StyleType = image.transform?.styleType || image.editState?.mode || 'center'
+  const styleType: StyleType = image.transform?.styleType || image.editState?.mode || 'cover'
   
   // 获取压缩后的图片 URL（用于列表显示）
   const compressedUrl = getListImageUrl(image.thumbnailUrl)

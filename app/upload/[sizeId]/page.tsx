@@ -25,7 +25,7 @@ import {
 } from '@/lib/api'
 
 // 裁剪模式类型
-type CropMode = 'center' | 'full' | 'lomo'
+type CropMode = 'cover' | 'full' | 'lomo'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -39,6 +39,7 @@ export default function UploadPage() {
   const [isLoadingPhotos, setIsLoadingPhotos] = useState(true)
   const [ossSignature, setOssSignature] = useState<OssSignature | null>(null)
   const loadedRef = useRef(false) // 防止重复加载
+  const ossSignatureFetchedRef = useRef(false) // 防止重复获取 OSS 签名
   const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁单
 
   const currentSession = useStore((state) => state.currentSession)
@@ -350,13 +351,17 @@ export default function UploadPage() {
             const serverStyleType = photo.transform?.styleType 
               ? mapCropModeFromServer(photo.transform.styleType) 
               : undefined
+            // 如果 transform 存在但 styleType 缺失，从 cropMode 获取
+            const fallbackCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
+            const finalStyleType = (serverStyleType || fallbackCropMode || 'cover') as 'cover' | 'full' | 'lomo'
+            
             const serverTransform = photo.transform ? {
               matrix: photo.transform.matrix as [number, number, number, number, number, number],
               outputWidth: photo.transform.outputWidth,
               outputHeight: photo.transform.outputHeight,
               sourceWidth: photo.transform.sourceWidth,
               sourceHeight: photo.transform.sourceHeight,
-              styleType: (serverStyleType as 'center' | 'full' | 'lomo') || 'center',
+              styleType: finalStyleType,
             } : undefined
 
             const existingImage = existingImagesMap.get(photo.photoId)
@@ -386,6 +391,17 @@ export default function UploadPage() {
                   canvasWidth: currentSession.canvasWidth,
                   canvasHeight: currentSession.canvasHeight,
                 }
+              } else if (fallbackCropMode) {
+                // 如果 transform 不存在，但从 cropMode 获取到了模式，创建 editState
+                updates.editState = {
+                  mode: fallbackCropMode,
+                  scale: 1,
+                  x: 0,
+                  y: 0,
+                  rotation: photo.autoRotated ? 90 : 0,
+                  canvasWidth: currentSession.canvasWidth,
+                  canvasHeight: currentSession.canvasHeight,
+                }
               }
               
               imagesToUpdate.push({ id: photo.photoId, updates })
@@ -394,7 +410,7 @@ export default function UploadPage() {
               // 如果服务器返回了 cropMode，需要转换为前端的 mode
               const serverCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
               const editState: EditState = {
-                mode: serverTransform?.styleType || serverCropMode || 'center',
+                mode: finalStyleType,
                 scale: 1,
                 x: 0,
                 y: 0,
@@ -445,21 +461,35 @@ export default function UploadPage() {
     loadPhotosFromServer()
   }, [currentSession, getOrderSn, allImages, addImages, updateImages])
 
-  // 初始化获取 OSS 签名
+  // 初始化获取 OSS 签名（只获取一次）
   useEffect(() => {
+    // 防止重复调用（React StrictMode 会执行两次，或者已经获取过）
+    if (ossSignatureFetchedRef.current) {
+      return
+    }
+    
     const fetchSignature = async () => {
+      // 双重检查，防止并发调用
+      if (ossSignatureFetchedRef.current) {
+        return
+      }
+      
+      ossSignatureFetchedRef.current = true
       try {
         setApiLoading(true, '获取上传签名...')
         const signature = await getOssSignature()
         setOssSignature(signature)
       } catch (error) {
         console.error('获取 OSS 签名失败:', error)
+        // 如果获取失败，重置标志，允许重试
+        ossSignatureFetchedRef.current = false
       } finally {
         setApiLoading(false, '')
       }
     }
     fetchSignature()
-  }, [setApiLoading])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // 只在组件挂载时执行一次
 
   /**
    * 判断图片是否需要旋转
@@ -517,27 +547,44 @@ export default function UploadPage() {
     const orderSn = getOrderSn()
     const specId = currentSession.sizeId
 
-    // 如果没有签名，先获取
+    // 如果没有签名，先获取（防止并发调用）
     let signature = ossSignature
     if (!signature) {
-      try {
-        console.log('开始获取 OSS 签名...')
-        setApiLoading(true, '获取上传签名...')
-        signature = await getOssSignature()
-        console.log('OSS 签名获取成功:', {
-          host: signature.host,
-          dir: signature.dir,
-          hasPolicy: !!signature.policy,
-          hasSignature: !!signature.signature,
-        })
-        setOssSignature(signature)
-      } catch (error) {
-        console.error('获取 OSS 签名失败:', error)
+      // 如果正在获取，等待一下再检查
+      if (ossSignatureFetchedRef.current) {
+        // 等待一小段时间，让初始化完成
+        await new Promise(resolve => setTimeout(resolve, 200))
+        signature = ossSignature
+      }
+      
+      // 如果还是没有，且没有正在获取，则获取
+      if (!signature && !ossSignatureFetchedRef.current) {
+        try {
+          console.log('开始获取 OSS 签名...')
+          ossSignatureFetchedRef.current = true
+          setApiLoading(true, '获取上传签名...')
+          signature = await getOssSignature()
+          console.log('OSS 签名获取成功:', {
+            host: signature.host,
+            dir: signature.dir,
+            hasPolicy: !!signature.policy,
+            hasSignature: !!signature.signature,
+          })
+          setOssSignature(signature)
+        } catch (error) {
+          console.error('获取 OSS 签名失败:', error)
+          ossSignatureFetchedRef.current = false // 允许重试
+          setIsUploading(false)
+          alert('获取上传签名失败，请重试')
+          return
+        } finally {
+          setApiLoading(false, '')
+        }
+      } else if (!signature) {
+        // 如果正在获取但还没完成，提示用户等待
         setIsUploading(false)
-        alert('获取上传签名失败，请重试')
+        alert('正在获取上传签名，请稍候再试')
         return
-      } finally {
-        setApiLoading(false, '')
       }
     }
 
@@ -570,7 +617,7 @@ export default function UploadPage() {
 
         // 默认编辑状态
         const defaultEditState: EditState = {
-          mode: 'center',
+          mode: 'cover',
           scale: 1,
           x: 0,
           y: 0,
@@ -613,7 +660,7 @@ export default function UploadPage() {
               originalWidth: dimensions.width,
               originalHeight: dimensions.height,
               quantity: 1,
-              cropMode: mapCropModeToServer('center'),
+              cropMode: mapCropModeToServer('cover'),
               autoRotated: needsRotation,
             })
             // 更新上传状态
@@ -887,30 +934,42 @@ export default function UploadPage() {
 
     try {
       // 构建照片列表
-      const photos = images.map(img => ({
-        id: img.id,
-        url: img.originalUrl,
-        quantity: img.printCount,
-        transform: img.transform && img.transform.matrix ? {
-          matrix: img.transform.matrix,
-          outputWidth: img.transform.outputWidth,
-          outputHeight: img.transform.outputHeight,
-          sourceWidth: img.transform.sourceWidth,
-          sourceHeight: img.transform.sourceHeight,
-          styleType: img.transform.styleType || 'center', // 添加 styleType 字段，默认为 center
-          // 包含简化参数字段（如果存在）
-          rotateAngle: img.transform.rotateAngle,
-          scale: img.transform.scale,
-          translateX: img.transform.translateX,
-          translateY: img.transform.translateY,
-          offsetX: img.transform.offsetX,
-          offsetY: img.transform.offsetY,
-          canvasWidth: img.transform.canvasWidth,
-          canvasHeight: img.transform.canvasHeight,
-          originalUrl: img.transform.originalUrl,
-        } : undefined,
-        cropInfo: img.cropInfo, // 用于服务端处理
-      }))
+      const photos = images.map(img => {
+        // 获取模式（从 transform 或 editState 中获取）
+        const mode = img.transform?.styleType || img.editState?.mode || 'cover'
+        
+        // lomo 和 full 模式不需要裁剪信息（cropInfo），但需要保留 transform 中的 styleType 用于前端回显
+        const shouldClearCropInfo = mode === 'lomo' || mode === 'full'
+        
+        return {
+          id: img.id,
+          url: img.originalUrl,
+          quantity: img.printCount,
+          // 始终保留 transform，至少包含 styleType，用于前端回显和后端识别样式
+          transform: img.transform ? {
+            matrix: img.transform.matrix,
+            outputWidth: img.transform.outputWidth,
+            outputHeight: img.transform.outputHeight,
+            sourceWidth: img.transform.sourceWidth,
+            sourceHeight: img.transform.sourceHeight,
+            styleType: img.transform.styleType || mode, // 确保 styleType 存在
+            // 变换参数（用于前端回显）
+            rotateAngle: img.transform.rotateAngle,
+            scale: img.transform.scale,
+            translateX: img.transform.translateX,
+            translateY: img.transform.translateY,
+            originalUrl: img.transform.originalUrl,
+          } : {
+            // 如果没有 transform，至少创建一个包含 styleType 的 transform
+            outputWidth: 0,
+            outputHeight: 0,
+            sourceWidth: 0,
+            sourceHeight: 0,
+            styleType: mode,
+          },
+          cropInfo: !shouldClearCropInfo ? img.cropInfo : undefined, // 用于服务端处理，lomo/full 模式清空
+        }
+      })
 
       // 调用后端提交订单
       setApiLoading(true, '提交订单中...')
@@ -1261,7 +1320,7 @@ export default function UploadPage() {
 
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex gap-2 flex-wrap">
-                  {(['center', 'full', 'lomo'] as CropMode[]).map((mode) => (
+                  {(['cover', 'full', 'lomo'] as CropMode[]).map((mode) => (
                     <button
                       key={mode}
                       onClick={() => handleApplyBatchCrop(mode)}
@@ -1280,7 +1339,7 @@ export default function UploadPage() {
                           </svg>
                         )}
                       </div>
-                      <span>{mode === 'center' ? '居中裁剪' : mode === 'full' ? '打印整图' : '四周留白'}</span>
+                      <span>{mode === 'cover' ? '居中裁剪' : mode === 'full' ? '打印整图' : '四周留白'}</span>
                     </button>
                   ))}
                 </div>

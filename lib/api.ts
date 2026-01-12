@@ -69,21 +69,17 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
 /** 照片变换信息 - 用于前端回显 */
 export interface PhotoTransform {
   matrix?: number[] // 兼容旧版本
-  outputWidth: number
-  outputHeight: number
-  sourceWidth: number
-  sourceHeight: number
-  styleType?: string
-  // 简化参数（新版本，优先使用）
+  outputWidth: number // 前端显示宽度（像素）
+  outputHeight: number // 前端显示高度（像素）
+  sourceWidth: number // 原图宽度（像素）
+  sourceHeight: number // 原图高度（像素）
+  styleType?: string // 样式类型
+  // 变换参数（用于前端回显）
   rotateAngle?: number // 旋转角度（仅0/90/180/270°）
   scale?: number // 等比例缩放
   translateX?: number // X平移（px）
   translateY?: number // Y平移（px）
-  offsetX?: number // 原图坐标系中的X偏移量（px），用于服务端直接裁剪
-  offsetY?: number // 原图坐标系中的Y偏移量（px），用于服务端直接裁剪
-  canvasWidth?: number // 相纸宽度（mm），用于计算相纸比例
-  canvasHeight?: number // 相纸高度（mm），用于计算相纸比例
-  originalUrl?: string // 原图地址（服务端能访问的路径）
+  originalUrl?: string // 原图地址
 }
 
 /** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
@@ -275,16 +271,40 @@ export interface OrderDetailResponse {
   status: number
   submitTime: string
   receiverName: string
-  photos: PhotoDetail[]
+  photos?: PhotoDetail[] // 可选，根据 includePhotos 参数决定
+  specs?: SpecInfo[] // 规格列表
   createdAt: string
 }
 
 /**
  * 获取订单详情
  * 后端路由: GET /api/order/:orderSn
+ * @param orderSn 订单号
+ * @param includePhotos 是否包含照片列表，默认 false（列表页不需要）
  */
-export async function getOrderDetail(orderSn: string): Promise<OrderDetailResponse> {
-  return request<OrderDetailResponse>(`/api/order/${orderSn}`)
+export async function getOrderDetail(orderSn: string, includePhotos: boolean = false): Promise<OrderDetailResponse> {
+  const params: Record<string, string> = {}
+  if (includePhotos) {
+    params.includePhotos = 'true'
+  }
+  return request<OrderDetailResponse>(`/api/order/${orderSn}`, { params })
+}
+
+/**
+ * 照片详情响应（根据 photo_id 获取单张照片信息）
+ */
+export interface PhotoDetailResponse {
+  photo: PhotoDetail
+  orderStatus: number // 订单状态：0-待上传 1-已提交 2-生产中 3-已发货 4-已完成 5-已取消
+  orderSn: string // 订单号
+}
+
+/**
+ * 获取照片详情（根据 photo_id）
+ * 后端路由: GET /api/photo/:photoId
+ */
+export async function getPhotoDetail(photoId: string): Promise<PhotoDetailResponse> {
+  return request<PhotoDetailResponse>(`/api/photo/${photoId}`)
 }
 
 // ==================== 规格相关 ====================

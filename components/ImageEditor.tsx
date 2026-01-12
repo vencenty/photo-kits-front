@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { RotateCw, ZoomIn, ZoomOut, Check, Lightbulb, RefreshCw, Download, Loader2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Check, Lightbulb, Download, Loader2 } from 'lucide-react'
 import { 
   PhotoTransform, 
   CropInfo,
@@ -26,11 +26,11 @@ interface ImageEditorProps {
   image: ImageType
   canvasWidth: number
   canvasHeight: number
-  onSave: (transform: PhotoTransform, cropInfo: CropInfo) => void
+  onSave: (transform: PhotoTransform | undefined, cropInfo: CropInfo | undefined) => void
   onCancel: () => void
 }
 
-type EditMode = 'center' | 'full' | 'lomo'
+type EditMode = 'cover' | 'full' | 'lomo'
 
 // Konva Canvas 组件
 interface KonvaCanvasProps {
@@ -47,7 +47,8 @@ interface KonvaCanvasProps {
   onWheel: (deltaY: number) => void
   dragBoundFunc: (pos: { x: number; y: number }) => { x: number; y: number }
   stageRef?: React.RefObject<any>
-  editable?: boolean // 是否可编辑
+  editable?: boolean // 是否可编辑（缩放、旋转）
+  allowDrag?: boolean // 是否允许拖拽移动
 }
 
 function KonvaCanvas({
@@ -65,6 +66,7 @@ function KonvaCanvas({
   dragBoundFunc,
   stageRef,
   editable = true,
+  allowDrag = true,
 }: KonvaCanvasProps) {
   const [konvaComponents, setKonvaComponents] = useState<{
     Stage: any
@@ -104,7 +106,10 @@ function KonvaCanvas({
       width={stageSize.width}
       height={stageSize.height}
       onWheel={(e: any) => {
-        if (!editable) return
+        if (!editable) {
+          e.evt.preventDefault()
+          return
+        }
         e.evt.preventDefault()
         onWheel(e.evt.deltaY)
       }}
@@ -129,18 +134,18 @@ function KonvaCanvas({
           rotation={imageAttrs.rotation}
           offsetX={imageAttrs.offsetX}
           offsetY={imageAttrs.offsetY}
-          draggable={editable}
-          dragBoundFunc={editable ? dragBoundFunc : undefined}
-          onDragMove={editable ? (e: any) => {
+          draggable={allowDrag}
+          dragBoundFunc={allowDrag ? dragBoundFunc : undefined}
+          onDragMove={allowDrag ? (e: any) => {
             onDragMove(e.target.x(), e.target.y())
           } : undefined}
-          onDragEnd={editable ? (e: any) => {
+          onDragEnd={allowDrag ? (e: any) => {
             onDragEnd(e.target.x(), e.target.y())
           } : undefined}
         />
         
         {/* 居中裁剪模式的出血线遮罩（红色半透明区域表示会被裁切的部分） */}
-        {styleType === 'center' && (
+        {styleType === 'cover' && (
           <>
             {/* 出血区域指示 - 这里可以根据需要添加 */}
           </>
@@ -171,7 +176,7 @@ export default function ImageEditor({
   const getInitialMode = (): EditMode => {
     if (photoData.transform?.styleType) return photoData.transform.styleType
     if (photoData.editState?.mode) return photoData.editState.mode
-    return 'center'
+    return 'cover'
   }
   
   const [mode, setMode] = useState<EditMode>(getInitialMode())
@@ -251,20 +256,108 @@ export default function ImageEditor({
     return () => window.removeEventListener('resize', updateSize)
   }, [aspectRatio])
 
+  // 稳定化 transform 引用，避免无限循环
+  const transformKey = useMemo(() => {
+    if (!photoData.transform) return null
+    // 使用关键字段创建唯一标识
+    return JSON.stringify({
+      styleType: photoData.transform.styleType,
+      outputWidth: photoData.transform.outputWidth,
+      outputHeight: photoData.transform.outputHeight,
+      sourceWidth: photoData.transform.sourceWidth,
+      sourceHeight: photoData.transform.sourceHeight,
+      rotateAngle: photoData.transform.rotateAngle,
+      scale: photoData.transform.scale,
+      translateX: photoData.transform.translateX,
+      translateY: photoData.transform.translateY,
+    })
+  }, [
+    photoData.transform?.styleType,
+    photoData.transform?.outputWidth,
+    photoData.transform?.outputHeight,
+    photoData.transform?.sourceWidth,
+    photoData.transform?.sourceHeight,
+    photoData.transform?.rotateAngle,
+    photoData.transform?.scale,
+    photoData.transform?.translateX,
+    photoData.transform?.translateY,
+  ])
+
+  // 使用 ref 跟踪上一次的值，避免不必要的更新
+  const prevValuesRef = useRef<{
+    image: HTMLImageElement | null
+    stageSize: { width: number; height: number }
+    mode: EditMode
+    transformKey: string | null
+    autoRotated: boolean | undefined
+  }>({
+    image: null,
+    stageSize: { width: 0, height: 0 },
+    mode: 'cover',
+    transformKey: null,
+    autoRotated: undefined,
+  })
+
+  // 使用单独的 ref 跟踪上一次的 attrs
+  const prevAttrsRef = useRef<ImageAttrs | null>(null)
+
   // 初始化图片位置和缩放
   useEffect(() => {
     if (!image || !stageSize.width || !stageSize.height) return
+    
+    // 检查是否真的需要更新
+    const prev = prevValuesRef.current
+    if (
+      prev.image === image &&
+      prev.stageSize.width === stageSize.width &&
+      prev.stageSize.height === stageSize.height &&
+      prev.mode === mode &&
+      prev.transformKey === transformKey &&
+      prev.autoRotated === photoData.autoRotated
+    ) {
+      return // 没有变化，不需要更新
+    }
+    
+    // 更新 ref
+    prevValuesRef.current = {
+      image,
+      stageSize,
+      mode,
+      transformKey,
+      autoRotated: photoData.autoRotated,
+    }
+    
+    // 只有在相同模式下才使用保存的 transform，否则重新计算
+    const shouldUseTransform = photoData.transform && 
+      photoData.transform.styleType === mode
     
     const attrs = calculateInitialAttrs(
       image,
       stageSize,
       mode,
-      photoData.transform,
+      shouldUseTransform ? photoData.transform : undefined,
       photoData.autoRotated
     )
+    
+    // 比较新旧 attrs 是否相同，避免不必要的状态更新
+    const prevAttrs = prevAttrsRef.current
+    if (prevAttrs &&
+        prevAttrs.x === attrs.x &&
+        prevAttrs.y === attrs.y &&
+        prevAttrs.scaleX === attrs.scaleX &&
+        prevAttrs.scaleY === attrs.scaleY &&
+        prevAttrs.rotation === attrs.rotation &&
+        prevAttrs.offsetX === attrs.offsetX &&
+        prevAttrs.offsetY === attrs.offsetY) {
+      return // attrs 没有变化，不需要更新
+    }
+    
+    // 更新 attrs ref
+    prevAttrsRef.current = attrs
+    
     setImageAttrs(attrs)
     setHasChanges(false)
-  }, [image, stageSize, photoData.transform, photoData.autoRotated])
+  }, [image, stageSize, mode, transformKey, photoData.transform, photoData.autoRotated])
 
   // 模式改变时重新计算
   const handleModeChange = useCallback((newMode: EditMode) => {
@@ -352,66 +445,6 @@ export default function ImageEditor({
     setHasChanges(true)
   }, [imageAttrs, getMinScaleValue, constrainPositionValue, image])
 
-  // 旋转90度
-  const handleRotate = useCallback(() => {
-    if (!image || !stageSize.width) return
-    
-    const newRotation = (imageAttrs.rotation + 90) % 360
-    
-    const margin = mode === 'lomo' ? WHITE_MARGIN_PERCENT / 100 : 0
-    const effectiveWidth = stageSize.width * (1 - margin * 2)
-    const effectiveHeight = stageSize.height * (1 - margin * 2)
-    
-    const rad = (newRotation * Math.PI) / 180
-    const cos = Math.abs(Math.cos(rad))
-    const sin = Math.abs(Math.sin(rad))
-    const rotatedWidth = image.width * cos + image.height * sin
-    const rotatedHeight = image.width * sin + image.height * cos
-    
-    let minScale: number
-    if (mode === 'lomo' || mode === 'full') {
-      minScale = Math.min(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight)
-    } else {
-      minScale = Math.max(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight)
-    }
-    
-    const newScale = Math.max(imageAttrs.scaleX, minScale)
-    const constrained = constrainPositionValue(imageAttrs.x, imageAttrs.y, newScale, newRotation)
-    
-    setImageAttrs(prev => ({
-      ...prev,
-      rotation: newRotation,
-      scaleX: newScale,
-      scaleY: newScale,
-      x: constrained.x,
-      y: constrained.y,
-    }))
-    setHasChanges(true)
-  }, [imageAttrs, image, stageSize, mode, constrainPositionValue])
-
-  // 缩放按钮
-  const handleZoomIn = useCallback(() => {
-    handleWheel(-100) // 负值表示放大
-  }, [handleWheel])
-
-  const handleZoomOut = useCallback(() => {
-    handleWheel(100) // 正值表示缩小
-  }, [handleWheel])
-
-  // 重置
-  const handleReset = useCallback(() => {
-    if (!image || !stageSize.width) return
-    
-    const attrs = calculateInitialAttrs(
-      image,
-      stageSize,
-      mode,
-      undefined,
-      photoData.autoRotated
-    )
-    setImageAttrs(attrs)
-    setHasChanges(true)
-  }, [image, stageSize, mode, photoData.autoRotated])
 
   // 规范化旋转角度到 0/90/180/270
   const normalizeRotation = (angle: number): number => {
@@ -466,30 +499,44 @@ export default function ImageEditor({
     // 获取原图地址
     const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
     
+    // lomo 和 full 模式不需要裁剪信息（cropInfo），但仍需要 transform 用于前端回显
+    if (mode === 'lomo' || mode === 'full') {
+      // 对于 lomo 和 full 模式，创建一个只包含 styleType 的 transform，用于前端回显
+      // 服务端会根据 cropMode 自动处理，不需要裁剪参数（cropInfo）
+      const transformForDisplay: PhotoTransform = {
+        outputWidth: stageSize.width,
+        outputHeight: stageSize.height,
+        sourceWidth: image.width,
+        sourceHeight: image.height,
+        styleType: mode,
+        originalUrl,
+      }
+      onSave(transformForDisplay, undefined)
+      return
+    }
+    
+    // cover 模式需要裁剪信息
     // 为了兼容性，仍然计算矩阵（但服务端可以优先使用简单参数）
     const matrix = imageAttrsToMatrix(imageAttrs)
     
-    // 生成 transform（用于前端回显）
+    // 生成 transform（用于前端回显，不包含服务端处理相关的字段）
     const transform: PhotoTransform = {
-      // 简化参数（优先使用）
+      // 兼容旧版本的矩阵
+      matrix,
+      // 输出尺寸（前端显示尺寸）
+      outputWidth: stageSize.width,
+      outputHeight: stageSize.height,
+      // 原图尺寸
+      sourceWidth: image.width,
+      sourceHeight: image.height,
+      // 样式类型
+      styleType: mode,
+      // 变换参数（用于前端回显）
       rotateAngle,
       scale,
       translateX,
       translateY,
-      offsetX,
-      offsetY,
       originalUrl,
-      // 相纸尺寸（服务端用于计算相纸比例，然后根据原图尺寸和比例裁剪）
-      // 例如：原图 4000×4000，相纸比例 4:3，服务端会裁剪成 4000×3000
-      canvasWidth,
-      canvasHeight,
-      // 兼容旧版本的矩阵
-      matrix,
-      outputWidth: stageSize.width,
-      outputHeight: stageSize.height,
-      sourceWidth: image.width,
-      sourceHeight: image.height,
-      styleType: mode,
     }
     
     // 生成 cropInfo（用于服务端处理，只包含服务端需要的字段）
@@ -599,11 +646,10 @@ export default function ImageEditor({
   const effectiveWidth = stageSize.width * (1 - margin * 2)
   const effectiveHeight = stageSize.height * (1 - margin * 2)
 
-  // 计算缩放百分比显示
-  const scalePercent = image ? Math.round((imageAttrs.scaleX / getMinScaleValue()) * 100) : 100
-
-  // 判断当前模式是否可编辑：只有 center 模式可以编辑
-  const isEditable = mode === 'center'
+  // cover 模式允许移动图片，但禁止放大缩小和旋转
+  // full 和 lomo 模式完全禁止编辑
+  const isEditable = false // 禁止缩放和旋转
+  const allowDrag = mode === 'cover' // cover 模式允许拖拽移动
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
@@ -623,21 +669,16 @@ export default function ImageEditor({
 
       {/* 提示信息 */}
       <div className="px-4 py-3 pt-16">
-        {isEditable ? (
-          <>
-            <div className="flex items-center justify-center gap-2 text-sm">
-              <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-              <span className="text-yellow-400">可手动放大缩小、旋转、移动位置</span>
-            </div>
-            <p className="text-center text-red-400 text-sm mt-1">超出边框部分将被裁剪</p>
-          </>
-        ) : (
-          <div className="flex items-center justify-center gap-2 text-sm">
-            <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0" />
-            <span className="text-blue-400">
-              {mode === 'full' ? '打印整图模式：图片完整显示，不可编辑' : '四周留白模式：图片完整显示，不可编辑'}
-            </span>
-          </div>
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0" />
+          <span className="text-blue-400">
+            {mode === 'cover' ? '居中裁剪模式：可拖拽移动图片位置，禁止缩放和旋转' : 
+             mode === 'full' ? '打印整图模式：图片完整显示，不可编辑' : 
+             '四周留白模式：图片完整显示，不可编辑'}
+          </span>
+        </div>
+        {mode === 'cover' && (
+          <p className="text-center text-red-400 text-sm mt-1">超出边框部分将被裁剪</p>
         )}
       </div>
 
@@ -666,13 +707,14 @@ export default function ImageEditor({
                   dragBoundFunc={dragBoundFunc}
                   stageRef={stageRef}
                   editable={isEditable}
+                  allowDrag={allowDrag}
                 />
               )}
             </div>
           </div>
           
           {/* 裁剪区域边框指示 */}
-          {mode === 'center' && (
+          {mode === 'cover' && (
             <div className="absolute inset-0 pointer-events-none" style={{ top: 0 }}>
               <div 
                 className="absolute border-2 border-red-500 border-dashed"
@@ -704,70 +746,20 @@ export default function ImageEditor({
 
       {/* 底部控制栏 */}
       <div className="bg-gray-900 border-t border-gray-800 p-4 pb-8">
-        {/* 缩放和旋转控制 */}
-        <div className="flex items-center justify-center gap-4 mb-4">
-          <button
-            onClick={handleZoomOut}
-            disabled={!isEditable}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              isEditable
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
-                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
-            }`}
-          >
-            <ZoomOut className="w-5 h-5" />
-          </button>
-          <span className="text-white text-sm w-16 text-center">{scalePercent}%</span>
-          <button
-            onClick={handleZoomIn}
-            disabled={!isEditable}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              isEditable
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
-                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
-            }`}
-          >
-            <ZoomIn className="w-5 h-5" />
-          </button>
-          <div className="w-px h-6 bg-gray-600 mx-2" />
-          <button
-            onClick={handleRotate}
-            disabled={!isEditable}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              isEditable
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
-                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
-            }`}
-          >
-            <RotateCw className="w-5 h-5" />
-          </button>
-          <button
-            onClick={handleReset}
-            disabled={!isEditable}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              isEditable
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
-                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
-            }`}
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
-        </div>
-
         {/* 模式选择器 */}
         <div className="flex gap-2 mb-4 justify-center">
           <button
-            onClick={() => handleModeChange('center')}
+            onClick={() => handleModeChange('cover')}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
-              mode === 'center'
+              mode === 'cover'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
             <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
-              mode === 'center' ? 'border-white bg-white' : 'border-gray-400'
+              mode === 'cover' ? 'border-white bg-white' : 'border-gray-400'
             }`}>
-              {mode === 'center' && <div className="w-2 h-2 bg-pink-500 rounded-sm" />}
+              {mode === 'cover' && <div className="w-2 h-2 bg-pink-500 rounded-sm" />}
             </div>
             居中裁剪
           </button>
@@ -807,12 +799,6 @@ export default function ImageEditor({
           </button>
         </div>
 
-        {/* 拖拽提示 */}
-        {isEditable && (
-          <p className="text-center text-gray-400 text-xs mb-3">
-            拖拽图片调整位置，滚轮/双指缩放
-          </p>
-        )}
 
         {/* 操作按钮 */}
         <div className="flex gap-3">
