@@ -46,6 +46,7 @@ interface KonvaCanvasProps {
   onWheel: (deltaY: number) => void
   dragBoundFunc: (pos: { x: number; y: number }) => { x: number; y: number }
   stageRef?: React.RefObject<any>
+  editable?: boolean // 是否可编辑
 }
 
 function KonvaCanvas({
@@ -62,6 +63,7 @@ function KonvaCanvas({
   onWheel,
   dragBoundFunc,
   stageRef,
+  editable = true,
 }: KonvaCanvasProps) {
   const [konvaComponents, setKonvaComponents] = useState<{
     Stage: any
@@ -101,6 +103,7 @@ function KonvaCanvas({
       width={stageSize.width}
       height={stageSize.height}
       onWheel={(e: any) => {
+        if (!editable) return
         e.evt.preventDefault()
         onWheel(e.evt.deltaY)
       }}
@@ -125,14 +128,14 @@ function KonvaCanvas({
           rotation={imageAttrs.rotation}
           offsetX={imageAttrs.offsetX}
           offsetY={imageAttrs.offsetY}
-          draggable
-          dragBoundFunc={dragBoundFunc}
-          onDragMove={(e: any) => {
+          draggable={editable}
+          dragBoundFunc={editable ? dragBoundFunc : undefined}
+          onDragMove={editable ? (e: any) => {
             onDragMove(e.target.x(), e.target.y())
-          }}
-          onDragEnd={(e: any) => {
+          } : undefined}
+          onDragEnd={editable ? (e: any) => {
             onDragEnd(e.target.x(), e.target.y())
-          }}
+          } : undefined}
         />
         
         {/* 居中裁剪模式的出血线遮罩（红色半透明区域表示会被裁切的部分） */}
@@ -548,6 +551,9 @@ export default function ImageEditor({
   // 计算缩放百分比显示
   const scalePercent = image ? Math.round((imageAttrs.scaleX / getMinScaleValue()) * 100) : 100
 
+  // 判断当前模式是否可编辑：只有 center 模式可以编辑
+  const isEditable = mode === 'center'
+
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
       {/* 下载按钮 */}
@@ -566,11 +572,22 @@ export default function ImageEditor({
 
       {/* 提示信息 */}
       <div className="px-4 py-3 pt-16">
-        <div className="flex items-center justify-center gap-2 text-sm">
-          <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-          <span className="text-yellow-400">可手动放大缩小、旋转、移动位置</span>
-        </div>
-        <p className="text-center text-red-400 text-sm mt-1">超出边框部分将被裁剪</p>
+        {isEditable ? (
+          <>
+            <div className="flex items-center justify-center gap-2 text-sm">
+              <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+              <span className="text-yellow-400">可手动放大缩小、旋转、移动位置</span>
+            </div>
+            <p className="text-center text-red-400 text-sm mt-1">超出边框部分将被裁剪</p>
+          </>
+        ) : (
+          <div className="flex items-center justify-center gap-2 text-sm">
+            <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0" />
+            <span className="text-blue-400">
+              {mode === 'full' ? '打印整图模式：图片完整显示，不可编辑' : '四周留白模式：图片完整显示，不可编辑'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Konva 编辑区域 */}
@@ -597,6 +614,7 @@ export default function ImageEditor({
                   onWheel={handleWheel}
                   dragBoundFunc={dragBoundFunc}
                   stageRef={stageRef}
+                  editable={isEditable}
                 />
               )}
             </div>
@@ -639,27 +657,47 @@ export default function ImageEditor({
         <div className="flex items-center justify-center gap-4 mb-4">
           <button
             onClick={handleZoomOut}
-            className="w-10 h-10 rounded-full bg-gray-700 text-gray-300 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition-all"
+            disabled={!isEditable}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              isEditable
+                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
+            }`}
           >
             <ZoomOut className="w-5 h-5" />
           </button>
           <span className="text-white text-sm w-16 text-center">{scalePercent}%</span>
           <button
             onClick={handleZoomIn}
-            className="w-10 h-10 rounded-full bg-gray-700 text-gray-300 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition-all"
+            disabled={!isEditable}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              isEditable
+                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
+            }`}
           >
             <ZoomIn className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-600 mx-2" />
           <button
             onClick={handleRotate}
-            className="w-10 h-10 rounded-full bg-gray-700 text-gray-300 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition-all"
+            disabled={!isEditable}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              isEditable
+                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
+            }`}
           >
             <RotateCw className="w-5 h-5" />
           </button>
           <button
             onClick={handleReset}
-            className="w-10 h-10 rounded-full bg-gray-700 text-gray-300 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition-all"
+            disabled={!isEditable}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              isEditable
+                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 active:scale-95'
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50'
+            }`}
           >
             <RefreshCw className="w-5 h-5" />
           </button>
@@ -684,11 +722,13 @@ export default function ImageEditor({
           </button>
           <button
             onClick={() => handleModeChange('full')}
+            disabled={mode === 'full'}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'full'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+            } ${mode === 'full' ? 'cursor-default' : ''}`}
+            title={mode === 'full' ? '打印整图模式不可编辑' : '切换到打印整图模式'}
           >
             <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
               mode === 'full' ? 'border-white bg-white' : 'border-gray-400'
@@ -699,11 +739,13 @@ export default function ImageEditor({
           </button>
           <button
             onClick={() => handleModeChange('lomo')}
+            disabled={mode === 'lomo'}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'lomo'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+            } ${mode === 'lomo' ? 'cursor-default' : ''}`}
+            title={mode === 'lomo' ? '四周留白模式不可编辑' : '切换到四周留白模式'}
           >
             <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
               mode === 'lomo' ? 'border-white bg-white' : 'border-gray-400'
@@ -715,9 +757,11 @@ export default function ImageEditor({
         </div>
 
         {/* 拖拽提示 */}
-        <p className="text-center text-gray-400 text-xs mb-3">
-          拖拽图片调整位置，滚轮/双指缩放
-        </p>
+        {isEditable && (
+          <p className="text-center text-gray-400 text-xs mb-3">
+            拖拽图片调整位置，滚轮/双指缩放
+          </p>
+        )}
 
         {/* 操作按钮 */}
         <div className="flex gap-3">

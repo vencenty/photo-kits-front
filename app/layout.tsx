@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '田田洗照片 - 上传照片',
-  description: '在线照片冲印服务',
+  title: '测试 - 传图',
+  description: '',
 }
 
 export default function RootLayout({
