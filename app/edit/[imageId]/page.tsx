@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-import { useStore, type PhotoTransform, type Image } from '@/lib/store'
+import { useStore, type PhotoTransform, type CropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { updatePhoto, getOrderDetail } from '@/lib/api'
@@ -104,7 +104,7 @@ export default function EditPage() {
     setImage(foundImage)
   }, [imageId, images, router, hasHydrated, currentSession, addImages, updateImage])
 
-  const handleSave = async (transform: PhotoTransform) => {
+  const handleSave = async (transform: PhotoTransform, cropInfo: CropInfo) => {
     // 检查订单是否已锁单
     if (isOrderLocked) {
       alert('订单已锁单，无法保存编辑。如需修改，请联系客服。')
@@ -113,6 +113,7 @@ export default function EditPage() {
     // 保存变换信息到本地 store
     updateImage(imageId, { 
       transform,
+      cropInfo,
       editState: {
         mode: transform.styleType,
         scale: 1,
@@ -142,7 +143,22 @@ export default function EditPage() {
           scale: transform.scale,
           translateX: transform.translateX,
           translateY: transform.translateY,
+          offsetX: transform.offsetX,
+          offsetY: transform.offsetY,
+          canvasWidth: transform.canvasWidth,
+          canvasHeight: transform.canvasHeight,
           originalUrl: transform.originalUrl,
+        },
+        cropInfo: {
+          canvasWidth: cropInfo.canvasWidth,
+          canvasHeight: cropInfo.canvasHeight,
+          sourceWidth: cropInfo.sourceWidth,
+          sourceHeight: cropInfo.sourceHeight,
+          offsetX: cropInfo.offsetX,
+          offsetY: cropInfo.offsetY,
+          rotateAngle: cropInfo.rotateAngle,
+          originalUrl: cropInfo.originalUrl,
+          styleType: cropInfo.styleType,
         },
       })
       console.log('编辑状态已同步到后端:', imageId)

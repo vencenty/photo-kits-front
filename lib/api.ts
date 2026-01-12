@@ -66,6 +66,7 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
 
 // ==================== 类型定义 ====================
 
+/** 照片变换信息 - 用于前端回显 */
 export interface PhotoTransform {
   matrix?: number[] // 兼容旧版本
   outputWidth: number
@@ -78,7 +79,24 @@ export interface PhotoTransform {
   scale?: number // 等比例缩放
   translateX?: number // X平移（px）
   translateY?: number // Y平移（px）
+  offsetX?: number // 原图坐标系中的X偏移量（px），用于服务端直接裁剪
+  offsetY?: number // 原图坐标系中的Y偏移量（px），用于服务端直接裁剪
+  canvasWidth?: number // 相纸宽度（mm），用于计算相纸比例
+  canvasHeight?: number // 相纸高度（mm），用于计算相纸比例
   originalUrl?: string // 原图地址（服务端能访问的路径）
+}
+
+/** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
+export interface CropInfo {
+  canvasWidth: number // 相纸宽度（mm），用于计算相纸比例
+  canvasHeight: number // 相纸高度（mm），用于计算相纸比例
+  sourceWidth: number // 原图宽度（像素）
+  sourceHeight: number // 原图高度（像素）
+  offsetX: number // 原图坐标系中的X偏移量（px），裁剪起始位置
+  offsetY: number // 原图坐标系中的Y偏移量（px），裁剪起始位置
+  rotateAngle: number // 旋转角度（仅0/90/180/270°）
+  originalUrl: string // 原图地址（服务端能访问的路径）
+  styleType?: string // 样式类型（可选）
 }
 
 export interface SpecInfo {
@@ -327,7 +345,8 @@ export interface AddPhotoParams {
   quantity?: number
   cropMode?: string
   autoRotated?: boolean
-  transform?: PhotoTransform
+  transform?: PhotoTransform // 用于前端回显
+  cropInfo?: CropInfo // 用于服务端处理
 }
 
 /**
@@ -345,7 +364,8 @@ export interface UpdatePhotoParams {
   photoId: string
   quantity?: number
   cropMode?: string
-  transform?: PhotoTransform
+  transform?: PhotoTransform // 用于前端回显
+  cropInfo?: CropInfo // 用于服务端处理
 }
 
 /**
@@ -420,7 +440,8 @@ export interface SubmitOrderParams {
     id: string
     url: string
     quantity: number
-    transform?: PhotoTransform
+    transform?: PhotoTransform // 用于前端回显
+    cropInfo?: CropInfo // 用于服务端处理
   }[]
 }
 

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { RotateCw, ZoomIn, ZoomOut, Check, Lightbulb, RefreshCw, Download, Loader2 } from 'lucide-react'
 import { 
   PhotoTransform, 
+  CropInfo,
   createAffineMatrix, 
   parseAffineMatrix,
   type Image as ImageType 
@@ -25,7 +26,7 @@ interface ImageEditorProps {
   image: ImageType
   canvasWidth: number
   canvasHeight: number
-  onSave: (transform: PhotoTransform) => void
+  onSave: (transform: PhotoTransform, cropInfo: CropInfo) => void
   onCancel: () => void
 }
 
@@ -432,19 +433,56 @@ export default function ImageEditor({
     const translateX = imageAttrs.x // X平移
     const translateY = imageAttrs.y // Y平移
     
+    // 计算有效区域的左上角坐标（画布坐标系）
+    const margin = mode === 'lomo' ? WHITE_MARGIN_PERCENT / 100 : 0
+    const canvasX = mode === 'lomo' ? stageSize.width * margin : 0
+    const canvasY = mode === 'lomo' ? stageSize.height * margin : 0
+    
+    // 计算 offsetX 和 offsetY：将画布有效区域左上角转换到原图坐标系
+    // 注意：Konva 的旋转中心是图片中心（通过 offsetX 和 offsetY 设置）
+    // 图片中心在画布上的位置就是 (translateX, translateY)
+    
+    // 1. 将画布坐标转换为相对于图片中心的坐标（画布坐标系）
+    const centerRelativeX = canvasX - translateX
+    const centerRelativeY = canvasY - translateY
+    
+    // 2. 应用逆旋转（将画布坐标系转换回原图坐标系）
+    const rad = (-rotateAngle * Math.PI) / 180
+    const cos = Math.cos(rad)
+    const sin = Math.sin(rad)
+    const rotatedX = centerRelativeX * cos - centerRelativeY * sin
+    const rotatedY = centerRelativeX * sin + centerRelativeY * cos
+    
+    // 3. 应用逆缩放，得到相对于图片中心的原图坐标
+    const scaledX = rotatedX / scale
+    const scaledY = rotatedY / scale
+    
+    // 4. 转换为相对于图片左上角的原图坐标
+    const imageCenterX = image.width / 2
+    const imageCenterY = image.height / 2
+    const offsetX = scaledX + imageCenterX
+    const offsetY = scaledY + imageCenterY
+    
     // 获取原图地址
     const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
     
     // 为了兼容性，仍然计算矩阵（但服务端可以优先使用简单参数）
     const matrix = imageAttrsToMatrix(imageAttrs)
     
+    // 生成 transform（用于前端回显）
     const transform: PhotoTransform = {
       // 简化参数（优先使用）
       rotateAngle,
       scale,
       translateX,
       translateY,
+      offsetX,
+      offsetY,
       originalUrl,
+      // 相纸尺寸（服务端用于计算相纸比例，然后根据原图尺寸和比例裁剪）
+      // 例如：原图 4000×4000，相纸比例 4:3，服务端会裁剪成 4000×3000
+      canvasWidth,
+      canvasHeight,
       // 兼容旧版本的矩阵
       matrix,
       outputWidth: stageSize.width,
@@ -454,7 +492,20 @@ export default function ImageEditor({
       styleType: mode,
     }
     
-    onSave(transform)
+    // 生成 cropInfo（用于服务端处理，只包含服务端需要的字段）
+    const cropInfo: CropInfo = {
+      canvasWidth,
+      canvasHeight,
+      sourceWidth: image.width,
+      sourceHeight: image.height,
+      offsetX,
+      offsetY,
+      rotateAngle,
+      originalUrl,
+      styleType: mode,
+    }
+    
+    onSave(transform, cropInfo)
   }, [image, imageAttrs, stageSize, mode, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 下载编辑后的图片

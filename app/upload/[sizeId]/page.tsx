@@ -898,7 +898,18 @@ export default function UploadPage() {
           sourceWidth: img.transform.sourceWidth,
           sourceHeight: img.transform.sourceHeight,
           styleType: img.transform.styleType || 'center', // 添加 styleType 字段，默认为 center
+          // 包含简化参数字段（如果存在）
+          rotateAngle: img.transform.rotateAngle,
+          scale: img.transform.scale,
+          translateX: img.transform.translateX,
+          translateY: img.transform.translateY,
+          offsetX: img.transform.offsetX,
+          offsetY: img.transform.offsetY,
+          canvasWidth: img.transform.canvasWidth,
+          canvasHeight: img.transform.canvasHeight,
+          originalUrl: img.transform.originalUrl,
         } : undefined,
+        cropInfo: img.cropInfo, // 用于服务端处理
       }))
 
       // 调用后端提交订单

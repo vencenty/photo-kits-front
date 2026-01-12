@@ -58,7 +58,7 @@ export function parseAffineMatrix(matrix: AffineMatrix): {
 
 // ==================== 照片变换类型 ====================
 
-/** 照片变换信息（使用仿射矩阵） */
+/** 照片变换信息（使用仿射矩阵）- 用于前端回显 */
 export interface PhotoTransform {
   /** 仿射变换矩阵 [a, b, c, d, tx, ty]（兼容旧版本） */
   matrix?: AffineMatrix
@@ -77,7 +77,33 @@ export interface PhotoTransform {
   scale?: number // 等比例缩放
   translateX?: number // X平移（px）
   translateY?: number // Y平移（px）
+  offsetX?: number // 原图坐标系中的X偏移量（px），用于服务端直接裁剪
+  offsetY?: number // 原图坐标系中的Y偏移量（px），用于服务端直接裁剪
+  canvasWidth?: number // 相纸宽度（mm），用于计算相纸比例
+  canvasHeight?: number // 相纸高度（mm），用于计算相纸比例
   originalUrl?: string // 原图地址（服务端能访问的路径）
+}
+
+/** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
+export interface CropInfo {
+  /** 相纸宽度（mm），用于计算相纸比例 */
+  canvasWidth: number
+  /** 相纸高度（mm），用于计算相纸比例 */
+  canvasHeight: number
+  /** 原图宽度（像素） */
+  sourceWidth: number
+  /** 原图高度（像素） */
+  sourceHeight: number
+  /** 原图坐标系中的X偏移量（px），裁剪起始位置 */
+  offsetX: number
+  /** 原图坐标系中的Y偏移量（px），裁剪起始位置 */
+  offsetY: number
+  /** 旋转角度（仅0/90/180/270°） */
+  rotateAngle: number
+  /** 原图地址（服务端能访问的路径） */
+  originalUrl: string
+  /** 样式类型（可选） */
+  styleType?: 'center' | 'full' | 'lomo'
 }
 
 // 编辑状态类型（兼容旧版本）
@@ -102,7 +128,8 @@ export interface Image {
   height: number
   printCount: number
   editState: EditState | null
-  transform?: PhotoTransform // 仿射变换信息（新版本）
+  transform?: PhotoTransform // 仿射变换信息（新版本，用于前端回显）
+  cropInfo?: CropInfo // 裁剪信息（用于服务端处理）
   autoRotated?: boolean // 是否自动旋转（横图转竖图）
   file?: File // 前端保存原始文件对象
   // 上传状态跟踪
