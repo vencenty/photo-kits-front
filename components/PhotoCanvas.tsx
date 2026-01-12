@@ -61,7 +61,7 @@ function calculateInitialAttrs(
   const imgHeight = image.height
   
   // 如果有保存的变换，恢复它
-  if (transform) {
+  if (transform && transform.matrix) {
     const savedStyleType = transform.styleType || styleType
     const margin = savedStyleType === 'lomo' ? WHITE_MARGIN_PERCENT / 100 : 0
     

@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 启用 standalone 模式，生成最小化的部署文件
+  // 注意：不要使用 'export'，因为应用有动态路由和 API 调用
+  output: 'standalone',
   images: {
     unoptimized: true,
   },

@@ -137,6 +137,12 @@ export default function EditPage() {
           sourceWidth: transform.sourceWidth,
           sourceHeight: transform.sourceHeight,
           styleType: transform.styleType,
+          // 包含新的简化参数字段
+          rotateAngle: transform.rotateAngle,
+          scale: transform.scale,
+          translateX: transform.translateX,
+          translateY: transform.translateY,
+          originalUrl: transform.originalUrl,
         },
       })
       console.log('编辑状态已同步到后端:', imageId)

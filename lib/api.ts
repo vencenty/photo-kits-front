@@ -3,7 +3,7 @@
  */
 
 // API 基础配置
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
 
 // 统一响应类型
 interface ApiResponse<T> {
