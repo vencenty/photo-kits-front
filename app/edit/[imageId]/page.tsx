@@ -3,11 +3,12 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-import { useStore, type PhotoTransform, type CropInfo, type Image } from '@/lib/store'
+import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { updatePhoto, getPhotoDetail } from '@/lib/api'
 import { mapCropModeToServer } from '@/lib/utils'
+import { buildOssCropUrl } from '@/lib/image-config'
 import type { Image as ImageType } from '@/lib/store'
 
 export default function EditPage() {
@@ -86,7 +87,7 @@ export default function EditPage() {
       // 只在图片数据真正改变时才更新 state
       if (image?.id !== foundImage.id || 
           image?.originalUrl !== foundImage.originalUrl ||
-          image?.transform !== foundImage.transform) {
+          image?.cropInfo !== foundImage.cropInfo) {
         setImage(foundImage)
       }
       return
@@ -104,7 +105,6 @@ export default function EditPage() {
             const needsUpdate = 
               (!foundImage.originalUrl && imageData.originalUrl) ||
               (!foundImage.thumbnailUrl && imageData.thumbnailUrl) ||
-              (!foundImage.transform && imageData.transform) ||
               (!foundImage.cropInfo && imageData.cropInfo) ||
               (!foundImage.editState && imageData.editState)
             
@@ -112,7 +112,6 @@ export default function EditPage() {
               updateImage(imageId, {
                 originalUrl: imageData.originalUrl || foundImage.originalUrl,
                 thumbnailUrl: imageData.thumbnailUrl || foundImage.thumbnailUrl,
-                transform: imageData.transform || foundImage.transform,
                 cropInfo: imageData.cropInfo || foundImage.cropInfo,
                 editState: imageData.editState || foundImage.editState,
               })
@@ -146,20 +145,18 @@ export default function EditPage() {
             // 合并编辑状态（sessionStorage 中的数据可能更新）
             // 只在真正需要更新时才调用 updateImage
             const needsUpdate = 
-              (imageData.transform && (!foundImage.transform || 
-                JSON.stringify(foundImage.transform) !== JSON.stringify(imageData.transform))) ||
+              (imageData.cropInfo && (!foundImage.cropInfo || 
+                JSON.stringify(foundImage.cropInfo) !== JSON.stringify(imageData.cropInfo))) ||
               (imageData.editState && (!foundImage.editState || 
                 JSON.stringify(foundImage.editState) !== JSON.stringify(imageData.editState)))
             
             if (needsUpdate) {
               updateImage(imageId, {
-                transform: imageData.transform,
                 cropInfo: imageData.cropInfo,
                 editState: imageData.editState,
               })
               foundImage = {
                 ...foundImage,
-                transform: imageData.transform || foundImage.transform,
                 cropInfo: imageData.cropInfo || foundImage.cropInfo,
                 editState: imageData.editState || foundImage.editState,
               }
@@ -189,38 +186,38 @@ export default function EditPage() {
     initializedRef.current = true
   }, [imageId, images, hasHydrated, currentSession, router, image, updateImage, addImages])
 
-  const handleSave = async (transform: PhotoTransform | undefined, cropInfo: CropInfo | undefined) => {
+  const handleSave = async (cropInfo: SimpleCropInfo | undefined) => {
     // 检查订单是否已锁单
     if (isOrderLocked) {
       alert('订单已锁单，无法保存编辑。如需修改，请联系客服。')
       return
     }
     
-    // 确定模式（从 transform 或当前图片的 transform 中获取）
-    const mode = transform?.styleType || image?.transform?.styleType || 'cover'
+    // 确定模式
+    const mode = cropInfo?.styleType || image?.cropInfo?.styleType || 'cover'
     
-    // 保存变换信息到本地 store
-    // 即使 transform 是 undefined，也要确保 editState 包含正确的 mode（从 cropMode 或其他地方获取）
+    // 打印 OSS 裁剪 URL（调试）
+    if (cropInfo && image) {
+      const originalUrl = image.originalUrl || image.thumbnailUrl || ''
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+      console.log('💾 编辑页保存 - x-oss-process URL:', ossCropUrl)
+    }
+    
+    // 保存裁剪信息到本地 store
     updateImage(imageId, { 
-      transform: transform || undefined,
       cropInfo: cropInfo || undefined,
-      editState: transform ? {
-        mode: transform.styleType,
-        scale: 1,
-        x: 0,
-        y: 0,
-        rotation: 0,
-        canvasWidth: transform.outputWidth,
-        canvasHeight: transform.outputHeight,
-      } : (mode ? {
-        mode: mode as 'cover' | 'full' | 'lomo',
+      // 同时更新 editState 保持兼容性
+      editState: cropInfo ? {
+        mode: cropInfo.styleType,
         scale: 1,
         x: 0,
         y: 0,
         rotation: 0,
         canvasWidth: currentSession?.canvasWidth || 127,
         canvasHeight: currentSession?.canvasHeight || 89,
-      } : null),
+      } : null,
+      // 清除旧的 transform（不再需要）
+      transform: undefined,
     })
     
     // 同步保存到后端（异步执行，不阻塞UI）
@@ -229,31 +226,16 @@ export default function EditPage() {
       await updatePhoto({
         photoId: imageId,
         cropMode: mapCropModeToServer(mode),
-        // transform 用于前端回显（包括 lomo 和 full 模式）
-        // cropInfo 只用于 cover 模式的服务端处理
-        transform: transform ? {
-          matrix: transform.matrix,
-          outputWidth: transform.outputWidth,
-          outputHeight: transform.outputHeight,
-          sourceWidth: transform.sourceWidth,
-          sourceHeight: transform.sourceHeight,
-          styleType: transform.styleType,
-          // 变换参数（用于前端回显）
-          rotateAngle: transform.rotateAngle,
-          scale: transform.scale,
-          translateX: transform.translateX,
-          translateY: transform.translateY,
-          originalUrl: transform.originalUrl,
-        } : undefined,
+        // 新版本：只传递简化的 cropInfo
         cropInfo: cropInfo ? {
-          canvasWidth: cropInfo.canvasWidth,
-          canvasHeight: cropInfo.canvasHeight,
+          canvasWidth: currentSession?.canvasWidth || 127,
+          canvasHeight: currentSession?.canvasHeight || 89,
           sourceWidth: cropInfo.sourceWidth,
           sourceHeight: cropInfo.sourceHeight,
           offsetX: cropInfo.offsetX,
           offsetY: cropInfo.offsetY,
-          rotateAngle: cropInfo.rotateAngle,
-          originalUrl: cropInfo.originalUrl,
+          rotateAngle: 0, // react-easy-crop 不支持旋转，固定为 0
+          originalUrl: image?.originalUrl || '',
           styleType: cropInfo.styleType,
         } : undefined,
       })

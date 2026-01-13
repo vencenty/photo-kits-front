@@ -113,6 +113,24 @@ export interface EditState {
   canvasHeight: number
 }
 
+// 简化的裁剪信息（用于 react-easy-crop，与 image-config.ts 中的类型保持一致）
+export interface SimpleCropInfo {
+  /** 裁剪起始 X（原图像素） */
+  offsetX: number
+  /** 裁剪起始 Y（原图像素） */
+  offsetY: number
+  /** 裁剪宽度（原图像素） */
+  cropWidth: number
+  /** 裁剪高度（原图像素） */
+  cropHeight: number
+  /** 原图宽度 */
+  sourceWidth: number
+  /** 原图高度 */
+  sourceHeight: number
+  /** 样式类型 */
+  styleType: 'cover' | 'full' | 'lomo'
+}
+
 // 图片类型
 export interface Image {
   id: string
@@ -124,8 +142,8 @@ export interface Image {
   height: number
   printCount: number
   editState: EditState | null
-  transform?: PhotoTransform // 仿射变换信息（新版本，用于前端回显）
-  cropInfo?: CropInfo // 裁剪信息（用于服务端处理）
+  transform?: PhotoTransform // 仿射变换信息（旧版本，保留兼容）
+  cropInfo?: SimpleCropInfo // 简化的裁剪信息（新版本，用于 react-easy-crop）
   autoRotated?: boolean // 是否自动旋转（横图转竖图）
   file?: File // 前端保存原始文件对象
   // 上传状态跟踪
@@ -293,7 +311,8 @@ export const useStore = create<StoreState>()(
           height: img.height,
           printCount: img.printCount,
           editState: img.editState,
-          transform: img.transform, // 保存变换信息（用于恢复编辑状态）
+          transform: img.transform, // 保存变换信息（旧版本兼容）
+          cropInfo: img.cropInfo, // 保存裁剪信息（新版本，用于恢复编辑状态）
           autoRotated: img.autoRotated, // 保存自动旋转状态
           // 不保存这些大数据:
           // originalUrl: undefined,

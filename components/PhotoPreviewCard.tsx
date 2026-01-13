@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
-import { PhotoCanvas, type StyleType } from './PhotoCanvas'
-import type { Image as ImageType, PhotoTransform } from '@/lib/store'
-import { getListImageUrl } from '@/lib/image-config'
+import type { Image as ImageType } from '@/lib/store'
+import { getListImageUrl, buildOssCropAndResizeUrl, SimpleCropInfo } from '@/lib/image-config'
+
+// 配置常量
+const WHITE_MARGIN_PERCENT = 5
 
 interface PhotoPreviewCardProps {
   image: ImageType
@@ -14,47 +16,21 @@ interface PhotoPreviewCardProps {
 
 export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [stageSize, setStageSize] = useState({ width: 0, height: 0 })
   const [isClient, setIsClient] = useState(false)
+  const [imageError, setImageError] = useState(false)
 
   // 客户端渲染检测
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  // 计算容器尺寸
+  // 图片变化时重置错误状态
   useEffect(() => {
-    if (!containerRef.current) return
-    
-    const updateSize = () => {
-      const container = containerRef.current
-      if (!container) return
-      
-      const containerWidth = container.offsetWidth
-      const containerHeight = container.offsetHeight
-      
-      if (containerWidth > 0 && containerHeight > 0) {
-        setStageSize({
-          width: containerWidth,
-          height: containerHeight,
-        })
-      }
-    }
-    
-    // 使用 requestAnimationFrame 确保容器已渲染
-    const rafId = requestAnimationFrame(updateSize)
-    
-    // 监听窗口大小变化
-    window.addEventListener('resize', updateSize)
-    
-    return () => {
-      cancelAnimationFrame(rafId)
-      window.removeEventListener('resize', updateSize)
-    }
-  }, [aspectRatio, image.id])
+    setImageError(false)
+  }, [image.id, image.cropInfo])
 
   // 如果没有 thumbnailUrl，显示占位符
-  if (!image.thumbnailUrl) {
+  if (!image.thumbnailUrl && !image.originalUrl) {
     return (
       <div 
         ref={containerRef}
@@ -67,30 +43,101 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   }
 
   // 获取样式类型
-  const styleType: StyleType = image.transform?.styleType || image.editState?.mode || 'cover'
+  const styleType = image.cropInfo?.styleType || image.editState?.mode || 'cover'
   
-  // 获取压缩后的图片 URL（用于列表显示）
-  const compressedUrl = getListImageUrl(image.thumbnailUrl)
+  // 获取原图 URL
+  const originalUrl = image.originalUrl || image.thumbnailUrl || ''
+  
+  // 根据是否有 cropInfo 来决定使用哪个 URL
+  let previewUrl: string
+  
+  if (image.cropInfo && styleType === 'cover' && !imageError) {
+    // 有裁剪信息且是 cover 模式，使用 OSS 裁剪 URL
+    previewUrl = buildOssCropAndResizeUrl(originalUrl, image.cropInfo as SimpleCropInfo, 300)
+    
+    // 打印调试信息
+    console.log('📷 列表页预览 URL:', {
+      imageId: image.id,
+      styleType,
+      cropInfo: image.cropInfo,
+      previewUrl,
+    })
+  } else {
+    // 没有裁剪信息或者是其他模式，使用普通压缩 URL
+    previewUrl = getListImageUrl(originalUrl)
+  }
+
+  // 渲染图片
+  const renderImage = () => {
+    const isLomo = styleType === 'lomo'
+    const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
+
+    if (styleType === 'cover') {
+      // Cover 模式：图片裁剪后填满整个区域
+      return (
+        <img
+          src={previewUrl}
+          alt={image.filename || '照片'}
+          className="w-full h-full object-cover"
+          onError={() => {
+            console.warn('图片加载失败，降级使用原图:', previewUrl)
+            setImageError(true)
+          }}
+        />
+      )
+    } else if (styleType === 'full') {
+      // Full 模式：完整显示图片
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-white">
+          <img
+            src={previewUrl}
+            alt={image.filename || '照片'}
+            className="max-w-full max-h-full object-contain"
+            onError={() => setImageError(true)}
+          />
+        </div>
+      )
+    } else {
+      // Lomo 模式：留白显示
+      return (
+        <div 
+          className="w-full h-full flex items-center justify-center bg-white"
+          style={{ padding: `${margin}%` }}
+        >
+          <img
+            src={previewUrl}
+            alt={image.filename || '照片'}
+            className="max-w-full max-h-full object-contain"
+            style={{
+              maxWidth: `${100 - margin * 2}%`,
+              maxHeight: `${100 - margin * 2}%`,
+            }}
+            onError={() => setImageError(true)}
+          />
+        </div>
+      )
+    }
+  }
+
+  // 降级显示（OSS 裁剪失败时）
+  const renderFallback = () => {
+    const fallbackUrl = getListImageUrl(originalUrl)
+    return (
+      <img
+        src={fallbackUrl}
+        alt={image.filename || '照片'}
+        className="w-full h-full object-cover"
+      />
+    )
+  }
 
   return (
     <div 
       ref={containerRef}
-      className="absolute inset-0"
-      style={{ pointerEvents: onClick ? 'auto' : 'none' }}
+      className="absolute inset-0 cursor-pointer"
+      onClick={onClick}
     >
-      {isClient && stageSize.width > 0 && stageSize.height > 0 && (
-        <PhotoCanvas
-          imageUrl={compressedUrl}
-          imageSize={{ width: image.width, height: image.height }}
-          stageSize={stageSize}
-          styleType={styleType}
-          transform={image.transform}
-          autoRotated={image.autoRotated}
-          editable={false}
-          onClick={onClick}
-        />
-      )}
+      {isClient && (imageError ? renderFallback() : renderImage())}
     </div>
   )
 }
-

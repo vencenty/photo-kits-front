@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useStore, EditState, parseAffineMatrix } from '@/lib/store'
+import { useStore, EditState } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
@@ -816,7 +816,7 @@ export default function UploadPage() {
       height: image.height,
       printCount: image.printCount,
       editState: image.editState,
-      transform: image.transform,
+      cropInfo: image.cropInfo, // 新版本：保存裁剪信息
       autoRotated: image.autoRotated,
     }
     sessionStorage.setItem(`edit-image-${id}`, JSON.stringify(imageData))
@@ -861,33 +861,34 @@ export default function UploadPage() {
     const updates = targetIds.map((id) => {
       const img = images.find(i => i.id === id)
       if (!img) return null
-
-      // 获取当前旋转角度（优先从 transform 获取，兼容单独编辑过的图片）
-      let currentRotation = 0
-      if (img.transform?.matrix) {
-        const { rotation } = parseAffineMatrix(img.transform.matrix as [number, number, number, number, number, number])
-        currentRotation = rotation
-      } else if (img.editState?.rotation) {
-        currentRotation = img.editState.rotation
-      } else if (img.autoRotated) {
-        currentRotation = 90
-      }
       
       const newEditState: EditState = {
         mode,
         scale: 1,
         x: 0,
         y: 0,
-        rotation: currentRotation,
+        rotation: img.autoRotated ? 90 : 0,
         canvasWidth: currentSession?.canvasWidth || 127,
         canvasHeight: currentSession?.canvasHeight || 89,
+      }
+
+      // 创建新的 cropInfo（简化版，用于批量设置模式）
+      const newCropInfo = {
+        offsetX: 0,
+        offsetY: 0,
+        cropWidth: img.width,
+        cropHeight: img.height,
+        sourceWidth: img.width,
+        sourceHeight: img.height,
+        styleType: mode as 'cover' | 'full' | 'lomo',
       }
 
       return {
         id,
         updates: { 
           editState: newEditState,
-          // 清除 transform，让 PhotoCanvas 使用 editState
+          cropInfo: newCropInfo,
+          // 清除旧的 transform
           transform: undefined,
         },
       }
@@ -935,39 +936,38 @@ export default function UploadPage() {
     try {
       // 构建照片列表
       const photos = images.map(img => {
-        // 获取模式（从 transform 或 editState 中获取）
-        const mode = img.transform?.styleType || img.editState?.mode || 'cover'
+        // 获取模式（从 cropInfo 或 editState 中获取）
+        const mode = img.cropInfo?.styleType || img.editState?.mode || 'cover'
         
-        // lomo 和 full 模式不需要裁剪信息（cropInfo），但需要保留 transform 中的 styleType 用于前端回显
+        // lomo 和 full 模式不需要裁剪信息
         const shouldClearCropInfo = mode === 'lomo' || mode === 'full'
+        
+        // 将 SimpleCropInfo 转换为 API 期望的 CropInfo 格式
+        const apiCropInfo = (!shouldClearCropInfo && img.cropInfo) ? {
+          canvasWidth: currentSession.canvasWidth,
+          canvasHeight: currentSession.canvasHeight,
+          sourceWidth: img.cropInfo.sourceWidth,
+          sourceHeight: img.cropInfo.sourceHeight,
+          offsetX: img.cropInfo.offsetX,
+          offsetY: img.cropInfo.offsetY,
+          rotateAngle: 0, // react-easy-crop 不支持旋转
+          originalUrl: img.originalUrl,
+          styleType: img.cropInfo.styleType,
+        } : undefined
         
         return {
           id: img.id,
           url: img.originalUrl,
           quantity: img.printCount,
-          // 始终保留 transform，至少包含 styleType，用于前端回显和后端识别样式
-          transform: img.transform ? {
-            matrix: img.transform.matrix,
-            outputWidth: img.transform.outputWidth,
-            outputHeight: img.transform.outputHeight,
-            sourceWidth: img.transform.sourceWidth,
-            sourceHeight: img.transform.sourceHeight,
-            styleType: img.transform.styleType || mode, // 确保 styleType 存在
-            // 变换参数（用于前端回显）
-            rotateAngle: img.transform.rotateAngle,
-            scale: img.transform.scale,
-            translateX: img.transform.translateX,
-            translateY: img.transform.translateY,
-            originalUrl: img.transform.originalUrl,
-          } : {
-            // 如果没有 transform，至少创建一个包含 styleType 的 transform
-            outputWidth: 0,
-            outputHeight: 0,
-            sourceWidth: 0,
-            sourceHeight: 0,
+          // 创建简化的 transform（只包含 styleType）
+          transform: {
+            outputWidth: currentSession.canvasWidth,
+            outputHeight: currentSession.canvasHeight,
+            sourceWidth: img.width,
+            sourceHeight: img.height,
             styleType: mode,
           },
-          cropInfo: !shouldClearCropInfo ? img.cropInfo : undefined, // 用于服务端处理，lomo/full 模式清空
+          cropInfo: apiCropInfo,
         }
       })
 
@@ -1011,14 +1011,6 @@ export default function UploadPage() {
 
   const handleBack = () => {
     router.push('/select-size')
-  }
-
-  const getImageRotation = (image: ImageType): number => {
-    if (image.transform?.matrix) {
-      const { rotation } = parseAffineMatrix(image.transform.matrix as [number, number, number, number, number, number])
-      return rotation
-    }
-    return image.editState?.rotation || 0
   }
 
   // 等待 hydration 和 session 加载

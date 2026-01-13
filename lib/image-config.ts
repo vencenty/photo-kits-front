@@ -137,3 +137,131 @@ export function getEditImageUrl(url: string): string {
   return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit)
 }
 
+// ==================== OSS 裁剪相关 ====================
+
+/**
+ * 简化的裁剪信息（用于 react-easy-crop）
+ */
+export interface SimpleCropInfo {
+  /** 裁剪起始 X（原图像素） */
+  offsetX: number
+  /** 裁剪起始 Y（原图像素） */
+  offsetY: number
+  /** 裁剪宽度（原图像素） */
+  cropWidth: number
+  /** 裁剪高度（原图像素） */
+  cropHeight: number
+  /** 原图宽度 */
+  sourceWidth: number
+  /** 原图高度 */
+  sourceHeight: number
+  /** 样式类型 */
+  styleType: 'cover' | 'full' | 'lomo'
+}
+
+/**
+ * 构建 OSS 裁剪 URL
+ * @param originalUrl 原图 URL
+ * @param cropInfo 裁剪信息
+ * @returns 带裁剪参数的 URL
+ */
+export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo): string {
+  if (!originalUrl) return originalUrl
+
+  // 如果是 data URL 或本地文件，不处理
+  if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
+    return originalUrl
+  }
+
+  // 判断是否为 OSS URL
+  const isOssUrl = originalUrl.includes('aliyuncs.com') || 
+                   originalUrl.includes('oss-proxy') || 
+                   originalUrl.includes('vencenty.cc')
+
+  if (!isOssUrl) {
+    return originalUrl
+  }
+
+  const { offsetX, offsetY, cropWidth, cropHeight, styleType } = cropInfo
+
+  // full 和 lomo 模式不需要裁剪
+  if (styleType !== 'cover') {
+    return originalUrl
+  }
+
+  // 构建裁剪参数
+  const x = Math.round(offsetX)
+  const y = Math.round(offsetY)
+  const w = Math.round(cropWidth)
+  const h = Math.round(cropHeight)
+
+  const cropParams = `crop,x_${x},y_${y},w_${w},h_${h}`
+
+  // 移除已有的 x-oss-process 参数，避免冲突
+  let cleanUrl = originalUrl
+  if (originalUrl.includes('x-oss-process=')) {
+    cleanUrl = originalUrl.replace(/[?&]x-oss-process=[^&]+/, '')
+    // 清理可能留下的 ? 或 & 
+    cleanUrl = cleanUrl.replace(/\?$/, '').replace(/\?&/, '?').replace(/&&/, '&')
+  }
+
+  const separator = cleanUrl.includes('?') ? '&' : '?'
+  return `${cleanUrl}${separator}x-oss-process=image/${cropParams}`
+}
+
+/**
+ * 构建带裁剪和压缩的 OSS URL（用于列表页预览）
+ * @param originalUrl 原图 URL
+ * @param cropInfo 裁剪信息
+ * @param targetWidth 目标宽度（用于压缩）
+ * @returns 带裁剪和压缩参数的 URL
+ */
+export function buildOssCropAndResizeUrl(
+  originalUrl: string, 
+  cropInfo: SimpleCropInfo,
+  targetWidth: number = 300
+): string {
+  if (!originalUrl) return originalUrl
+
+  // 如果是 data URL 或本地文件，不处理
+  if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
+    return originalUrl
+  }
+
+  // 判断是否为 OSS URL
+  const isOssUrl = originalUrl.includes('aliyuncs.com') || 
+                   originalUrl.includes('oss-proxy') || 
+                   originalUrl.includes('vencenty.cc')
+
+  if (!isOssUrl) {
+    return originalUrl
+  }
+
+  const { offsetX, offsetY, cropWidth, cropHeight, styleType } = cropInfo
+  const params: string[] = []
+
+  // cover 模式需要裁剪
+  if (styleType === 'cover') {
+    const x = Math.round(offsetX)
+    const y = Math.round(offsetY)
+    const w = Math.round(cropWidth)
+    const h = Math.round(cropHeight)
+    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+  }
+
+  // 添加压缩参数
+  params.push(`resize,w_${targetWidth}`)
+  params.push('quality,q_80')
+  params.push('format,jpg')
+
+  // 移除已有的 x-oss-process 参数
+  let cleanUrl = originalUrl
+  if (originalUrl.includes('x-oss-process=')) {
+    cleanUrl = originalUrl.replace(/[?&]x-oss-process=[^&]+/, '')
+    cleanUrl = cleanUrl.replace(/\?$/, '').replace(/\?&/, '?').replace(/&&/, '&')
+  }
+
+  const separator = cleanUrl.includes('?') ? '&' : '?'
+  return `${cleanUrl}${separator}x-oss-process=image/${params.join('/')}`
+}
+

@@ -1,54 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Check, Lightbulb, Download, Loader2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Check, Lightbulb } from 'lucide-react'
+import Cropper from 'react-easy-crop'
+import type { Area, Point } from 'react-easy-crop'
 import {
-  PhotoTransform,
-  CropInfo,
-  createAffineMatrix,
-  parseAffineMatrix,
   type Image as ImageType
 } from '@/lib/store'
-
-// 从变换矩阵计算裁剪区域左上角坐标的辅助函数
-function calculateCropOffsetFromMatrix(matrix: number[], canvasWidth: number, canvasHeight: number, sourceWidth: number, sourceHeight: number) {
-  const [a, b, c, d, e, f] = matrix
-
-  // 1. 计算变换矩阵的逆矩阵
-  const det = a * d - b * c
-  if (Math.abs(det) < 1e-10) {
-    throw new Error('Matrix is not invertible')
-  }
-
-  const invA = d / det
-  const invB = -b / det
-  const invC = -c / det
-  const invD = a / det
-  const invE = (-d * e + c * f) / det
-  const invF = (b * e - a * f) / det
-
-  // 2. 画布左上角点(0,0)变换回原图坐标系，就是裁剪区域的起始点
-  const cropStartX = invA * 0 + invC * 0 + invE
-  const cropStartY = invB * 0 + invD * 0 + invF
-
-  // 3. 确保坐标在原图范围内
-  const offsetX = Math.max(0, Math.min(sourceWidth, cropStartX))
-  const offsetY = Math.max(0, Math.min(sourceHeight, cropStartY))
-
-  return {
-    offsetX: Math.round(offsetX),
-    offsetY: Math.round(offsetY)
-  }
-}
-import { 
-  ImageAttrs, 
-  StyleType, 
-  imageAttrsToMatrix,
-  constrainPosition,
-  getMinScale,
-  calculateInitialAttrs,
-} from './PhotoCanvas'
-import { getEditImageUrl } from '@/lib/image-config'
+import { getEditImageUrl, SimpleCropInfo, buildOssCropUrl } from '@/lib/image-config'
 
 // 配置常量
 const WHITE_MARGIN_PERCENT = 5
@@ -57,143 +16,34 @@ interface ImageEditorProps {
   image: ImageType
   canvasWidth: number
   canvasHeight: number
-  onSave: (transform: PhotoTransform | undefined, cropInfo: CropInfo | undefined) => void
+  onSave: (cropInfo: SimpleCropInfo | undefined) => void
   onCancel: () => void
 }
 
 type EditMode = 'cover' | 'full' | 'lomo'
 
-// Konva Canvas 组件
-interface KonvaCanvasProps {
-  image: HTMLImageElement
-  stageSize: { width: number; height: number }
-  imageAttrs: ImageAttrs
-  styleType: StyleType
-  effectiveX: number
-  effectiveY: number
-  effectiveWidth: number
-  effectiveHeight: number
-  onDragMove: (x: number, y: number) => void
-  onDragEnd: (x: number, y: number) => void
-  onWheel: (deltaY: number) => void
-  dragBoundFunc: (pos: { x: number; y: number }) => { x: number; y: number }
-  stageRef?: React.RefObject<any>
-  editable?: boolean // 是否可编辑（缩放、旋转）
-  allowDrag?: boolean // 是否允许拖拽移动
-}
+/**
+ * 计算 cover 模式下的裁剪尺寸
+ * 图片需要完全覆盖相纸区域，所以取 max 比例
+ */
+function calculateCoverCropSize(
+  sourceWidth: number,
+  sourceHeight: number,
+  paperRatio: number
+): { cropWidth: number; cropHeight: number } {
+  const imageRatio = sourceWidth / sourceHeight
 
-function KonvaCanvas({
-  image,
-  stageSize,
-  imageAttrs,
-  styleType,
-  effectiveX,
-  effectiveY,
-  effectiveWidth,
-  effectiveHeight,
-  onDragMove,
-  onDragEnd,
-  onWheel,
-  dragBoundFunc,
-  stageRef,
-  editable = true,
-  allowDrag = true,
-}: KonvaCanvasProps) {
-  const [konvaComponents, setKonvaComponents] = useState<{
-    Stage: any
-    Layer: any
-    Image: any
-    Rect: any
-  } | null>(null)
-
-  // 动态加载 react-konva
-  useEffect(() => {
-    import('react-konva').then((mod) => {
-      setKonvaComponents({
-        Stage: mod.Stage,
-        Layer: mod.Layer,
-        Image: mod.Image,
-        Rect: mod.Rect,
-      })
-    })
-  }, [])
-
-  if (!konvaComponents) {
-    return (
-      <div 
-        style={{ width: stageSize.width, height: stageSize.height }}
-        className="bg-gray-100 flex items-center justify-center"
-      >
-        <span className="text-gray-400">加载中...</span>
-      </div>
-    )
+  if (imageRatio > paperRatio) {
+    // 图片更宽，裁剪左右
+    const cropHeight = sourceHeight
+    const cropWidth = sourceHeight * paperRatio
+    return { cropWidth, cropHeight }
+  } else {
+    // 图片更高，裁剪上下
+    const cropWidth = sourceWidth
+    const cropHeight = sourceWidth / paperRatio
+    return { cropWidth, cropHeight }
   }
-
-  const { Stage, Layer, Image: KonvaImage, Rect } = konvaComponents
-
-  return (
-    <Stage
-      ref={stageRef}
-      width={stageSize.width}
-      height={stageSize.height}
-      onWheel={(e: any) => {
-        if (!editable) {
-          e.evt.preventDefault()
-          return
-        }
-        e.evt.preventDefault()
-        onWheel(e.evt.deltaY)
-      }}
-    >
-      <Layer>
-        {/* 背景 */}
-        <Rect
-          x={0}
-          y={0}
-          width={stageSize.width}
-          height={stageSize.height}
-          fill="white"
-        />
-        
-        {/* 图片 */}
-        <KonvaImage
-          image={image}
-          x={imageAttrs.x}
-          y={imageAttrs.y}
-          scaleX={imageAttrs.scaleX}
-          scaleY={imageAttrs.scaleY}
-          rotation={imageAttrs.rotation}
-          offsetX={imageAttrs.offsetX}
-          offsetY={imageAttrs.offsetY}
-          draggable={allowDrag}
-          dragBoundFunc={allowDrag ? dragBoundFunc : undefined}
-          onDragMove={allowDrag ? (e: any) => {
-            onDragMove(e.target.x(), e.target.y())
-          } : undefined}
-          onDragEnd={allowDrag ? (e: any) => {
-            onDragEnd(e.target.x(), e.target.y())
-          } : undefined}
-        />
-        
-        {/* 居中裁剪模式的出血线遮罩（红色半透明区域表示会被裁切的部分） */}
-        {styleType === 'cover' && (
-          <>
-            {/* 出血区域指示 - 这里可以根据需要添加 */}
-          </>
-        )}
-        
-        {/* 留白模式的白色边框 */}
-        {styleType === 'lomo' && (
-          <>
-            <Rect x={0} y={0} width={effectiveX} height={stageSize.height} fill="white" />
-            <Rect x={stageSize.width - effectiveX} y={0} width={effectiveX} height={stageSize.height} fill="white" />
-            <Rect x={effectiveX} y={0} width={effectiveWidth} height={effectiveY} fill="white" />
-            <Rect x={effectiveX} y={stageSize.height - effectiveY} width={effectiveWidth} height={effectiveY} fill="white" />
-          </>
-        )}
-      </Layer>
-    </Stage>
-  )
 }
 
 export default function ImageEditor({
@@ -205,520 +55,238 @@ export default function ImageEditor({
 }: ImageEditorProps) {
   // 获取初始模式
   const getInitialMode = (): EditMode => {
-    if (photoData.transform?.styleType) return photoData.transform.styleType
+    if (photoData.cropInfo?.styleType) return photoData.cropInfo.styleType
     if (photoData.editState?.mode) return photoData.editState.mode
     return 'cover'
   }
-  
+
   const [mode, setMode] = useState<EditMode>(getInitialMode())
-  const [image, setImage] = useState<HTMLImageElement | null>(null)
-  const [stageSize, setStageSize] = useState({ width: 300, height: 400 })
-  const [imageAttrs, setImageAttrs] = useState<ImageAttrs>({
-    x: 0,
-    y: 0,
-    scaleX: 1,
-    scaleY: 1,
-    rotation: 0,
-    offsetX: 0,
-    offsetY: 0,
+  const [imageUrl, setImageUrl] = useState<string>('')
+  const [imageLoaded, setImageLoaded] = useState(false)
+  
+  // react-easy-crop 状态
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+  
+  // 原图尺寸（从 photoData 或加载的图片获取）
+  const [sourceSize, setSourceSize] = useState({
+    width: photoData.width || 0,
+    height: photoData.height || 0,
   })
-  const [hasChanges, setHasChanges] = useState(false)
-  const [isClient, setIsClient] = useState(false)
-  const [isDownloading, setIsDownloading] = useState(false)
   
   const containerRef = useRef<HTMLDivElement>(null)
-  const stageRef = useRef<any>(null)
 
   // 计算相纸比例
   const aspectRatio = canvasWidth / canvasHeight
-
-  // 客户端渲染检测
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
 
   // 加载图片
   useEffect(() => {
     const originalUrl = photoData.thumbnailUrl || photoData.originalUrl
     if (!originalUrl) return
-    
+
     // 使用编辑页压缩配置
-    const imageUrl = getEditImageUrl(originalUrl)
-    
+    const editUrl = getEditImageUrl(originalUrl)
+    setImageUrl(editUrl)
+
+    // 预加载图片获取尺寸（用于校验）
     const img = document.createElement('img')
     img.crossOrigin = 'anonymous'
-    img.onload = () => setImage(img)
-    img.onerror = () => {
-      // 如果压缩后的 URL 加载失败，降级使用原图
-      if (imageUrl !== originalUrl) {
-        const fallbackImg = document.createElement('img')
-        fallbackImg.crossOrigin = 'anonymous'
-        fallbackImg.onload = () => setImage(fallbackImg)
-        fallbackImg.src = originalUrl
+    img.onload = () => {
+      setImageLoaded(true)
+      // 使用原图尺寸（从 photoData 获取，因为加载的可能是压缩图）
+      if (!sourceSize.width || !sourceSize.height) {
+        setSourceSize({
+          width: photoData.width || img.width,
+          height: photoData.height || img.height,
+        })
       }
     }
-    img.src = imageUrl
-    
+    img.onerror = () => {
+      // 降级使用原图
+      if (editUrl !== originalUrl) {
+        setImageUrl(originalUrl)
+      }
+    }
+    img.src = editUrl
+
     return () => {
       img.onload = null
       img.onerror = null
     }
-  }, [photoData.thumbnailUrl, photoData.originalUrl])
+  }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height])
 
-  // 计算容器尺寸
+  // 从保存的 cropInfo 恢复状态
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return
     
-    const updateSize = () => {
-      const container = containerRef.current
-      if (!container) return
+    const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
+    
+    // 只有 cover 模式且有有效数据时才恢复
+    if (styleType !== 'cover' || !cropWidth || !cropHeight) return
+    
+    // 计算 react-easy-crop 需要的 crop 位置
+    // react-easy-crop 的 crop 是图片相对于裁剪框的偏移
+    // 我们需要把 offsetX/Y 转换为 crop.x/y
+    const { cropWidth: defaultCropW, cropHeight: defaultCropH } = calculateCoverCropSize(
+      sourceSize.width,
+      sourceSize.height,
+      aspectRatio
+    )
+    
+    // 计算中心偏移
+    const centerOffsetX = (sourceSize.width - defaultCropW) / 2
+    const centerOffsetY = (sourceSize.height - defaultCropH) / 2
+    
+    // offsetX/Y 是裁剪区域左上角在原图中的位置
+    // crop.x/y 需要表示相对于默认中心位置的偏移（百分比或像素）
+    // 这里先设置为默认值，让用户可以重新调整
+    setCrop({ x: 0, y: 0 })
+    setZoom(1)
+    
+  }, [photoData.cropInfo, sourceSize, aspectRatio])
+
+  // 裁剪完成回调
+  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+    
+    // 打印 OSS 裁剪 URL（调试用）
+    if (mode === 'cover' && sourceSize.width && sourceSize.height) {
+      const cropInfo: SimpleCropInfo = {
+        offsetX: croppedAreaPixels.x,
+        offsetY: croppedAreaPixels.y,
+        cropWidth: croppedAreaPixels.width,
+        cropHeight: croppedAreaPixels.height,
+        sourceWidth: sourceSize.width,
+        sourceHeight: sourceSize.height,
+        styleType: 'cover',
+      }
       
-      const containerWidth = container.offsetWidth
-      const containerHeight = containerWidth / aspectRatio
+      const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
       
-      setStageSize({
-        width: containerWidth,
-        height: containerHeight,
+      console.log('📐 裁剪参数:', {
+        offsetX: Math.round(croppedAreaPixels.x),
+        offsetY: Math.round(croppedAreaPixels.y),
+        cropWidth: Math.round(croppedAreaPixels.width),
+        cropHeight: Math.round(croppedAreaPixels.height),
+        sourceSize,
       })
+      console.log('🔗 x-oss-process URL:', ossCropUrl)
     }
-    
-    updateSize()
-    window.addEventListener('resize', updateSize)
-    return () => window.removeEventListener('resize', updateSize)
-  }, [aspectRatio])
+  }, [mode, sourceSize, photoData.originalUrl, photoData.thumbnailUrl])
 
-  // 稳定化 transform 引用，避免无限循环
-  const transformKey = useMemo(() => {
-    if (!photoData.transform) return null
-    // 使用关键字段创建唯一标识
-    return JSON.stringify({
-      styleType: photoData.transform.styleType,
-      outputWidth: photoData.transform.outputWidth,
-      outputHeight: photoData.transform.outputHeight,
-      sourceWidth: photoData.transform.sourceWidth,
-      sourceHeight: photoData.transform.sourceHeight,
-      rotateAngle: photoData.transform.rotateAngle,
-      scale: photoData.transform.scale,
-      translateX: photoData.transform.translateX,
-      translateY: photoData.transform.translateY,
-    })
-  }, [
-    photoData.transform?.styleType,
-    photoData.transform?.outputWidth,
-    photoData.transform?.outputHeight,
-    photoData.transform?.sourceWidth,
-    photoData.transform?.sourceHeight,
-    photoData.transform?.rotateAngle,
-    photoData.transform?.scale,
-    photoData.transform?.translateX,
-    photoData.transform?.translateY,
-  ])
-
-  // 使用 ref 跟踪上一次的值，避免不必要的更新
-  const prevValuesRef = useRef<{
-    image: HTMLImageElement | null
-    stageSize: { width: number; height: number }
-    mode: EditMode
-    transformKey: string | null
-    autoRotated: boolean | undefined
-  }>({
-    image: null,
-    stageSize: { width: 0, height: 0 },
-    mode: 'cover',
-    transformKey: null,
-    autoRotated: undefined,
-  })
-
-  // 使用单独的 ref 跟踪上一次的 attrs
-  const prevAttrsRef = useRef<ImageAttrs | null>(null)
-
-  // 初始化图片位置和缩放
-  useEffect(() => {
-    if (!image || !stageSize.width || !stageSize.height) return
-    
-    // 检查是否真的需要更新
-    const prev = prevValuesRef.current
-    if (
-      prev.image === image &&
-      prev.stageSize.width === stageSize.width &&
-      prev.stageSize.height === stageSize.height &&
-      prev.mode === mode &&
-      prev.transformKey === transformKey &&
-      prev.autoRotated === photoData.autoRotated
-    ) {
-      return // 没有变化，不需要更新
-    }
-    
-    // 更新 ref
-    prevValuesRef.current = {
-      image,
-      stageSize,
-      mode,
-      transformKey,
-      autoRotated: photoData.autoRotated,
-    }
-    
-    // 只有在相同模式下才使用保存的 transform，否则重新计算
-    const shouldUseTransform = photoData.transform && 
-      photoData.transform.styleType === mode
-    
-    const attrs = calculateInitialAttrs(
-      image,
-      stageSize,
-      mode,
-      shouldUseTransform ? photoData.transform : undefined,
-      photoData.autoRotated
-    )
-    
-    // 比较新旧 attrs 是否相同，避免不必要的状态更新
-    const prevAttrs = prevAttrsRef.current
-    if (prevAttrs &&
-        prevAttrs.x === attrs.x &&
-        prevAttrs.y === attrs.y &&
-        prevAttrs.scaleX === attrs.scaleX &&
-        prevAttrs.scaleY === attrs.scaleY &&
-        prevAttrs.rotation === attrs.rotation &&
-        prevAttrs.offsetX === attrs.offsetX &&
-        prevAttrs.offsetY === attrs.offsetY) {
-      return // attrs 没有变化，不需要更新
-    }
-    
-    // 更新 attrs ref
-    prevAttrsRef.current = attrs
-    
-    setImageAttrs(attrs)
-    setHasChanges(false)
-  }, [image, stageSize, mode, transformKey, photoData.transform, photoData.autoRotated])
-
-  // 模式改变时重新计算
+  // 模式改变
   const handleModeChange = useCallback((newMode: EditMode) => {
-    if (!image || !stageSize.width) return
-    
     setMode(newMode)
-    
-    // 重新计算初始属性（不使用保存的transform）
-    const attrs = calculateInitialAttrs(
-      image,
-      stageSize,
-      newMode,
-      undefined, // 不使用保存的transform
-      photoData.autoRotated
-    )
-    setImageAttrs(attrs)
-    setHasChanges(true)
-  }, [image, stageSize, photoData.autoRotated])
-
-  // 获取最小缩放比例
-  const getMinScaleValue = useCallback(() => {
-    if (!image || !stageSize.width) return 0.1
-    return getMinScale(image, stageSize, mode, imageAttrs.rotation)
-  }, [image, stageSize, mode, imageAttrs.rotation])
-
-  // 限制位置
-  const constrainPositionValue = useCallback((x: number, y: number, scale: number, rotation: number) => {
-    if (!image || !stageSize.width) return { x, y }
-    return constrainPosition(x, y, scale, rotation, image, stageSize, mode)
-  }, [image, stageSize, mode])
-
-  // 创建 dragBoundFunc
-  const dragBoundFunc = useCallback((pos: { x: number; y: number }) => {
-    return constrainPositionValue(pos.x, pos.y, imageAttrs.scaleX, imageAttrs.rotation)
-  }, [constrainPositionValue, imageAttrs.scaleX, imageAttrs.rotation])
-
-  // 处理拖拽
-  const handleDragMove = useCallback((x: number, y: number) => {
-    const constrained = constrainPositionValue(x, y, imageAttrs.scaleX, imageAttrs.rotation)
-    setImageAttrs(prev => ({
-      ...prev,
-      x: constrained.x,
-      y: constrained.y,
-    }))
-    setHasChanges(true)
-  }, [constrainPositionValue, imageAttrs.scaleX, imageAttrs.rotation])
-
-  const handleDragEnd = useCallback((x: number, y: number) => {
-    const constrained = constrainPositionValue(x, y, imageAttrs.scaleX, imageAttrs.rotation)
-    setImageAttrs(prev => ({
-      ...prev,
-      x: constrained.x,
-      y: constrained.y,
-    }))
-  }, [constrainPositionValue, imageAttrs.scaleX, imageAttrs.rotation])
-
-  // 处理滚轮缩放
-  const handleWheel = useCallback((deltaY: number) => {
-    if (!image) return
-    
-    const scaleBy = 1.05
-    const minScale = getMinScaleValue()
-    const maxScale = minScale * 5
-    
-    let newScale = deltaY < 0 
-      ? imageAttrs.scaleX * scaleBy 
-      : imageAttrs.scaleX / scaleBy
-    
-    newScale = Math.max(minScale, Math.min(maxScale, newScale))
-    
-    const constrained = constrainPositionValue(
-      imageAttrs.x, 
-      imageAttrs.y, 
-      newScale, 
-      imageAttrs.rotation
-    )
-    
-    setImageAttrs(prev => ({
-      ...prev,
-      scaleX: newScale,
-      scaleY: newScale,
-      x: constrained.x,
-      y: constrained.y,
-    }))
-    setHasChanges(true)
-  }, [imageAttrs, getMinScaleValue, constrainPositionValue, image])
-
-
-  // 规范化旋转角度到 0/90/180/270
-  const normalizeRotation = (angle: number): number => {
-    // 将角度规范化到 0-360 范围
-    let normalized = ((angle % 360) + 360) % 360
-    // 四舍五入到最近的 90 度倍数
-    return Math.round(normalized / 90) * 90
-  }
+    // 重置裁剪状态
+    setCrop({ x: 0, y: 0 })
+    setZoom(1)
+    setCroppedAreaPixels(null)
+  }, [])
 
   // 保存
   const handleSave = useCallback(() => {
-    if (!image) return
-    
-    // 规范化旋转角度到 0/90/180/270
-    const rotateAngle = normalizeRotation(imageAttrs.rotation)
-    
-    // 提取简单参数
-    const scale = imageAttrs.scaleX // 等比例缩放（scaleX 和 scaleY 应该相等）
-    const translateX = imageAttrs.x // X平移
-    const translateY = imageAttrs.y // Y平移
-    
-    // 获取原图尺寸（优先使用 transform 中的 sourceWidth/sourceHeight，否则使用实际图片尺寸）
-    // 注意：前端加载的可能是压缩后的图片，所以需要使用原图尺寸来计算 offsetX/offsetY
-    const sourceWidth = photoData.transform?.sourceWidth || image.width
-    const sourceHeight = photoData.transform?.sourceHeight || image.height
-    
-    // 计算压缩图片和原图的尺寸比例
-    // 这是关键：所有在压缩图片坐标系中的值，都需要乘以这个比例才能得到原图坐标系中的值
-    const imageSizeRatioX = sourceWidth / image.width
-    const imageSizeRatioY = sourceHeight / image.height
-    
-    // cover 模式：使用变换矩阵计算裁剪区域左上角坐标
-    // 通过逆变换矩阵将画布左上角(0,0)映射回原图坐标系
-    const matrix = imageAttrsToMatrix(imageAttrs)
-    const cropResult = calculateCropOffsetFromMatrix(
-      matrix,
-      canvasWidth,
-      canvasHeight,
-      sourceWidth,
-      sourceHeight
-    )
+    if (!sourceSize.width || !sourceSize.height) return
 
-    const offsetX = cropResult.offsetX
-    const offsetY = cropResult.offsetY
-    
-    // 调试日志：输出计算过程
-    console.log('裁剪参数计算:', {
-      rotateAngle,
-      scale,
-      translateX,
-      translateY,
-      compressedImageSize: { width: image.width, height: image.height },
-      sourceImageSize: { width: sourceWidth, height: sourceHeight },
-      imageSizeRatio: { x: imageSizeRatioX, y: imageSizeRatioY },
-      stageSize,
-      matrix,
-      canvasCorners: [
-        { x: 0, y: 0 },
-        { x: canvasWidth, y: 0 },
-        { x: canvasWidth, y: canvasHeight },
-        { x: 0, y: canvasHeight }
-      ],
-      // 最终坐标（裁剪区域左上角在未旋转原图中的位置）
-      offsetX,
-      offsetY
-    })
-    
-    // 获取原图地址
-    const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-    
-    // lomo 和 full 模式不需要裁剪信息（cropInfo），但仍需要 transform 用于前端回显
-    if (mode === 'lomo' || mode === 'full') {
-      // 对于 lomo 和 full 模式，创建一个只包含 styleType 的 transform，用于前端回显
-      // 服务端会根据 cropMode 自动处理，不需要裁剪参数（cropInfo）
-      const transformForDisplay: PhotoTransform = {
-        outputWidth: stageSize.width,
-        outputHeight: stageSize.height,
-        sourceWidth,
-        sourceHeight,
+    // full 和 lomo 模式不需要裁剪参数
+    if (mode === 'full' || mode === 'lomo') {
+      const cropInfo: SimpleCropInfo = {
+        offsetX: 0,
+        offsetY: 0,
+        cropWidth: sourceSize.width,
+        cropHeight: sourceSize.height,
+        sourceWidth: sourceSize.width,
+        sourceHeight: sourceSize.height,
         styleType: mode,
-        originalUrl,
       }
-      onSave(transformForDisplay, undefined)
+      onSave(cropInfo)
       return
     }
-    
-    // cover 模式需要裁剪信息
-    // matrix 已经在上面计算过了，这里直接使用
 
-    // 生成 transform（用于前端回显，不包含服务端处理相关的字段）
-    const transform: PhotoTransform = {
-      // 兼容旧版本的矩阵
-      matrix,
-      // 输出尺寸（前端显示尺寸）
-      outputWidth: stageSize.width,
-      outputHeight: stageSize.height,
-      // 原图尺寸
-      sourceWidth,
-      sourceHeight,
-      // 样式类型
-      styleType: mode,
-      // 变换参数（用于前端回显）
-      rotateAngle,
-      scale,
-      translateX,
-      translateY,
-      originalUrl,
-    }
-    
-    // 生成 cropInfo（用于服务端处理，只包含服务端需要的字段）
-    const cropInfo: CropInfo = {
-      canvasWidth,
-      canvasHeight,
-      sourceWidth,
-      sourceHeight,
-      offsetX,
-      offsetY,
-      rotateAngle,
-      originalUrl,
-      styleType: mode,
-    }
-    
-    onSave(transform, cropInfo)
-  }, [image, imageAttrs, stageSize, mode, photoData.originalUrl, photoData.thumbnailUrl, onSave])
+    // cover 模式，使用 react-easy-crop 返回的像素坐标
+    if (!croppedAreaPixels) {
+      // 如果没有裁剪过，使用默认居中裁剪
+      const { cropWidth, cropHeight } = calculateCoverCropSize(
+        sourceSize.width,
+        sourceSize.height,
+        aspectRatio
+      )
+      const offsetX = (sourceSize.width - cropWidth) / 2
+      const offsetY = (sourceSize.height - cropHeight) / 2
 
-  // 下载编辑后的图片
-  const handleDownload = useCallback(async () => {
-    if (!image || !stageRef.current) return
-    
-    setIsDownloading(true)
-    try {
-      const stage = stageRef.current
-      
-      // 导出整个 Stage
-      const fullDataURL = stage.toDataURL({
-        pixelRatio: 2, // 提高清晰度
-        mimeType: 'image/png',
-        quality: 1,
-      })
-      
-      let finalDataURL = fullDataURL
-      let downloadWidth = stageSize.width * 2 // pixelRatio = 2
-      let downloadHeight = stageSize.height * 2
-      
-      // 如果是留白模式，裁剪掉白边，只保留有效区域
-      if (mode === 'lomo') {
-        const margin = WHITE_MARGIN_PERCENT / 100
-        const marginX = stageSize.width * margin * 2 // 考虑 pixelRatio
-        const marginY = stageSize.height * margin * 2
-        const effectiveWidth = stageSize.width * (1 - margin * 2) * 2
-        const effectiveHeight = stageSize.height * (1 - margin * 2) * 2
-        
-        // 创建临时 Canvas 来裁剪
-        const tempCanvas = document.createElement('canvas')
-        tempCanvas.width = effectiveWidth
-        tempCanvas.height = effectiveHeight
-        const tempCtx = tempCanvas.getContext('2d')
-        
-        if (tempCtx) {
-          // 加载完整图片
-          const fullImg = new Image()
-          await new Promise((resolve, reject) => {
-            fullImg.onload = resolve
-            fullImg.onerror = reject
-            fullImg.src = fullDataURL
-          })
-          
-          // 只绘制有效区域（裁剪掉白边）
-          tempCtx.drawImage(
-            fullImg,
-            marginX, // 源图片的起始 x
-            marginY, // 源图片的起始 y
-            effectiveWidth, // 裁剪宽度
-            effectiveHeight, // 裁剪高度
-            0, // 目标 x
-            0, // 目标 y
-            effectiveWidth, // 目标宽度
-            effectiveHeight // 目标高度
-          )
-          
-          finalDataURL = tempCanvas.toDataURL('image/png', 1.0)
-          downloadWidth = effectiveWidth
-          downloadHeight = effectiveHeight
-        }
+      const cropInfo: SimpleCropInfo = {
+        offsetX: Math.round(offsetX),
+        offsetY: Math.round(offsetY),
+        cropWidth: Math.round(cropWidth),
+        cropHeight: Math.round(cropHeight),
+        sourceWidth: sourceSize.width,
+        sourceHeight: sourceSize.height,
+        styleType: 'cover',
       }
-      
-      // 创建下载链接
-      const link = document.createElement('a')
-      link.download = `edited-${mode}${mode === 'lomo' ? '-no-border' : ''}-${Date.now()}.png`
-      link.href = finalDataURL
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      console.log('图片已下载:', {
-        mode,
-        stageSize,
-        downloadSize: { width: downloadWidth, height: downloadHeight },
-        imageAttrs,
-        hasWhiteBorder: mode === 'lomo' ? '已裁剪' : '无白边',
-      })
-    } catch (error) {
-      console.error('下载图片失败:', error)
-      alert('下载失败，请重试')
-    } finally {
-      setIsDownloading(false)
+
+      // 打印最终的 OSS URL
+      const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+      console.log('💾 保存裁剪参数:', cropInfo)
+      console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
+
+      onSave(cropInfo)
+      return
     }
-  }, [image, mode, stageSize, imageAttrs])
 
-  // 计算有效区域
-  const margin = mode === 'lomo' ? WHITE_MARGIN_PERCENT / 100 : 0
-  const effectiveX = stageSize.width * margin
-  const effectiveY = stageSize.height * margin
-  const effectiveWidth = stageSize.width * (1 - margin * 2)
-  const effectiveHeight = stageSize.height * (1 - margin * 2)
+    const cropInfo: SimpleCropInfo = {
+      offsetX: Math.round(croppedAreaPixels.x),
+      offsetY: Math.round(croppedAreaPixels.y),
+      cropWidth: Math.round(croppedAreaPixels.width),
+      cropHeight: Math.round(croppedAreaPixels.height),
+      sourceWidth: sourceSize.width,
+      sourceHeight: sourceSize.height,
+      styleType: 'cover',
+    }
 
-  // cover 模式允许移动图片，但禁止放大缩小和旋转
-  // full 和 lomo 模式完全禁止编辑
-  const isEditable = false // 禁止缩放和旋转
-  const allowDrag = mode === 'cover' // cover 模式允许拖拽移动
+    // 打印最终的 OSS URL
+    const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+    const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+    console.log('💾 保存裁剪参数:', cropInfo)
+    console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
+
+    onSave(cropInfo)
+  }, [croppedAreaPixels, sourceSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
+
+  // 渲染 full 或 lomo 模式（不可编辑）
+  const renderStaticMode = () => {
+    const isLomo = mode === 'lomo'
+    const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
+
+    return (
+      <div 
+        className="relative w-full h-full bg-white flex items-center justify-center"
+        style={{
+          padding: isLomo ? `${margin}%` : 0,
+        }}
+      >
+        <img
+          src={imageUrl}
+          alt="预览"
+          className="max-w-full max-h-full object-contain"
+          style={{
+            maxWidth: isLomo ? `${100 - margin * 2}%` : '100%',
+            maxHeight: isLomo ? `${100 - margin * 2}%` : '100%',
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      {/* 下载按钮 */}
-      <button
-        onClick={handleDownload}
-        disabled={isDownloading || !image}
-        className="absolute top-4 left-4 z-50 w-10 h-10 bg-gray-800/80 hover:bg-gray-700/80 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        title="下载编辑后的图片"
-      >
-        {isDownloading ? (
-          <Loader2 className="w-5 h-5 text-white animate-spin" />
-        ) : (
-          <Download className="w-5 h-5 text-white" />
-        )}
-      </button>
-
       {/* 提示信息 */}
-      <div className="px-4 py-3 pt-16">
+      <div className="px-4 py-3 pt-8">
         <div className="flex items-center justify-center gap-2 text-sm">
           <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0" />
           <span className="text-blue-400">
-            {mode === 'cover' ? '居中裁剪模式：可拖拽移动图片位置，禁止缩放和旋转' : 
+            {mode === 'cover' ? '居中裁剪模式：可拖拽移动图片位置' : 
              mode === 'full' ? '打印整图模式：图片完整显示，不可编辑' : 
              '四周留白模式：图片完整显示，不可编辑'}
           </span>
@@ -728,66 +296,74 @@ export default function ImageEditor({
         )}
       </div>
 
-      {/* Konva 编辑区域 */}
+      {/* 编辑区域 */}
       <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="relative w-full max-w-lg">
-          <div 
+          <div
             ref={containerRef}
             className="relative w-full bg-white shadow-2xl overflow-hidden"
             style={{ paddingTop: `${(1 / aspectRatio) * 100}%` }}
           >
             <div className="absolute inset-0">
-              {isClient && image && (
-                <KonvaCanvas
-                  image={image}
-                  stageSize={stageSize}
-                  imageAttrs={imageAttrs}
-                  styleType={mode}
-                  effectiveX={effectiveX}
-                  effectiveY={effectiveY}
-                  effectiveWidth={effectiveWidth}
-                  effectiveHeight={effectiveHeight}
-                  onDragMove={handleDragMove}
-                  onDragEnd={handleDragEnd}
-                  onWheel={handleWheel}
-                  dragBoundFunc={dragBoundFunc}
-                  stageRef={stageRef}
-                  editable={isEditable}
-                  allowDrag={allowDrag}
-                />
+              {imageLoaded && imageUrl && (
+                mode === 'cover' ? (
+                  // Cover 模式：使用 react-easy-crop
+                  <Cropper
+                    image={imageUrl}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={aspectRatio}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                    onCropComplete={onCropComplete}
+                    // 禁止缩放，只允许拖拽
+                    minZoom={1}
+                    maxZoom={1}
+                    restrictPosition={true}
+                    showGrid={false}
+                    style={{
+                      containerStyle: {
+                        backgroundColor: 'white',
+                      },
+                      cropAreaStyle: {
+                        border: '2px dashed #ef4444',
+                      },
+                    }}
+                    classes={{
+                      containerClassName: 'rounded-none',
+                    }}
+                  />
+                ) : (
+                  // Full 和 Lomo 模式：静态显示
+                  renderStaticMode()
+                )
+              )}
+              
+              {/* 加载中 */}
+              {!imageLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                  <span className="text-gray-400">加载中...</span>
+                </div>
               )}
             </div>
           </div>
-          
-          {/* 裁剪区域边框指示 */}
-          {mode === 'cover' && (
-            <div className="absolute inset-0 pointer-events-none" style={{ top: 0 }}>
-              <div 
-                className="absolute border-2 border-red-500 border-dashed"
-                style={{
-                  top: `${(1 - effectiveHeight / stageSize.height) / 2 * 100}%`,
-                  left: `${(1 - effectiveWidth / stageSize.width) / 2 * 100}%`,
-                  right: `${(1 - effectiveWidth / stageSize.width) / 2 * 100}%`,
-                  bottom: `${(1 - effectiveHeight / stageSize.height) / 2 * 100}%`,
-                }}
-              />
+        </div>
+
+        {/* 裁剪提示 */}
+        {mode === 'cover' && (
+          <>
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
+              <span>✂</span>
+              <span className="writing-mode-vertical">裁剪区域</span>
+              <span>✂</span>
             </div>
-          )}
-        </div>
-
-        {/* 左侧裁剪提示 */}
-        <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
-          <span>✂</span>
-          <span className="writing-mode-vertical">裁剪区域</span>
-          <span>✂</span>
-        </div>
-
-        {/* 右侧裁剪提示 */}
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
-          <span>✂</span>
-          <span className="writing-mode-vertical">裁剪区域</span>
-          <span>✂</span>
-        </div>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
+              <span>✂</span>
+              <span className="writing-mode-vertical">裁剪区域</span>
+              <span>✂</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 底部控制栏 */}
@@ -811,13 +387,11 @@ export default function ImageEditor({
           </button>
           <button
             onClick={() => handleModeChange('full')}
-            disabled={mode === 'full'}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'full'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            } ${mode === 'full' ? 'cursor-default' : ''}`}
-            title={mode === 'full' ? '打印整图模式不可编辑' : '切换到打印整图模式'}
+            }`}
           >
             <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
               mode === 'full' ? 'border-white bg-white' : 'border-gray-400'
@@ -828,13 +402,11 @@ export default function ImageEditor({
           </button>
           <button
             onClick={() => handleModeChange('lomo')}
-            disabled={mode === 'lomo'}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'lomo'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            } ${mode === 'lomo' ? 'cursor-default' : ''}`}
-            title={mode === 'lomo' ? '四周留白模式不可编辑' : '切换到四周留白模式'}
+            }`}
           >
             <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
               mode === 'lomo' ? 'border-white bg-white' : 'border-gray-400'
@@ -844,7 +416,6 @@ export default function ImageEditor({
             四周留白
           </button>
         </div>
-
 
         {/* 操作按钮 */}
         <div className="flex gap-3">
