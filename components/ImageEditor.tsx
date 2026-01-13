@@ -2,13 +2,44 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Check, Lightbulb, Download, Loader2 } from 'lucide-react'
-import { 
-  PhotoTransform, 
+import {
+  PhotoTransform,
   CropInfo,
-  createAffineMatrix, 
+  createAffineMatrix,
   parseAffineMatrix,
-  type Image as ImageType 
+  type Image as ImageType
 } from '@/lib/store'
+
+// 从变换矩阵计算裁剪区域左上角坐标的辅助函数
+function calculateCropOffsetFromMatrix(matrix: number[], canvasWidth: number, canvasHeight: number, sourceWidth: number, sourceHeight: number) {
+  const [a, b, c, d, e, f] = matrix
+
+  // 1. 计算变换矩阵的逆矩阵
+  const det = a * d - b * c
+  if (Math.abs(det) < 1e-10) {
+    throw new Error('Matrix is not invertible')
+  }
+
+  const invA = d / det
+  const invB = -b / det
+  const invC = -c / det
+  const invD = a / det
+  const invE = (-d * e + c * f) / det
+  const invF = (b * e - a * f) / det
+
+  // 2. 画布左上角点(0,0)变换回原图坐标系，就是裁剪区域的起始点
+  const cropStartX = invA * 0 + invC * 0 + invE
+  const cropStartY = invB * 0 + invD * 0 + invF
+
+  // 3. 确保坐标在原图范围内
+  const offsetX = Math.max(0, Math.min(sourceWidth, cropStartX))
+  const offsetY = Math.max(0, Math.min(sourceHeight, cropStartY))
+
+  return {
+    offsetX: Math.round(offsetX),
+    offsetY: Math.round(offsetY)
+  }
+}
 import { 
   ImageAttrs, 
   StyleType, 
@@ -466,35 +497,59 @@ export default function ImageEditor({
     const translateX = imageAttrs.x // X平移
     const translateY = imageAttrs.y // Y平移
     
-    // 计算有效区域的左上角坐标（画布坐标系）
-    const margin = mode === 'lomo' ? WHITE_MARGIN_PERCENT / 100 : 0
-    const canvasX = mode === 'lomo' ? stageSize.width * margin : 0
-    const canvasY = mode === 'lomo' ? stageSize.height * margin : 0
+    // 获取原图尺寸（优先使用 transform 中的 sourceWidth/sourceHeight，否则使用实际图片尺寸）
+    // 注意：前端加载的可能是压缩后的图片，所以需要使用原图尺寸来计算 offsetX/offsetY
+    const sourceWidth = photoData.transform?.sourceWidth || image.width
+    const sourceHeight = photoData.transform?.sourceHeight || image.height
     
-    // 计算 offsetX 和 offsetY：将画布有效区域左上角转换到原图坐标系
-    // 注意：Konva 的旋转中心是图片中心（通过 offsetX 和 offsetY 设置）
-    // 图片中心在画布上的位置就是 (translateX, translateY)
+    // 计算压缩图片和原图的尺寸比例
+    // 这是关键：所有在压缩图片坐标系中的值，都需要乘以这个比例才能得到原图坐标系中的值
+    const imageSizeRatioX = sourceWidth / image.width
+    const imageSizeRatioY = sourceHeight / image.height
     
-    // 1. 将画布坐标转换为相对于图片中心的坐标（画布坐标系）
-    const centerRelativeX = canvasX - translateX
-    const centerRelativeY = canvasY - translateY
+    // cover 模式：使用变换矩阵计算裁剪区域左上角坐标
+    // 通过逆变换矩阵将画布左上角(0,0)映射回原图坐标系
+    const matrix = imageAttrsToMatrix(imageAttrs)
+    const cropResult = calculateCropOffsetFromMatrix(
+      matrix,
+      canvasWidth,
+      canvasHeight,
+      sourceWidth,
+      sourceHeight
+    )
+
+    const offsetX = cropResult.offsetX
+    const offsetY = cropResult.offsetY
     
-    // 2. 应用逆旋转（将画布坐标系转换回原图坐标系）
-    const rad = (-rotateAngle * Math.PI) / 180
-    const cos = Math.cos(rad)
-    const sin = Math.sin(rad)
-    const rotatedX = centerRelativeX * cos - centerRelativeY * sin
-    const rotatedY = centerRelativeX * sin + centerRelativeY * cos
-    
-    // 3. 应用逆缩放，得到相对于图片中心的原图坐标
-    const scaledX = rotatedX / scale
-    const scaledY = rotatedY / scale
-    
-    // 4. 转换为相对于图片左上角的原图坐标
-    const imageCenterX = image.width / 2
-    const imageCenterY = image.height / 2
-    const offsetX = scaledX + imageCenterX
-    const offsetY = scaledY + imageCenterY
+    // 调试日志：输出计算过程
+    console.log('裁剪参数计算:', {
+      rotateAngle,
+      scale,
+      translateX,
+      translateY,
+      compressedImageSize: { width: image.width, height: image.height },
+      sourceImageSize: { width: sourceWidth, height: sourceHeight },
+      imageSizeRatio: { x: imageSizeRatioX, y: imageSizeRatioY },
+      stageSize,
+      // 画布坐标系中的偏移
+      relativeX,
+      relativeY,
+      // 压缩图片坐标系中的偏移
+      compressedRelativeX,
+      compressedRelativeY,
+      // 原图坐标系中的偏移（旋转后）
+      rotatedRelativeX,
+      rotatedRelativeY,
+      // 原图坐标系中的偏移（未旋转）
+      originalRelativeX,
+      originalRelativeY,
+      // 最终坐标（裁剪区域左上角在未旋转原图中的位置）
+      offsetX,
+      offsetY,
+      // 验证：如果 translateX=10, image.width=300, sourceWidth=3000
+      // 那么 compressedRelativeX = 10/scale, rotatedRelativeX = (10/scale) * 10 = 100/scale
+      // 这就是用户期望的：画布上的移动按比例映射到原图
+    })
     
     // 获取原图地址
     const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
@@ -506,8 +561,8 @@ export default function ImageEditor({
       const transformForDisplay: PhotoTransform = {
         outputWidth: stageSize.width,
         outputHeight: stageSize.height,
-        sourceWidth: image.width,
-        sourceHeight: image.height,
+        sourceWidth,
+        sourceHeight,
         styleType: mode,
         originalUrl,
       }
@@ -527,8 +582,8 @@ export default function ImageEditor({
       outputWidth: stageSize.width,
       outputHeight: stageSize.height,
       // 原图尺寸
-      sourceWidth: image.width,
-      sourceHeight: image.height,
+      sourceWidth,
+      sourceHeight,
       // 样式类型
       styleType: mode,
       // 变换参数（用于前端回显）
@@ -543,8 +598,8 @@ export default function ImageEditor({
     const cropInfo: CropInfo = {
       canvasWidth,
       canvasHeight,
-      sourceWidth: image.width,
-      sourceHeight: image.height,
+      sourceWidth,
+      sourceHeight,
       offsetX,
       offsetY,
       rotateAngle,
