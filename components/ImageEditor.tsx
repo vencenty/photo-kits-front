@@ -531,24 +531,16 @@ export default function ImageEditor({
       sourceImageSize: { width: sourceWidth, height: sourceHeight },
       imageSizeRatio: { x: imageSizeRatioX, y: imageSizeRatioY },
       stageSize,
-      // 画布坐标系中的偏移
-      relativeX,
-      relativeY,
-      // 压缩图片坐标系中的偏移
-      compressedRelativeX,
-      compressedRelativeY,
-      // 原图坐标系中的偏移（旋转后）
-      rotatedRelativeX,
-      rotatedRelativeY,
-      // 原图坐标系中的偏移（未旋转）
-      originalRelativeX,
-      originalRelativeY,
+      matrix,
+      canvasCorners: [
+        { x: 0, y: 0 },
+        { x: canvasWidth, y: 0 },
+        { x: canvasWidth, y: canvasHeight },
+        { x: 0, y: canvasHeight }
+      ],
       // 最终坐标（裁剪区域左上角在未旋转原图中的位置）
       offsetX,
-      offsetY,
-      // 验证：如果 translateX=10, image.width=300, sourceWidth=3000
-      // 那么 compressedRelativeX = 10/scale, rotatedRelativeX = (10/scale) * 10 = 100/scale
-      // 这就是用户期望的：画布上的移动按比例映射到原图
+      offsetY
     })
     
     // 获取原图地址
@@ -571,9 +563,8 @@ export default function ImageEditor({
     }
     
     // cover 模式需要裁剪信息
-    // 为了兼容性，仍然计算矩阵（但服务端可以优先使用简单参数）
-    const matrix = imageAttrsToMatrix(imageAttrs)
-    
+    // matrix 已经在上面计算过了，这里直接使用
+
     // 生成 transform（用于前端回显，不包含服务端处理相关的字段）
     const transform: PhotoTransform = {
       // 兼容旧版本的矩阵
