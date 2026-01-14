@@ -199,29 +199,13 @@ export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo, a
 
   const params: string[] = []
 
-  // 如果 autoRotated 为 true，先添加旋转参数（旋转应该在裁剪之前）
-  if (autoRotated) {
-    params.push('rotate,90')
-    
-    // 当 autoRotated 为 true 时，传入的坐标是基于旋转后的图片的
-    // 需要转换为原图坐标系（因为 OSS 是先旋转再裁剪）
-    // 原图尺寸：sourceWidth x sourceHeight
-    // 旋转后尺寸：sourceHeight x sourceWidth
-    // 坐标转换：旋转后图片上的 (x, y, w, h) 转换为原图上的 (y, sourceWidth - x - w, h, w)
-    const originalX = Math.round(offsetY)
-    const originalY = Math.round(sourceWidth - offsetX - cropWidth)
-    const originalW = Math.round(cropHeight)
-    const originalH = Math.round(cropWidth)
-    
-    params.push(`crop,x_${originalX},y_${originalY},w_${originalW},h_${originalH}`)
-  } else {
-    // 构建裁剪参数（未旋转的情况）
+
     const x = Math.round(offsetX)
     const y = Math.round(offsetY)
     const w = Math.round(cropWidth)
     const h = Math.round(cropHeight)
     params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
-  }
+
 
   // 移除已有的 x-oss-process 参数，避免冲突
   let cleanUrl = originalUrl
