@@ -25,6 +25,10 @@ const config: Config = {
       backgroundImage: {
         'gradient-primary': 'linear-gradient(135deg, #FFA07A 0%, #FF6B9D 100%)',
       },
+      fontSize: {
+        // 确保基础字体大小正确
+        base: '16px',
+      },
     },
   },
   plugins: [],

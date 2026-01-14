@@ -13,6 +13,11 @@
     /* 禁止 iOS 的弹性滚动效果 */
     overscroll-behavior: none;
     height: 100%;
+    /* 设置基础字体大小，确保 Tailwind 的 text-* 类正常工作 */
+    font-size: 16px;
+    /* 防止移动端自动调整字体大小 */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   
   body {
@@ -24,6 +29,12 @@
     min-height: 100%;
     /* 防止移动端的橡皮筋效果 */
     -webkit-overflow-scrolling: touch;
+    /* 设置基础字体大小 */
+    font-size: 16px;
+    line-height: 1.5;
+    /* 防止移动端自动调整字体大小 */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 }
 

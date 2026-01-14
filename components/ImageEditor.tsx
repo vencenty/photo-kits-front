@@ -10,7 +10,7 @@ import {
 import { getEditImageUrl, SimpleCropInfo, buildOssCropUrl } from '@/lib/image-config'
 
 // 配置常量
-const WHITE_MARGIN_PERCENT = 5
+const WHITE_MARGIN_PERCENT = 1
 
 interface ImageEditorProps {
   image: ImageType
