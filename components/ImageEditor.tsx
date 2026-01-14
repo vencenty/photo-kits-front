@@ -70,10 +70,24 @@ export default function ImageEditor({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   
   // 原图尺寸（从 photoData 获取，这是真实的原图尺寸）
-  const [sourceSize, setSourceSize] = useState({
-    width: photoData.width || 0,
-    height: photoData.height || 0,
-  })
+  // 如果 autoRotated 为 true，需要宽高互换（因为旋转后宽变高，高变宽）
+  const getSourceSize = () => {
+    const originalWidth = photoData.width || 0
+    const originalHeight = photoData.height || 0
+    if (photoData.autoRotated) {
+      // 旋转90度后，宽高互换
+      return {
+        width: originalHeight,
+        height: originalWidth,
+      }
+    }
+    return {
+      width: originalWidth,
+      height: originalHeight,
+    }
+  }
+
+  const [sourceSize, setSourceSize] = useState(getSourceSize())
   
   // 压缩图尺寸（前端实际加载的图片尺寸，用于坐标转换）
   const [displayImageSize, setDisplayImageSize] = useState({
@@ -82,6 +96,7 @@ export default function ImageEditor({
   })
   
   const containerRef = useRef<HTMLDivElement>(null)
+  const restoredRef = useRef(false) // 标记是否已恢复过位置
 
   // 计算相纸比例
   const aspectRatio = canvasWidth / canvasHeight
@@ -91,8 +106,8 @@ export default function ImageEditor({
     const originalUrl = photoData.thumbnailUrl || photoData.originalUrl
     if (!originalUrl) return
 
-    // 使用编辑页压缩配置
-    const editUrl = getEditImageUrl(originalUrl)
+    // 使用编辑页压缩配置，如果 autoRotated 为 true，自动添加旋转参数
+    const editUrl = getEditImageUrl(originalUrl, photoData.autoRotated)
     setImageUrl(editUrl)
 
     // 预加载图片获取尺寸
@@ -102,11 +117,22 @@ export default function ImageEditor({
       setImageLoaded(true)
       
       // 1. 设置原图尺寸（从 photoData 获取，这是真实的原图尺寸）
+      // 如果 autoRotated 为 true，需要宽高互换（因为旋转后宽变高，高变宽）
       if (!sourceSize.width || !sourceSize.height) {
-        setSourceSize({
-          width: photoData.width || img.naturalWidth,
-          height: photoData.height || img.naturalHeight,
-        })
+        const originalWidth = photoData.width || img.naturalWidth
+        const originalHeight = photoData.height || img.naturalHeight
+        if (photoData.autoRotated) {
+          // 旋转90度后，宽高互换
+          setSourceSize({
+            width: originalHeight,
+            height: originalWidth,
+          })
+        } else {
+          setSourceSize({
+            width: originalWidth,
+            height: originalHeight,
+          })
+        }
       }
       
       // 2. 设置压缩图尺寸（这是前端实际加载的图片尺寸，用于坐标转换）
@@ -129,11 +155,18 @@ export default function ImageEditor({
       // 降级使用原图
       if (editUrl !== originalUrl) {
         setImageUrl(originalUrl)
-        // 如果降级到原图，压缩图尺寸就是原图尺寸
-        setDisplayImageSize({
-          width: photoData.width || 0,
-          height: photoData.height || 0,
-        })
+        // 如果降级到原图，压缩图尺寸需要考虑旋转
+        if (photoData.autoRotated) {
+          setDisplayImageSize({
+            width: photoData.height || 0,
+            height: photoData.width || 0,
+          })
+        } else {
+          setDisplayImageSize({
+            width: photoData.width || 0,
+            height: photoData.height || 0,
+          })
+        }
       }
     }
     img.src = editUrl
@@ -142,25 +175,116 @@ export default function ImageEditor({
       img.onload = null
       img.onerror = null
     }
-  }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height, sourceSize.width, sourceSize.height])
+  }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height, photoData.autoRotated, sourceSize.width, sourceSize.height])
 
   // 从保存的 cropInfo 恢复状态
-  // 注意：由于需要将原图坐标转换为压缩图坐标，且压缩图尺寸可能变化，
-  // 这里简化处理，重置为默认居中位置，让用户可以重新调整
+  // 将原图坐标转换为压缩图坐标，恢复 react-easy-crop 的位置
   useEffect(() => {
+    // 防止重复恢复
+    if (restoredRef.current) return
     if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return
+    if (!displayImageSize.width || !displayImageSize.height) return // 等待压缩图尺寸加载完成
+    if (mode !== 'cover') return
     
-    const { styleType } = photoData.cropInfo
+    const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
     
-    // 只有 cover 模式时才处理
+    // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return
     
-    // 重置为默认居中位置（用户可以重新调整）
-    setCrop({ x: 0, y: 0 })
-    setZoom(1)
-    setCroppedAreaPixels(null)
+    // 如果 cropWidth 和 cropHeight 不存在，从相纸比例计算
+    let finalCropWidth = cropWidth
+    let finalCropHeight = cropHeight
+    if (!finalCropWidth || !finalCropHeight) {
+      const calculated = calculateCoverCropSize(
+        sourceSize.width,
+        sourceSize.height,
+        aspectRatio
+      )
+      finalCropWidth = calculated.cropWidth
+      finalCropHeight = calculated.cropHeight
+    }
     
-  }, [photoData.cropInfo, sourceSize])
+    // 计算缩放比例：压缩图尺寸 / 原图尺寸（反向转换）
+    const scaleX = displayImageSize.width / sourceSize.width
+    const scaleY = displayImageSize.height / sourceSize.height
+    
+    // 将原图坐标转换为压缩图坐标
+    const displayOffsetX = offsetX * scaleX
+    const displayOffsetY = offsetY * scaleY
+    const displayCropWidth = finalCropWidth * scaleX
+    const displayCropHeight = finalCropHeight * scaleY
+    
+    // react-easy-crop 的 crop Point 表示图片中心相对于裁剪框中心的偏移
+    // 在 react-easy-crop 中：
+    // - 图片会被缩放以覆盖裁剪框（cover 模式）
+    // - crop Point 是图片中心相对于裁剪框中心的偏移（像素单位）
+    // 
+    // 保存的 offsetX/offsetY 是裁剪区域左上角在原图中的位置
+    // 裁剪区域中心在原图上的位置 = offsetX + cropWidth/2, offsetY + cropHeight/2
+    // 裁剪区域中心在压缩图上的位置 = (offsetX + cropWidth/2) * scaleX, (offsetY + cropHeight/2) * scaleY
+    // 
+    // 在 react-easy-crop 中，裁剪框是居中的，所以裁剪框中心 = 压缩图中心 = displayImageSize.width/2
+    // 
+    // 图片中心在压缩图上的位置 = 裁剪区域中心在压缩图上的位置
+    // crop.x = 图片中心 - 裁剪框中心 = (offsetX + cropWidth/2) * scaleX - displayImageSize.width/2
+    
+    const cropAreaCenterX = (offsetX + finalCropWidth / 2) * scaleX
+    const cropAreaCenterY = (offsetY + finalCropHeight / 2) * scaleY
+    const containerCenterX = displayImageSize.width / 2
+    const containerCenterY = displayImageSize.height / 2
+    
+    const cropX = cropAreaCenterX - containerCenterX
+    const cropY = cropAreaCenterY - containerCenterY
+    
+    // 设置恢复的位置
+    setCrop({ x: cropX, y: cropY })
+    setZoom(1)
+    
+    // 设置 croppedAreaPixels（用于保存时直接使用，避免重新计算）
+    setCroppedAreaPixels({
+      x: displayOffsetX,
+      y: displayOffsetY,
+      width: displayCropWidth,
+      height: displayCropHeight,
+    })
+    
+    restoredRef.current = true
+    
+    console.log('🔄 恢复编辑位置:', {
+      原图坐标: { 
+        offsetX, 
+        offsetY, 
+        cropWidth: finalCropWidth, 
+        cropHeight: finalCropHeight,
+        裁剪区域中心: {
+          x: offsetX + finalCropWidth / 2,
+          y: offsetY + finalCropHeight / 2,
+        }
+      },
+      压缩图坐标: { 
+        offsetX: displayOffsetX, 
+        offsetY: displayOffsetY, 
+        cropWidth: displayCropWidth, 
+        cropHeight: displayCropHeight,
+        裁剪区域中心: {
+          x: cropAreaCenterX,
+          y: cropAreaCenterY,
+        }
+      },
+      裁剪框中心: {
+        x: containerCenterX,
+        y: containerCenterY,
+      },
+      crop位置: { x: cropX, y: cropY },
+      缩放比例: { scaleX, scaleY },
+    })
+    
+  }, [photoData.cropInfo, sourceSize, displayImageSize, mode, aspectRatio])
+  
+  // 模式改变时重置恢复标记
+  useEffect(() => {
+    restoredRef.current = false
+  }, [mode])
 
   // 裁剪完成回调
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
@@ -169,28 +293,36 @@ export default function ImageEditor({
     
     // 转换为原图坐标并打印 OSS 裁剪 URL（调试用）
     if (mode === 'cover' && sourceSize.width && sourceSize.height && displayImageSize.width && displayImageSize.height) {
-      // 计算缩放比例：原图尺寸 / 压缩图尺寸
+      // 计算缩放比例：旋转后的原图尺寸 / 压缩图尺寸
       const scaleX = sourceSize.width / displayImageSize.width
       const scaleY = sourceSize.height / displayImageSize.height
       
-      // 将压缩图坐标转换为原图坐标
+      // 将压缩图坐标转换为旋转后的原图坐标
       const realOffsetX = Math.round(croppedAreaPixels.x * scaleX)
       const realOffsetY = Math.round(croppedAreaPixels.y * scaleY)
       const realCropWidth = Math.round(croppedAreaPixels.width * scaleX)
       const realCropHeight = Math.round(croppedAreaPixels.height * scaleY)
+      
+      // 获取原图尺寸（未旋转的）
+      const originalSourceWidth = photoData.autoRotated 
+        ? photoData.height || sourceSize.height 
+        : photoData.width || sourceSize.width
+      const originalSourceHeight = photoData.autoRotated 
+        ? photoData.width || sourceSize.width 
+        : photoData.height || sourceSize.height
       
       const cropInfo: SimpleCropInfo = {
         offsetX: realOffsetX,
         offsetY: realOffsetY,
         cropWidth: realCropWidth,
         cropHeight: realCropHeight,
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
+        sourceWidth: originalSourceWidth,
+        sourceHeight: originalSourceHeight,
         styleType: 'cover',
       }
       
       const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, photoData.autoRotated)
       
       console.log('📐 裁剪参数（压缩图坐标）:', {
         压缩图: {
@@ -201,18 +333,19 @@ export default function ImageEditor({
         },
         缩放比例: { scaleX, scaleY },
       })
-      console.log('📐 裁剪参数（原图坐标）:', {
-        原图: {
+      console.log('📐 裁剪参数（旋转后的原图坐标）:', {
+        旋转后的原图: {
           offsetX: realOffsetX,
           offsetY: realOffsetY,
           cropWidth: realCropWidth,
           cropHeight: realCropHeight,
         },
-        原图尺寸: sourceSize,
+        旋转后的原图尺寸: sourceSize,
+        原图尺寸: { width: originalSourceWidth, height: originalSourceHeight },
       })
       console.log('🔗 x-oss-process URL:', ossCropUrl)
     }
-  }, [mode, sourceSize, displayImageSize, photoData.originalUrl, photoData.thumbnailUrl])
+  }, [mode, sourceSize, displayImageSize, photoData.originalUrl, photoData.thumbnailUrl, photoData.autoRotated, photoData.width, photoData.height])
 
   // 模式改变
   const handleModeChange = useCallback((newMode: EditMode) => {
@@ -227,6 +360,15 @@ export default function ImageEditor({
   const handleSave = useCallback(() => {
     if (!sourceSize.width || !sourceSize.height) return
 
+    // 获取原图尺寸（未旋转的）
+    // 如果 autoRotated 为 true，sourceSize 是旋转后的尺寸，需要转换回原图尺寸
+    const originalSourceWidth = photoData.autoRotated 
+      ? photoData.height || sourceSize.height 
+      : photoData.width || sourceSize.width
+    const originalSourceHeight = photoData.autoRotated 
+      ? photoData.width || sourceSize.width 
+      : photoData.height || sourceSize.height
+
     // full 和 lomo 模式不需要裁剪参数
     if (mode === 'full' || mode === 'lomo') {
       const cropInfo: SimpleCropInfo = {
@@ -234,8 +376,8 @@ export default function ImageEditor({
         offsetY: 0,
         cropWidth: sourceSize.width,
         cropHeight: sourceSize.height,
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
+        sourceWidth: originalSourceWidth,
+        sourceHeight: originalSourceHeight,
         styleType: mode,
       }
       onSave(cropInfo)
@@ -244,7 +386,7 @@ export default function ImageEditor({
 
     // cover 模式，需要将压缩图坐标转换为原图坐标
     if (!croppedAreaPixels) {
-      // 如果没有裁剪过，使用默认居中裁剪（基于原图尺寸）
+      // 如果没有裁剪过，使用默认居中裁剪（基于旋转后的图片尺寸）
       const { cropWidth, cropHeight } = calculateCoverCropSize(
         sourceSize.width,
         sourceSize.height,
@@ -258,14 +400,14 @@ export default function ImageEditor({
         offsetY: Math.round(offsetY),
         cropWidth: Math.round(cropWidth),
         cropHeight: Math.round(cropHeight),
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
+        sourceWidth: originalSourceWidth,
+        sourceHeight: originalSourceHeight,
         styleType: 'cover',
       }
 
       // 打印最终的 OSS URL
       const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, photoData.autoRotated)
       console.log('💾 保存裁剪参数（默认居中）:', cropInfo)
       console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
 
@@ -279,11 +421,11 @@ export default function ImageEditor({
       return
     }
 
-    // 计算缩放比例：原图尺寸 / 压缩图尺寸
+    // 计算缩放比例：旋转后的原图尺寸 / 压缩图尺寸
     const scaleX = sourceSize.width / displayImageSize.width
     const scaleY = sourceSize.height / displayImageSize.height
 
-    // 将压缩图坐标转换为原图坐标
+    // 将压缩图坐标转换为旋转后的原图坐标
     const realOffsetX = Math.round(croppedAreaPixels.x * scaleX)
     const realOffsetY = Math.round(croppedAreaPixels.y * scaleY)
     const realCropWidth = Math.round(croppedAreaPixels.width * scaleX)
@@ -294,14 +436,14 @@ export default function ImageEditor({
       offsetY: realOffsetY,
       cropWidth: realCropWidth,
       cropHeight: realCropHeight,
-      sourceWidth: sourceSize.width,
-      sourceHeight: sourceSize.height,
+      sourceWidth: originalSourceWidth,
+      sourceHeight: originalSourceHeight,
       styleType: 'cover',
     }
 
     // 打印最终的 OSS URL
     const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-    const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+    const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, photoData.autoRotated)
     console.log('💾 保存裁剪参数（已转换）:', {
       压缩图坐标: {
         offsetX: Math.round(croppedAreaPixels.x),

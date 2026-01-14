@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
@@ -31,6 +31,11 @@ export default function EditPage() {
   const initializedRef = useRef(false)
   const lastImageIdRef = useRef<string | null>(null)
   const orderStatusCheckedRef = useRef<string | null>(null) // 跟踪已检查过订单状态的 photo_id
+  
+  // 使用 useMemo 稳定当前图片的引用，避免不必要的重新渲染
+  const currentImageFromStore = useMemo(() => {
+    return images.find((img) => img.id === imageId)
+  }, [images, imageId])
 
   // 检查订单状态（根据 photo_id 获取照片信息和订单状态）- 只调用一次
   useEffect(() => {
@@ -72,26 +77,20 @@ export default function EditPage() {
     if (lastImageIdRef.current !== imageId) {
       initializedRef.current = false
       lastImageIdRef.current = imageId
+      setIsLoading(true) // 重置加载状态
+      setImage(null) // 清空当前图片
     }
+    
+    // 如果已经初始化过，跳过（避免重复处理）
+    if (initializedRef.current) return
     
     // 最佳实践：按优先级查找图片数据
     // 1. 优先从 store 中查找（最快，无网络请求）
     // 2. 如果 store 中没有或没有 URL，从 sessionStorage 查找（点击编辑时保存的）
     // 3. 如果都没有，跳转到列表页
     
-    let foundImage = images.find((img) => img.id === imageId)
+    let foundImage = currentImageFromStore
     const hasValidUrl = foundImage && (foundImage.originalUrl || foundImage.thumbnailUrl)
-    
-    // 如果已经初始化过，且找到了有效的图片，直接设置（避免重复处理）
-    if (initializedRef.current && foundImage && hasValidUrl) {
-      // 只在图片数据真正改变时才更新 state
-      if (image?.id !== foundImage.id || 
-          image?.originalUrl !== foundImage.originalUrl ||
-          image?.cropInfo !== foundImage.cropInfo) {
-        setImage(foundImage)
-      }
-      return
-    }
     
     // 如果 store 中没有或没有有效的 URL，尝试从 sessionStorage 读取
     if (!foundImage || !hasValidUrl) {
@@ -108,7 +107,7 @@ export default function EditPage() {
               (!foundImage.cropInfo && imageData.cropInfo) ||
               (!foundImage.editState && imageData.editState)
             
-            if (needsUpdate && !initializedRef.current) {
+            if (needsUpdate) {
               updateImage(imageId, {
                 originalUrl: imageData.originalUrl || foundImage.originalUrl,
                 thumbnailUrl: imageData.thumbnailUrl || foundImage.thumbnailUrl,
@@ -125,9 +124,7 @@ export default function EditPage() {
             }
           } else {
             // 添加到 store（只添加一次，避免循环）
-            if (!initializedRef.current) {
-              addImages([imageData])
-            }
+            addImages([imageData])
             foundImage = imageData
           }
         }
@@ -137,34 +134,32 @@ export default function EditPage() {
     } else {
       // store 中有图片，但需要确保编辑状态是最新的
       // 如果 sessionStorage 中有更新的数据，使用它（只检查一次）
-      if (!initializedRef.current) {
-        try {
-          const sessionData = sessionStorage.getItem(`edit-image-${imageId}`)
-          if (sessionData) {
-            const imageData = JSON.parse(sessionData) as ImageType
-            // 合并编辑状态（sessionStorage 中的数据可能更新）
-            // 只在真正需要更新时才调用 updateImage
-            const needsUpdate = 
-              (imageData.cropInfo && (!foundImage.cropInfo || 
-                JSON.stringify(foundImage.cropInfo) !== JSON.stringify(imageData.cropInfo))) ||
-              (imageData.editState && (!foundImage.editState || 
-                JSON.stringify(foundImage.editState) !== JSON.stringify(imageData.editState)))
-            
-            if (needsUpdate) {
-              updateImage(imageId, {
-                cropInfo: imageData.cropInfo,
-                editState: imageData.editState,
-              })
-              foundImage = {
-                ...foundImage,
-                cropInfo: imageData.cropInfo || foundImage.cropInfo,
-                editState: imageData.editState || foundImage.editState,
-              }
+      try {
+        const sessionData = sessionStorage.getItem(`edit-image-${imageId}`)
+        if (sessionData) {
+          const imageData = JSON.parse(sessionData) as ImageType
+          // 合并编辑状态（sessionStorage 中的数据可能更新）
+          // 只在真正需要更新时才调用 updateImage
+          const needsUpdate = 
+            (imageData.cropInfo && (!foundImage.cropInfo || 
+              JSON.stringify(foundImage.cropInfo) !== JSON.stringify(imageData.cropInfo))) ||
+            (imageData.editState && (!foundImage.editState || 
+              JSON.stringify(foundImage.editState) !== JSON.stringify(imageData.editState)))
+          
+          if (needsUpdate) {
+            updateImage(imageId, {
+              cropInfo: imageData.cropInfo,
+              editState: imageData.editState,
+            })
+            foundImage = {
+              ...foundImage,
+              cropInfo: imageData.cropInfo || foundImage.cropInfo,
+              editState: imageData.editState || foundImage.editState,
             }
           }
-        } catch (error) {
-          console.error('从 sessionStorage 读取图片数据失败:', error)
         }
+      } catch (error) {
+        console.error('从 sessionStorage 读取图片数据失败:', error)
       }
     }
     
@@ -184,7 +179,8 @@ export default function EditPage() {
     setIsLoading(false)
     setImage(foundImage)
     initializedRef.current = true
-  }, [imageId, images, hasHydrated, currentSession, router, image, updateImage, addImages])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageId, currentImageFromStore, hasHydrated, currentSession?.id])
 
   const handleSave = async (cropInfo: SimpleCropInfo | undefined) => {
     // 检查订单是否已锁单
@@ -199,7 +195,7 @@ export default function EditPage() {
     // 打印 OSS 裁剪 URL（调试）
     if (cropInfo && image) {
       const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, image.autoRotated)
       console.log('💾 编辑页保存 - x-oss-process URL:', ossCropUrl)
     }
     
@@ -226,7 +222,7 @@ export default function EditPage() {
       await updatePhoto({
         photoId: imageId,
         cropMode: mapCropModeToServer(mode),
-        // 新版本：只传递简化的 cropInfo
+        // 新版本：传递完整的 cropInfo，包含 cropWidth 和 cropHeight
         cropInfo: cropInfo ? {
           canvasWidth: currentSession?.canvasWidth || 127,
           canvasHeight: currentSession?.canvasHeight || 89,
@@ -234,6 +230,8 @@ export default function EditPage() {
           sourceHeight: cropInfo.sourceHeight,
           offsetX: cropInfo.offsetX,
           offsetY: cropInfo.offsetY,
+          cropWidth: cropInfo.cropWidth, // 保存裁剪宽度
+          cropHeight: cropInfo.cropHeight, // 保存裁剪高度
           rotateAngle: 0, // react-easy-crop 不支持旋转，固定为 0
           originalUrl: image?.originalUrl || '',
           styleType: cropInfo.styleType,

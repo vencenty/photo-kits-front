@@ -94,6 +94,10 @@ export interface CropInfo {
   offsetX: number
   /** 原图坐标系中的Y偏移量（px），裁剪起始位置 */
   offsetY: number
+  /** 裁剪宽度（px），在未旋转原图坐标系中 */
+  cropWidth?: number
+  /** 裁剪高度（px），在未旋转原图坐标系中 */
+  cropHeight?: number
   /** 旋转角度（仅0/90/180/270°） */
   rotateAngle: number
   /** 原图地址（服务端能访问的路径） */

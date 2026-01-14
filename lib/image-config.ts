@@ -62,10 +62,16 @@ export const IMAGE_COMPRESS_CONFIG = {
 /**
  * 构建 OSS 图片处理参数
  * @param config 压缩配置
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns OSS 图片处理参数字符串
  */
-export function buildOssImageParams(config: OssImageConfig): string {
+export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolean): string {
   const params: string[] = []
+
+  // 如果 autoRotated 为 true，先添加旋转参数（旋转应该在裁剪和缩放之前）
+  if (autoRotated) {
+    params.push('rotate,90')
+  }
 
   // 添加尺寸参数
   if (config.width > 0 && config.height > 0) {
@@ -93,9 +99,10 @@ export function buildOssImageParams(config: OssImageConfig): string {
  * 给 OSS URL 添加压缩参数
  * @param url 原始图片 URL
  * @param config 压缩配置
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 添加了压缩参数的 URL
  */
-export function applyOssImageCompress(url: string, config: OssImageConfig): string {
+export function applyOssImageCompress(url: string, config: OssImageConfig, autoRotated?: boolean): string {
   if (!url) return url
 
   // 如果是 data URL 或本地文件，不处理
@@ -113,7 +120,7 @@ export function applyOssImageCompress(url: string, config: OssImageConfig): stri
   }
 
   // 构建 OSS 图片处理参数
-  const ossParams = buildOssImageParams(config)
+  const ossParams = buildOssImageParams(config, autoRotated)
   if (!ossParams) {
     return url
   }
@@ -125,16 +132,20 @@ export function applyOssImageCompress(url: string, config: OssImageConfig): stri
 
 /**
  * 获取列表页压缩后的图片 URL
+ * @param url 原始图片 URL
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  */
-export function getListImageUrl(url: string): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list)
+export function getListImageUrl(url: string, autoRotated?: boolean): string {
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list, autoRotated)
 }
 
 /**
  * 获取编辑页压缩后的图片 URL
+ * @param url 原始图片 URL
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  */
-export function getEditImageUrl(url: string): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit)
+export function getEditImageUrl(url: string, autoRotated?: boolean): string {
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit, autoRotated)
 }
 
 // ==================== OSS 裁剪相关 ====================
@@ -163,9 +174,10 @@ export interface SimpleCropInfo {
  * 构建 OSS 裁剪 URL
  * @param originalUrl 原图 URL
  * @param cropInfo 裁剪信息
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 带裁剪参数的 URL
  */
-export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo): string {
+export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo, autoRotated?: boolean): string {
   if (!originalUrl) return originalUrl
 
   // 如果是 data URL 或本地文件，不处理
@@ -182,20 +194,38 @@ export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo): 
     return originalUrl
   }
 
-  const { offsetX, offsetY, cropWidth, cropHeight, styleType } = cropInfo
+  const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
 
   // full 和 lomo 模式不需要裁剪
   if (styleType !== 'cover') {
     return originalUrl
   }
 
-  // 构建裁剪参数
-  const x = Math.round(offsetX)
-  const y = Math.round(offsetY)
-  const w = Math.round(cropWidth)
-  const h = Math.round(cropHeight)
+  const params: string[] = []
 
-  const cropParams = `crop,x_${x},y_${y},w_${w},h_${h}`
+  // 如果 autoRotated 为 true，先添加旋转参数（旋转应该在裁剪之前）
+  if (autoRotated) {
+    params.push('rotate,90')
+    
+    // 当 autoRotated 为 true 时，传入的坐标是基于旋转后的图片的
+    // 需要转换为原图坐标系（因为 OSS 是先旋转再裁剪）
+    // 原图尺寸：sourceWidth x sourceHeight
+    // 旋转后尺寸：sourceHeight x sourceWidth
+    // 坐标转换：旋转后图片上的 (x, y, w, h) 转换为原图上的 (y, sourceWidth - x - w, h, w)
+    const originalX = Math.round(offsetY)
+    const originalY = Math.round(sourceWidth - offsetX - cropWidth)
+    const originalW = Math.round(cropHeight)
+    const originalH = Math.round(cropWidth)
+    
+    params.push(`crop,x_${originalX},y_${originalY},w_${originalW},h_${originalH}`)
+  } else {
+    // 构建裁剪参数（未旋转的情况）
+    const x = Math.round(offsetX)
+    const y = Math.round(offsetY)
+    const w = Math.round(cropWidth)
+    const h = Math.round(cropHeight)
+    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+  }
 
   // 移除已有的 x-oss-process 参数，避免冲突
   let cleanUrl = originalUrl
@@ -206,7 +236,7 @@ export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo): 
   }
 
   const separator = cleanUrl.includes('?') ? '&' : '?'
-  return `${cleanUrl}${separator}x-oss-process=image/${cropParams}`
+  return `${cleanUrl}${separator}x-oss-process=image/${params.join('/')}`
 }
 
 /**
@@ -214,12 +244,14 @@ export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo): 
  * @param originalUrl 原图 URL
  * @param cropInfo 裁剪信息
  * @param targetWidth 目标宽度（用于压缩）
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 带裁剪和压缩参数的 URL
  */
 export function buildOssCropAndResizeUrl(
   originalUrl: string, 
   cropInfo: SimpleCropInfo,
-  targetWidth: number = 300
+  targetWidth: number = 300,
+  autoRotated?: boolean
 ): string {
   if (!originalUrl) return originalUrl
 
@@ -237,16 +269,35 @@ export function buildOssCropAndResizeUrl(
     return originalUrl
   }
 
-  const { offsetX, offsetY, cropWidth, cropHeight, styleType } = cropInfo
+  const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
   const params: string[] = []
+
+  // 如果 autoRotated 为 true，先添加旋转参数（旋转应该在裁剪之前）
+  if (autoRotated) {
+    params.push('rotate,90')
+  }
 
   // cover 模式需要裁剪
   if (styleType === 'cover') {
-    const x = Math.round(offsetX)
-    const y = Math.round(offsetY)
-    const w = Math.round(cropWidth)
-    const h = Math.round(cropHeight)
-    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+    if (autoRotated) {
+      // 当 autoRotated 为 true 时，传入的坐标是基于旋转后的图片的
+      // 需要转换为原图坐标系（因为 OSS 是先旋转再裁剪）
+      // 原图尺寸：sourceWidth x sourceHeight
+      // 旋转后尺寸：sourceHeight x sourceWidth
+      // 坐标转换：旋转后图片上的 (x, y, w, h) 转换为原图上的 (y, sourceWidth - x - w, h, w)
+      const originalX = Math.round(offsetY)
+      const originalY = Math.round(sourceWidth - offsetX - cropWidth)
+      const originalW = Math.round(cropHeight)
+      const originalH = Math.round(cropWidth)
+      params.push(`crop,x_${originalX},y_${originalY},w_${originalW},h_${originalH}`)
+    } else {
+      // 未旋转的情况，直接使用传入的坐标
+      const x = Math.round(offsetX)
+      const y = Math.round(offsetY)
+      const w = Math.round(cropWidth)
+      const h = Math.round(cropHeight)
+      params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+    }
   }
 
   // 添加压缩参数
