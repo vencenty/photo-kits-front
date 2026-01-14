@@ -523,12 +523,12 @@ export default function ImageEditor({
                     onCropComplete={onCropComplete}
                     // 禁止缩放，只允许拖拽
                     minZoom={1}
-                    maxZoom={1}
+                    maxZoom={2}
                     restrictPosition={true}
-                    showGrid={false}
+                    showGrid={true}
                     style={{
                       containerStyle: {
-                        backgroundColor: '#ffffff',
+                        backgroundColor: 'white',
                       },
                       mediaStyle: {
                         backgroundColor: '#ffffff',
