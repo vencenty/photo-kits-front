@@ -65,7 +65,7 @@ export const IMAGE_COMPRESS_CONFIG = {
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns OSS 图片处理参数字符串
  */
-export function buildOssImageParams(config: OssImageConfig): string {
+export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolean): string {
   const params: string[] = []
 
 
@@ -88,6 +88,11 @@ export function buildOssImageParams(config: OssImageConfig): string {
     params.push(`format,${config.format}`)
   }
 
+  // 如果 autoRotated 为 true，添加旋转参数（旋转应该在所有操作之后）
+  if (autoRotated) {
+    params.push('rotate,90')
+  }
+
   return params.length > 0 ? `image/${params.join('/')}` : ''
 }
 
@@ -98,7 +103,7 @@ export function buildOssImageParams(config: OssImageConfig): string {
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 添加了压缩参数的 URL
  */
-export function applyOssImageCompress(url: string, config: OssImageConfig): string {
+export function applyOssImageCompress(url: string, config: OssImageConfig, autoRotated?: boolean): string {
   if (!url) return url
 
   // 如果是 data URL 或本地文件，不处理
@@ -116,7 +121,7 @@ export function applyOssImageCompress(url: string, config: OssImageConfig): stri
   }
 
   // 构建 OSS 图片处理参数
-  const ossParams = buildOssImageParams(config)
+  const ossParams = buildOssImageParams(config, autoRotated)
   if (!ossParams) {
     return url
   }
@@ -132,7 +137,7 @@ export function applyOssImageCompress(url: string, config: OssImageConfig): stri
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  */
 export function getListImageUrl(url: string, autoRotated?: boolean): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list)
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list, autoRotated)
 }
 
 /**
@@ -170,68 +175,22 @@ export interface SimpleCropInfo {
  * 构建 OSS 裁剪 URL
  * @param originalUrl 原图 URL
  * @param cropInfo 裁剪信息
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param options 可选参数
+ * @param options.autoRotated 是否自动旋转（横图转竖图，旋转90度）- 用于列表页展示
+ * @param options.targetWidth 目标宽度（用于压缩）- 用于列表页展示
+ * @param options.quality 图片质量（0-100）- 用于列表页展示
+ * @param options.format 输出格式（jpg/webp/png）- 用于列表页展示
  * @returns 带裁剪参数的 URL
  */
-export function buildOssCropUrl(originalUrl: string, cropInfo: SimpleCropInfo, autoRotated?: boolean): string {
-  if (!originalUrl) return originalUrl
-
-  // 如果是 data URL 或本地文件，不处理
-  if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
-    return originalUrl
-  }
-
-  // 判断是否为 OSS URL
-  const isOssUrl = originalUrl.includes('aliyuncs.com') || 
-                   originalUrl.includes('oss-proxy') || 
-                   originalUrl.includes('vencenty.cc')
-
-  if (!isOssUrl) {
-    return originalUrl
-  }
-
-  const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
-
-  // full 和 lomo 模式不需要裁剪
-  if (styleType !== 'cover') {
-    return originalUrl
-  }
-
-  const params: string[] = []
-
-
-    const x = Math.round(offsetX)
-    const y = Math.round(offsetY)
-    const w = Math.round(cropWidth)
-    const h = Math.round(cropHeight)
-    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
-
-
-  // 移除已有的 x-oss-process 参数，避免冲突
-  let cleanUrl = originalUrl
-  if (originalUrl.includes('x-oss-process=')) {
-    cleanUrl = originalUrl.replace(/[?&]x-oss-process=[^&]+/, '')
-    // 清理可能留下的 ? 或 & 
-    cleanUrl = cleanUrl.replace(/\?$/, '').replace(/\?&/, '?').replace(/&&/, '&')
-  }
-
-  const separator = cleanUrl.includes('?') ? '&' : '?'
-  return `${cleanUrl}${separator}x-oss-process=image/${params.join('/')}`
-}
-
-/**
- * 构建带裁剪和压缩的 OSS URL（用于列表页预览）
- * @param originalUrl 原图 URL
- * @param cropInfo 裁剪信息
- * @param targetWidth 目标宽度（用于压缩）
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
- * @returns 带裁剪和压缩参数的 URL
- */
-export function buildOssCropAndResizeUrl(
+export function buildOssCropUrl(
   originalUrl: string, 
-  cropInfo: SimpleCropInfo,
-  targetWidth: number = 300,
-  autoRotated?: boolean
+  cropInfo: SimpleCropInfo, 
+  options?: {
+    autoRotated?: boolean
+    targetWidth?: number
+    quality?: number
+    format?: string
+  }
 ): string {
   if (!originalUrl) return originalUrl
 
@@ -250,49 +209,51 @@ export function buildOssCropAndResizeUrl(
   }
 
   const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
+  const { autoRotated, targetWidth, quality, format } = options || {}
+
   const params: string[] = []
 
-  // 如果 autoRotated 为 true，先添加旋转参数（旋转应该在裁剪之前）
+  // cover 模式需要裁剪
+  if (styleType === 'cover') {
+    const x = Math.round(offsetX)
+    const y = Math.round(offsetY)
+    const w = Math.round(cropWidth)
+    const h = Math.round(cropHeight)
+    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+  }
+
+  // 添加压缩参数（用于列表页）
+  if (targetWidth) {
+    params.push(`resize,w_${targetWidth}`)
+  }
+
+  if (quality !== undefined) {
+    params.push(`quality,q_${quality}`)
+  }
+
+  if (format) {
+    params.push(`format,${format}`)
+  }
+
+  // 如果 autoRotated 为 true，添加旋转参数（旋转应该在所有操作之后）
+  // 这样列表页展示时，横图会被旋转90度显示为竖图
   if (autoRotated) {
     params.push('rotate,90')
   }
 
-  // cover 模式需要裁剪
-  if (styleType === 'cover') {
-    if (autoRotated) {
-      // 当 autoRotated 为 true 时，传入的坐标是基于旋转后的图片的
-      // 需要转换为原图坐标系（因为 OSS 是先旋转再裁剪）
-      // 原图尺寸：sourceWidth x sourceHeight
-      // 旋转后尺寸：sourceHeight x sourceWidth
-      // 坐标转换：旋转后图片上的 (x, y, w, h) 转换为原图上的 (y, sourceWidth - x - w, h, w)
-      const originalX = Math.round(offsetY)
-      const originalY = Math.round(sourceWidth - offsetX - cropWidth)
-      const originalW = Math.round(cropHeight)
-      const originalH = Math.round(cropWidth)
-      params.push(`crop,x_${originalX},y_${originalY},w_${originalW},h_${originalH}`)
-    } else {
-      // 未旋转的情况，直接使用传入的坐标
-      const x = Math.round(offsetX)
-      const y = Math.round(offsetY)
-      const w = Math.round(cropWidth)
-      const h = Math.round(cropHeight)
-      params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
-    }
+  // 如果没有参数，直接返回原 URL
+  if (params.length === 0) {
+    return originalUrl
   }
 
-  // 添加压缩参数
-  params.push(`resize,w_${targetWidth}`)
-  params.push('quality,q_80')
-  params.push('format,jpg')
-
-  // 移除已有的 x-oss-process 参数
+  // 移除已有的 x-oss-process 参数，避免冲突
   let cleanUrl = originalUrl
   if (originalUrl.includes('x-oss-process=')) {
     cleanUrl = originalUrl.replace(/[?&]x-oss-process=[^&]+/, '')
+    // 清理可能留下的 ? 或 & 
     cleanUrl = cleanUrl.replace(/\?$/, '').replace(/\?&/, '?').replace(/&&/, '&')
   }
 
   const separator = cleanUrl.includes('?') ? '&' : '?'
   return `${cleanUrl}${separator}x-oss-process=image/${params.join('/')}`
 }
-

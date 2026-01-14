@@ -195,7 +195,7 @@ export default function EditPage() {
     // 打印 OSS 裁剪 URL（调试）
     if (cropInfo && image) {
       const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, image.autoRotated)
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, { autoRotated: image.autoRotated })
       console.log('💾 编辑页保存 - x-oss-process URL:', ossCropUrl)
     }
     

@@ -310,7 +310,7 @@ export default function ImageEditor({
       }
       
       const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, false)
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
       
       console.log('📐 裁剪参数（压缩图坐标）:', {
         压缩图: {
@@ -386,7 +386,7 @@ export default function ImageEditor({
 
       // 打印最终的 OSS URL
       const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, false)
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
       console.log('💾 保存裁剪参数（默认居中）:', cropInfo)
       console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
 
@@ -422,7 +422,7 @@ export default function ImageEditor({
 
     // 打印最终的 OSS URL
     const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-    const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, false)
+    const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
     console.log('💾 保存裁剪参数（已转换）:', {
       压缩图坐标: {
         offsetX: Math.round(croppedAreaPixels.x),

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getListImageUrl, buildOssCropAndResizeUrl, SimpleCropInfo } from '@/lib/image-config'
+import { getListImageUrl, buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
 
 // 配置常量
 const WHITE_MARGIN_PERCENT = 1
@@ -48,40 +48,36 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 获取原图 URL
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
   
-  // 根据是否有 cropInfo 来决定使用哪个 URL
+  // 统一使用 buildOssCropUrl 处理，列表页需要压缩和旋转（如果是横图）
   let previewUrl: string
   
-  if (image.cropInfo && styleType === 'cover' && !imageError) {
-    // 有裁剪信息且是 cover 模式，使用 OSS 裁剪 URL
-    previewUrl = buildOssCropAndResizeUrl(originalUrl, image.cropInfo as SimpleCropInfo, 300, image.autoRotated)
+  if (image.cropInfo && !imageError) {
+    // 有裁剪信息，使用统一的 buildOssCropUrl
+    // cover 模式会进行裁剪，full 和 lomo 模式不会裁剪但会添加压缩和旋转参数
+    previewUrl = buildOssCropUrl(originalUrl, image.cropInfo as SimpleCropInfo, {
+      targetWidth: 300,
+      quality: 80,
+      format: 'jpg',
+      autoRotated: image.autoRotated
+    })
   } else {
-    // 没有裁剪信息或者是其他模式，使用普通压缩 URL
+    // 没有裁剪信息，使用普通压缩 URL
     previewUrl = getListImageUrl(originalUrl, image.autoRotated)
-  }
-
-  // 判断图片是否是横图（宽度大于高度）
-  // 注意：编辑后的图片URL已经是正确的了（通过OSS处理），但原始图片尺寸信息可能还是横图的
-  // 所以需要根据原始尺寸判断，如果是横图就在列表页旋转90度显示
-  const isLandscape = () => {
-    if (!image.width || !image.height) return false
-
-    return image.width >image.height
   }
 
   // 渲染图片
   const renderImage = () => {
     const isLomo = styleType === 'lomo'
     const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
-    const isHorizontal = isLandscape() // 判断是否是横图
 
     if (styleType === 'cover') {
       // Cover 模式：图片裁剪后填满整个区域（与 ImageEditor 保持一致）
-      // 如果是横图，旋转90度显示为竖图
+      // 旋转已在 OSS 层面处理（通过 autoRotated 参数）
       return (
         <img
           src={previewUrl}
           alt={image.filename || '照片'}
-          className={`w-full h-full object-cover}`}
+          className="w-full h-full object-cover"
           onError={() => {
             console.warn('图片加载失败，降级使用原图:', previewUrl)
             setImageError(true)
@@ -90,20 +86,20 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
       )
     } else if (styleType === 'full') {
       // Full 模式：完整显示图片（与 ImageEditor 保持一致）
-      // 如果是横图，旋转90度显示为竖图
+      // 旋转已在 OSS 层面处理（通过 autoRotated 参数）
       return (
         <div className="relative w-full h-full bg-white flex items-center justify-center">
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className={`max-w-full max-h-full object-contain ${isHorizontal ? 'rotate-90' : ''}`}
+            className="max-w-full max-h-full object-contain"
             onError={() => setImageError(true)}
           />
         </div>
       )
     } else {
       // Lomo 模式：留白显示（与 ImageEditor 保持一致）
-      // 如果是横图，旋转90度显示为竖图
+      // 旋转已在 OSS 层面处理（通过 autoRotated 参数）
       return (
         <div 
           className="relative w-full h-full bg-white flex items-center justify-center"
@@ -114,7 +110,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className={`max-w-full max-h-full object-contain ${isHorizontal ? 'rotate-90' : ''}`}
+            className="max-w-full max-h-full object-contain"
             style={{
               maxWidth: isLomo ? `${100 - margin * 2}%` : '100%',
               maxHeight: isLomo ? `${100 - margin * 2}%` : '100%',
@@ -129,12 +125,11 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 降级显示（OSS 裁剪失败时）
   const renderFallback = () => {
     const fallbackUrl = getListImageUrl(originalUrl, image.autoRotated)
-    const isHorizontal = isLandscape() // 判断是否是横图
     return (
       <img
         src={fallbackUrl}
         alt={image.filename || '照片'}
-        className={`w-full h-full object-cover ${isHorizontal ? 'rotate-90' : ''}`}
+        className="w-full h-full object-cover"
       />
     )
   }
