@@ -63,7 +63,6 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 注意：编辑后的图片URL已经是正确的了（通过OSS处理），但原始图片尺寸信息可能还是横图的
   // 所以需要根据原始尺寸判断，如果是横图就在列表页旋转90度显示
   const isLandscape = () => {
-    console.log(image.width,image.height, image.originalUrl)
     if (!image.width || !image.height) return false
 
     return image.width >image.height
@@ -76,7 +75,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
     const isHorizontal = isLandscape() // 判断是否是横图
 
     if (styleType === 'cover') {
-      // Cover 模式：图片裁剪后填满整个区域
+      // Cover 模式：图片裁剪后填满整个区域（与 ImageEditor 保持一致）
       // 如果是横图，旋转90度显示为竖图
       return (
         <img
@@ -90,33 +89,35 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
         />
       )
     } else if (styleType === 'full') {
-      // Full 模式：完整显示图片
+      // Full 模式：完整显示图片（与 ImageEditor 保持一致）
       // 如果是横图，旋转90度显示为竖图
       return (
-        <div className="w-full h-full flex items-center justify-center bg-white">
+        <div className="relative w-full h-full bg-white flex items-center justify-center">
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className={`${isHorizontal ? 'max-w-full h-full object-contain rotate-90' : 'max-w-full max-h-full object-contain'}`}
+            className={`max-w-full max-h-full object-contain ${isHorizontal ? 'rotate-90' : ''}`}
             onError={() => setImageError(true)}
           />
         </div>
       )
     } else {
-      // Lomo 模式：留白显示
+      // Lomo 模式：留白显示（与 ImageEditor 保持一致）
       // 如果是横图，旋转90度显示为竖图
       return (
         <div 
-          className="w-full h-full flex items-center justify-center bg-white"
-          style={{ padding: `${margin}%` }}
+          className="relative w-full h-full bg-white flex items-center justify-center"
+          style={{
+            padding: isLomo ? `${margin}%` : 0,
+          }}
         >
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
             className={`max-w-full max-h-full object-contain ${isHorizontal ? 'rotate-90' : ''}`}
             style={{
-              maxWidth: `${100 - margin * 2}%`,
-              maxHeight: `${100 - margin * 2}%`,
+              maxWidth: isLomo ? `${100 - margin * 2}%` : '100%',
+              maxHeight: isLomo ? `${100 - margin * 2}%` : '100%',
             }}
             onError={() => setImageError(true)}
           />
