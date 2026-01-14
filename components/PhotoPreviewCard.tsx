@@ -6,7 +6,7 @@ import type { Image as ImageType } from '@/lib/store'
 import { getListImageUrl, buildOssCropAndResizeUrl, SimpleCropInfo } from '@/lib/image-config'
 
 // 配置常量
-const WHITE_MARGIN_PERCENT = 5
+const WHITE_MARGIN_PERCENT = 1
 
 interface PhotoPreviewCardProps {
   image: ImageType
@@ -60,12 +60,13 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   }
 
   // 判断图片是否是横图（宽度大于高度）
+  // 注意：编辑后的图片URL已经是正确的了（通过OSS处理），但原始图片尺寸信息可能还是横图的
+  // 所以需要根据原始尺寸判断，如果是横图就在列表页旋转90度显示
   const isLandscape = () => {
+    console.log(image.width,image.height, image.originalUrl)
     if (!image.width || !image.height) return false
-    // 如果 autoRotated 为 true，说明图片被旋转了，需要交换宽高来判断
-    const actualWidth = image.autoRotated ? image.height : image.width
-    const actualHeight = image.autoRotated ? image.width : image.height
-    return actualWidth > actualHeight
+
+    return image.width >image.height
   }
 
   // 渲染图片
@@ -76,7 +77,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
 
     if (styleType === 'cover') {
       // Cover 模式：图片裁剪后填满整个区域
-      // 如果是横图，用 CSS 强制显示为竖图（3:4 比例）
+      // 如果是横图，旋转90度显示为竖图
       return (
         <img
           src={previewUrl}
@@ -90,20 +91,20 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
       )
     } else if (styleType === 'full') {
       // Full 模式：完整显示图片
-      // 如果是横图，用 CSS 强制显示为竖图（3:4 比例）
+      // 如果是横图，旋转90度显示为竖图
       return (
         <div className="w-full h-full flex items-center justify-center bg-white">
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className={isHorizontal ? "w-full h-full object-cover rotate-90" : "max-w-full max-h-full object-contain"}
+            className={`${isHorizontal ? 'max-w-full h-full object-contain rotate-90' : 'max-w-full max-h-full object-contain'}`}
             onError={() => setImageError(true)}
           />
         </div>
       )
     } else {
       // Lomo 模式：留白显示
-      // 如果是横图，用 CSS 强制显示为竖图（3:4 比例）
+      // 如果是横图，旋转90度显示为竖图
       return (
         <div 
           className="w-full h-full flex items-center justify-center bg-white"
@@ -112,14 +113,10 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className={isHorizontal ? "w-full h-full object-cover" : "max-w-full max-h-full object-contain"}
+            className={`max-w-full max-h-full object-contain ${isHorizontal ? 'rotate-90' : ''}`}
             style={{
-              ...(isHorizontal ? {
-                aspectRatio: '3 / 4',
-              } : {
-                maxWidth: `${100 - margin * 2}%`,
-                maxHeight: `${100 - margin * 2}%`,
-              }),
+              maxWidth: `${100 - margin * 2}%`,
+              maxHeight: `${100 - margin * 2}%`,
             }}
             onError={() => setImageError(true)}
           />
@@ -136,11 +133,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
       <img
         src={fallbackUrl}
         alt={image.filename || '照片'}
-        className="w-full h-full object-cover"
-        style={isHorizontal ? {
-          objectFit: 'cover',
-          aspectRatio: '3 / 4',
-        } : undefined}
+        className={`w-full h-full object-cover ${isHorizontal ? 'rotate-90' : ''}`}
       />
     )
   }
