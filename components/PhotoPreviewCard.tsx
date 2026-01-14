@@ -81,7 +81,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
         <img
           src={previewUrl}
           alt={image.filename || '照片'}
-          className={`w-full h-full object-cover ${isHorizontal ? 'rotate-90' : ''}`}
+          className={`w-full h-full object-cover}`}
           onError={() => {
             console.warn('图片加载失败，降级使用原图:', previewUrl)
             setImageError(true)
