@@ -90,11 +90,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
         <img
           src={previewUrl}
           alt={image.filename || '照片'}
-          className="w-full h-full object-cover"
-          style={isHorizontal ? {
-            objectFit: 'cover',
-            aspectRatio: '3 / 4',
-          } : undefined}
+          className={`w-full h-full object-cover ${isHorizontal ? 'rotate-90' : ''}`}
           onError={() => {
             console.warn('图片加载失败，降级使用原图:', previewUrl)
             setImageError(true)
@@ -109,10 +105,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className={isHorizontal ? "w-full h-full object-cover" : "max-w-full max-h-full object-contain"}
-            style={isHorizontal ? {
-              aspectRatio: '3 / 4',
-            } : undefined}
+            className={isHorizontal ? "w-full h-full object-cover rotate-90" : "max-w-full max-h-full object-contain"}
             onError={() => setImageError(true)}
           />
         </div>

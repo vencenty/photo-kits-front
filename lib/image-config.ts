@@ -65,13 +65,9 @@ export const IMAGE_COMPRESS_CONFIG = {
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns OSS 图片处理参数字符串
  */
-export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolean): string {
+export function buildOssImageParams(config: OssImageConfig): string {
   const params: string[] = []
 
-  // 如果 autoRotated 为 true，先添加旋转参数（旋转应该在裁剪和缩放之前）
-  if (autoRotated) {
-    params.push('rotate,90')
-  }
 
   // 添加尺寸参数
   if (config.width > 0 && config.height > 0) {
@@ -120,7 +116,7 @@ export function applyOssImageCompress(url: string, config: OssImageConfig, autoR
   }
 
   // 构建 OSS 图片处理参数
-  const ossParams = buildOssImageParams(config, autoRotated)
+  const ossParams = buildOssImageParams(config)
   if (!ossParams) {
     return url
   }
