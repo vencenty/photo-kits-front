@@ -68,6 +68,7 @@ export default function ImageEditor({
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+  const [initialCroppedAreaPixels, setInitialCroppedAreaPixels] = useState<Area | undefined>(undefined)
   
   // 原图尺寸（从 photoData 获取，这是真实的原图尺寸）
   // 如果 autoRotated 为 true，需要宽高互换（因为旋转后宽变高，高变宽）
@@ -97,6 +98,7 @@ export default function ImageEditor({
   
   const containerRef = useRef<HTMLDivElement>(null)
   const restoredRef = useRef(false) // 标记是否已恢复过位置
+  const isRestoringRef = useRef(false) // 标记是否正在恢复位置，用于防止 onCropComplete 触发更新
 
   // 计算相纸比例
   const aspectRatio = canvasWidth / canvasHeight
@@ -241,12 +243,14 @@ export default function ImageEditor({
     setZoom(1)
     
     // 设置 croppedAreaPixels（用于保存时直接使用，避免重新计算）
-    setCroppedAreaPixels({
+    const initialArea: Area = {
       x: displayOffsetX,
       y: displayOffsetY,
       width: displayCropWidth,
       height: displayCropHeight,
-    })
+    }
+    setCroppedAreaPixels(initialArea)
+    setInitialCroppedAreaPixels(initialArea) // 设置初始值，只设置一次
     
     restoredRef.current = true
     
@@ -284,10 +288,14 @@ export default function ImageEditor({
   // 模式改变时重置恢复标记
   useEffect(() => {
     restoredRef.current = false
+    isRestoringRef.current = false
   }, [mode])
 
   // 裁剪完成回调
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    // 如果正在恢复位置，不更新状态，避免无限循环
+    if (isRestoringRef.current) return
+    
     // 保存压缩图坐标（react-easy-crop 返回的）
     setCroppedAreaPixels(croppedAreaPixels)
     
@@ -354,6 +362,7 @@ export default function ImageEditor({
     setCrop({ x: 0, y: 0 })
     setZoom(1)
     setCroppedAreaPixels(null)
+    setInitialCroppedAreaPixels(undefined)
   }, [])
 
   // 保存
@@ -521,6 +530,7 @@ export default function ImageEditor({
                     onCropChange={setCrop}
                     onZoomChange={setZoom}
                     onCropComplete={onCropComplete}
+                    initialCroppedAreaPixels={initialCroppedAreaPixels}
                     // 禁止缩放，只允许拖拽
                     minZoom={1}
                     maxZoom={2}
