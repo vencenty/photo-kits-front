@@ -68,18 +68,33 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
     previewUrl = getListImageUrl(originalUrl, image.autoRotated)
   }
 
+  // 判断图片是否是横图（宽度大于高度）
+  const isLandscape = () => {
+    if (!image.width || !image.height) return false
+    // 如果 autoRotated 为 true，说明图片被旋转了，需要交换宽高来判断
+    const actualWidth = image.autoRotated ? image.height : image.width
+    const actualHeight = image.autoRotated ? image.width : image.height
+    return actualWidth > actualHeight
+  }
+
   // 渲染图片
   const renderImage = () => {
     const isLomo = styleType === 'lomo'
     const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
+    const isHorizontal = isLandscape() // 判断是否是横图
 
     if (styleType === 'cover') {
       // Cover 模式：图片裁剪后填满整个区域
+      // 如果是横图，用 CSS 强制显示为竖图（3:4 比例）
       return (
         <img
           src={previewUrl}
           alt={image.filename || '照片'}
           className="w-full h-full object-cover"
+          style={isHorizontal ? {
+            objectFit: 'cover',
+            aspectRatio: '3 / 4',
+          } : undefined}
           onError={() => {
             console.warn('图片加载失败，降级使用原图:', previewUrl)
             setImageError(true)
@@ -88,18 +103,23 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
       )
     } else if (styleType === 'full') {
       // Full 模式：完整显示图片
+      // 如果是横图，用 CSS 强制显示为竖图（3:4 比例）
       return (
         <div className="w-full h-full flex items-center justify-center bg-white">
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className="max-w-full max-h-full object-contain"
+            className={isHorizontal ? "w-full h-full object-cover" : "max-w-full max-h-full object-contain"}
+            style={isHorizontal ? {
+              aspectRatio: '3 / 4',
+            } : undefined}
             onError={() => setImageError(true)}
           />
         </div>
       )
     } else {
       // Lomo 模式：留白显示
+      // 如果是横图，用 CSS 强制显示为竖图（3:4 比例）
       return (
         <div 
           className="w-full h-full flex items-center justify-center bg-white"
@@ -108,10 +128,14 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className="max-w-full max-h-full object-contain"
+            className={isHorizontal ? "w-full h-full object-cover" : "max-w-full max-h-full object-contain"}
             style={{
-              maxWidth: `${100 - margin * 2}%`,
-              maxHeight: `${100 - margin * 2}%`,
+              ...(isHorizontal ? {
+                aspectRatio: '3 / 4',
+              } : {
+                maxWidth: `${100 - margin * 2}%`,
+                maxHeight: `${100 - margin * 2}%`,
+              }),
             }}
             onError={() => setImageError(true)}
           />
@@ -123,11 +147,16 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 降级显示（OSS 裁剪失败时）
   const renderFallback = () => {
     const fallbackUrl = getListImageUrl(originalUrl, image.autoRotated)
+    const isHorizontal = isLandscape() // 判断是否是横图
     return (
       <img
         src={fallbackUrl}
         alt={image.filename || '照片'}
         className="w-full h-full object-cover"
+        style={isHorizontal ? {
+          objectFit: 'cover',
+          aspectRatio: '3 / 4',
+        } : undefined}
       />
     )
   }
