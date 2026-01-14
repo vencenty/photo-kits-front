@@ -503,7 +503,7 @@ export default function ImageEditor({
                     initialCroppedAreaPixels={initialCroppedAreaPixels}
                     // 禁止缩放，只允许拖拽
                     minZoom={1}
-                    maxZoom={2}
+                    maxZoom={1}
                     restrictPosition={true}
                     showGrid={true}
                     style={{
