@@ -580,47 +580,33 @@ export default function ImageEditor({
         <div className="flex gap-2 mb-4 justify-center">
           <button
             onClick={() => handleModeChange('cover')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
+            className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'cover'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
-              mode === 'cover' ? 'border-white bg-white' : 'border-gray-400'
-            }`}>
-              {mode === 'cover' && <div className="w-2 h-2 bg-pink-500 rounded-sm" />}
-            </div>
             居中裁剪
           </button>
           <button
             onClick={() => handleModeChange('full')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
+            className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'full'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
-              mode === 'full' ? 'border-white bg-white' : 'border-gray-400'
-            }`}>
-              {mode === 'full' && <div className="w-2 h-2 bg-pink-500 rounded-sm" />}
-            </div>
             打印整图
           </button>
           <button
             onClick={() => handleModeChange('lomo')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
+            className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${
               mode === 'lomo'
                 ? 'bg-pink-500 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <div className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${
-              mode === 'lomo' ? 'border-white bg-white' : 'border-gray-400'
-            }`}>
-              {mode === 'lomo' && <div className="w-2 h-2 bg-pink-500 rounded-sm" />}
-            </div>
+
             四周留白
           </button>
         </div>
