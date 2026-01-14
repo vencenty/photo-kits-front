@@ -3,10 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getListImageUrl, buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
-
-// 配置常量
-const WHITE_MARGIN_PERCENT = 1
+import { getListImageUrl, buildOssCropUrl, SimpleCropInfo, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface PhotoPreviewCardProps {
   image: ImageType

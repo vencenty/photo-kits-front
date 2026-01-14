@@ -60,6 +60,12 @@ export const IMAGE_COMPRESS_CONFIG = {
 } as const
 
 /**
+ * Lomo 模式白边配置
+ * 用于控制四周留白模式下的白边宽度（百分比）
+ */
+export const WHITE_MARGIN_PERCENT = 2
+
+/**
  * 构建 OSS 图片处理参数
  * @param config 压缩配置
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）

@@ -7,10 +7,7 @@ import type { Area, Point } from 'react-easy-crop'
 import {
   type Image as ImageType
 } from '@/lib/store'
-import { getEditImageUrl, SimpleCropInfo, buildOssCropUrl } from '@/lib/image-config'
-
-// 配置常量
-const WHITE_MARGIN_PERCENT = 1
+import { getEditImageUrl, SimpleCropInfo, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface ImageEditorProps {
   image: ImageType
