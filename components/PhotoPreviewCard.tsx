@@ -54,15 +54,6 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   if (image.cropInfo && styleType === 'cover' && !imageError) {
     // 有裁剪信息且是 cover 模式，使用 OSS 裁剪 URL
     previewUrl = buildOssCropAndResizeUrl(originalUrl, image.cropInfo as SimpleCropInfo, 300, image.autoRotated)
-    
-    // 打印调试信息
-    console.log('📷 列表页预览 URL:', {
-      imageId: image.id,
-      styleType,
-      cropInfo: image.cropInfo,
-      autoRotated: image.autoRotated,
-      previewUrl,
-    })
   } else {
     // 没有裁剪信息或者是其他模式，使用普通压缩 URL
     previewUrl = getListImageUrl(originalUrl, image.autoRotated)

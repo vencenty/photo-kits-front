@@ -98,7 +98,7 @@ export function buildOssImageParams(config: OssImageConfig): string {
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 添加了压缩参数的 URL
  */
-export function applyOssImageCompress(url: string, config: OssImageConfig, autoRotated?: boolean): string {
+export function applyOssImageCompress(url: string, config: OssImageConfig): string {
   if (!url) return url
 
   // 如果是 data URL 或本地文件，不处理
@@ -132,7 +132,7 @@ export function applyOssImageCompress(url: string, config: OssImageConfig, autoR
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  */
 export function getListImageUrl(url: string, autoRotated?: boolean): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list, autoRotated)
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list)
 }
 
 /**
@@ -141,7 +141,7 @@ export function getListImageUrl(url: string, autoRotated?: boolean): string {
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  */
 export function getEditImageUrl(url: string, autoRotated?: boolean): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit, autoRotated)
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit)
 }
 
 // ==================== OSS 裁剪相关 ====================
