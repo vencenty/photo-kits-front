@@ -1201,7 +1201,7 @@ export default function UploadPage() {
                     aspectRatio={paperRatio}
                     onClick={
                       isBatchMode 
-                        ? () => toggleSelection(image.id)
+                        ? undefined // 批量模式下，由外层 div 处理点击，避免重复触发
                         : (image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced 
                           ? () => handleEdit(image.id) 
                           : undefined)
