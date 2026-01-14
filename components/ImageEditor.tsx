@@ -497,7 +497,7 @@ export default function ImageEditor({
           </span>
         </div>
         {mode === 'cover' && (
-          <p className="text-center text-red-400 text-sm mt-1">超出边框部分将被裁剪</p>
+          <p className="text-center text-red-400 text-sm mt-1">超出红色边框部分将被裁剪</p>
         )}
       </div>
 
@@ -512,7 +512,7 @@ export default function ImageEditor({
             <div className="absolute inset-0">
               {imageLoaded && imageUrl && (
                 mode === 'cover' ? (
-                  // Cover 模式：使用 react-easy-crop
+                  // Cover 模式：使用 react-easy-crop 
                   <Cropper
                     image={imageUrl}
                     crop={crop}
@@ -528,10 +528,13 @@ export default function ImageEditor({
                     showGrid={false}
                     style={{
                       containerStyle: {
-                        backgroundColor: 'white',
+                        backgroundColor: '#ffffff',
+                      },
+                      mediaStyle: {
+                        backgroundColor: '#ffffff',
                       },
                       cropAreaStyle: {
-                        border: '2px dashed #ef4444',
+                        border: '3px dashed #ef4444',
                       },
                     }}
                     classes={{
@@ -550,25 +553,25 @@ export default function ImageEditor({
                   <span className="text-gray-400">加载中...</span>
                 </div>
               )}
+
+              {/* 裁剪提示 */}
+              {mode === 'cover' && (
+                <>
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
+                    <span>✂</span>
+                    <span className="writing-mode-vertical">裁剪区域</span>
+                    <span>✂</span>
+                  </div>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
+                    <span>✂</span>
+                    <span className="writing-mode-vertical">裁剪区域</span>
+                    <span>✂</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
-
-        {/* 裁剪提示 */}
-        {mode === 'cover' && (
-          <>
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
-              <span>✂</span>
-              <span className="writing-mode-vertical">裁剪区域</span>
-              <span>✂</span>
-            </div>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-red-400 text-xs">
-              <span>✂</span>
-              <span className="writing-mode-vertical">裁剪区域</span>
-              <span>✂</span>
-            </div>
-          </>
-        )}
       </div>
 
       {/* 底部控制栏 */}
