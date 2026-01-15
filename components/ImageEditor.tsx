@@ -165,7 +165,19 @@ export default function ImageEditor({
   }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height])
 
   // 从保存的 cropInfo 恢复状态
-  // 将原图坐标转换为压缩图坐标，恢复 react-easy-crop 的位置
+  // 
+  // 【坐标转换原理】
+  // 1. 保存时：用户在压缩图（600px短边）上编辑，react-easy-crop 返回压缩图坐标
+  //    → 转换为原图坐标保存：原图坐标 = 压缩图坐标 × (原图尺寸 / 压缩图尺寸)
+  //    → 例如：压缩图300×400，原图3000×4000，压缩图上移动10px → 原图移动100px
+  //
+  // 2. 恢复时：从数据库读取的是原图坐标（cropInfo）
+  //    → 转换为压缩图坐标：压缩图坐标 = 原图坐标 × (压缩图尺寸 / 原图尺寸)
+  //    → 例如：原图移动100px → 压缩图移动10px，设置到 react-easy-crop
+  //
+  // 3. react-easy-crop 的 crop Point：
+  //    - 表示图片中心相对于裁剪框中心的偏移（像素单位）
+  //    - 裁剪框是居中的，所以需要计算图片中心位置
   useEffect(() => {
     // 防止重复恢复
     if (restoredRef.current) return
@@ -191,53 +203,67 @@ export default function ImageEditor({
       finalCropHeight = calculated.cropHeight
     }
     
-    // 计算缩放比例：压缩图尺寸 / 原图尺寸（反向转换）
+    // 【步骤1】计算缩放比例：压缩图尺寸 / 原图尺寸
+    // 例如：压缩图600×800，原图3000×4000 → scaleX = 600/3000 = 0.2, scaleY = 800/4000 = 0.2
     const scaleX = displayImageSize.width / sourceSize.width
     const scaleY = displayImageSize.height / sourceSize.height
     
-    // 将原图坐标转换为压缩图坐标
+    // 【步骤2】将原图坐标转换为压缩图坐标
+    // 例如：原图 offsetX=100 → 压缩图 offsetX = 100 × 0.2 = 20
     const displayOffsetX = offsetX * scaleX
     const displayOffsetY = offsetY * scaleY
     const displayCropWidth = finalCropWidth * scaleX
     const displayCropHeight = finalCropHeight * scaleY
     
-    // react-easy-crop 的 crop Point 表示图片中心相对于裁剪框中心的偏移
-    // 在 react-easy-crop 中：
-    // - 图片会被缩放以覆盖裁剪框（cover 模式）
-    // - crop Point 是图片中心相对于裁剪框中心的偏移（像素单位）
+    // 【步骤3】计算 react-easy-crop 的 crop Point
     // 
-    // 保存的 offsetX/offsetY 是裁剪区域左上角在原图中的位置
-    // 裁剪区域中心在原图上的位置 = offsetX + cropWidth/2, offsetY + cropHeight/2
-    // 裁剪区域中心在压缩图上的位置 = (offsetX + cropWidth/2) * scaleX, (offsetY + cropHeight/2) * scaleY
+    // react-easy-crop 的 crop Point 表示：图片中心相对于裁剪框中心的偏移（像素单位）
     // 
-    // 在 react-easy-crop 中，裁剪框是居中的，所以裁剪框中心 = 压缩图中心 = displayImageSize.width/2
-    // 
-    // 图片中心在压缩图上的位置 = 裁剪区域中心在压缩图上的位置
-    // crop.x = 图片中心 - 裁剪框中心 = (offsetX + cropWidth/2) * scaleX - displayImageSize.width/2
+    // 理解要点：
+    // 1. 保存的 offsetX/offsetY 是裁剪区域左上角在原图中的位置
+    // 2. 裁剪区域中心在原图上的位置 = offsetX + cropWidth/2, offsetY + cropHeight/2
+    // 3. 裁剪区域中心在压缩图上的位置 = (offsetX + cropWidth/2) × scaleX, (offsetY + cropHeight/2) × scaleY
+    // 4. 在 react-easy-crop 中，裁剪框是居中的，所以裁剪框中心 = 压缩图中心 = displayImageSize.width/2
+    // 5. crop.x = 图片中心 - 裁剪框中心 = 裁剪区域中心 - 压缩图中心
+    //
+    // 示例计算：
+    // - 原图：3000×4000，offsetX=100, cropWidth=2000
+    // - 压缩图：600×800，scaleX=0.2
+    // - 裁剪区域中心在原图：100 + 2000/2 = 1100
+    // - 裁剪区域中心在压缩图：1100 × 0.2 = 220
+    // - 压缩图中心：600/2 = 300
+    // - crop.x = 220 - 300 = -80（图片中心在裁剪框中心左侧80px）
     
+    // 计算裁剪区域中心在压缩图上的位置
     const cropAreaCenterX = (offsetX + finalCropWidth / 2) * scaleX
     const cropAreaCenterY = (offsetY + finalCropHeight / 2) * scaleY
+    
+    // 计算压缩图中心（也是裁剪框中心）
     const containerCenterX = displayImageSize.width / 2
     const containerCenterY = displayImageSize.height / 2
     
+    // 计算图片中心相对于裁剪框中心的偏移（这就是 react-easy-crop 需要的 crop Point）
     const cropX = cropAreaCenterX - containerCenterX
     const cropY = cropAreaCenterY - containerCenterY
     
-    // 设置恢复的位置
+    // 【步骤4】设置恢复的位置和区域
+    // 
+    // setCrop：设置图片中心相对于裁剪框中心的偏移，react-easy-crop 会根据这个值定位图片
     setCrop({ x: cropX, y: cropY })
-    setZoom(1)
+    setZoom(1) // 缩放设为1（不缩放）
     
-    // 设置 croppedAreaPixels（用于保存时直接使用，避免重新计算）
+    // setCroppedAreaPixels：保存压缩图上的裁剪区域坐标
+    // 这个值会在用户保存时使用，避免重新计算（因为 react-easy-crop 的 onCropComplete 会更新它）
     const initialArea: Area = {
-      x: displayOffsetX,
-      y: displayOffsetY,
-      width: displayCropWidth,
-      height: displayCropHeight,
+      x: displayOffsetX,      // 裁剪区域左上角在压缩图上的X坐标
+      y: displayOffsetY,      // 裁剪区域左上角在压缩图上的Y坐标
+      width: displayCropWidth, // 裁剪区域在压缩图上的宽度
+      height: displayCropHeight, // 裁剪区域在压缩图上的高度
     }
     setCroppedAreaPixels(initialArea)
     setInitialCroppedAreaPixels(initialArea) // 设置初始值，只设置一次
     
-    restoredRef.current = true
+    restoredRef.current = true // 标记已恢复，防止重复恢复
     
     console.log('🔄 恢复编辑位置:', {
       原图坐标: { 
@@ -308,26 +334,6 @@ export default function ImageEditor({
       
       const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
       const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
-      
-      console.log('📐 裁剪参数（压缩图坐标）:', {
-        压缩图: {
-          offsetX: Math.round(croppedAreaPixels.x),
-          offsetY: Math.round(croppedAreaPixels.y),
-          cropWidth: Math.round(croppedAreaPixels.width),
-          cropHeight: Math.round(croppedAreaPixels.height),
-        },
-        缩放比例: { scaleX, scaleY },
-      })
-      console.log('📐 裁剪参数（原图坐标）:', {
-        原图: {
-          offsetX: realOffsetX,
-          offsetY: realOffsetY,
-          cropWidth: realCropWidth,
-          cropHeight: realCropHeight,
-        },
-        原图尺寸: sourceSize,
-      })
-      console.log('🔗 x-oss-process URL:', ossCropUrl)
     }
   }, [mode, sourceSize, displayImageSize, photoData.originalUrl, photoData.thumbnailUrl, photoData.width, photoData.height])
 
@@ -382,9 +388,7 @@ export default function ImageEditor({
       }
 
       // 打印最终的 OSS URL
-      const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
-      console.log('💾 保存裁剪参数（默认居中）:', cropInfo)
+      const ossCropUrl = buildOssCropUrl(photoData.originalUrl, cropInfo)
       console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
 
       onSave(cropInfo)
@@ -499,6 +503,7 @@ export default function ImageEditor({
                     onCropComplete={onCropComplete}
                     initialCroppedAreaPixels={initialCroppedAreaPixels}
                     // 禁止缩放，只允许拖拽
+                    objectFit='contain'
                     minZoom={1}
                     maxZoom={1}
                     restrictPosition={true}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getListThumbnailUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { getListThumbnailUrl, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface PhotoPreviewCardProps {
   image: ImageType
@@ -43,8 +43,25 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
 
   // 渲染图片 - 根据样式类型使用不同的 object-fit
   const renderImage = () => {
-    if (styleType === 'cover') {
-      // Cover 模式：使用 object-cover 实现居中裁切
+    if (styleType === 'cover' && image.cropInfo) {
+      // Cover 模式：如果有 cropInfo，使用精确裁切的 OSS URL
+      const croppedUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
+        autoRotated: image.autoRotated,
+        targetWidth: 300, // 列表页缩略图短边宽度
+        useShortEdge: true, // 使用短边缩放，与 getListThumbnailUrl 保持一致
+        quality: 70,
+        format: 'jpg',
+      })
+
+      return (
+        <img
+          src={croppedUrl}
+          alt={image.filename || '照片'}
+          className="w-full h-full object-cover"
+        />
+      )
+    } else if (styleType === 'cover') {
+      // Cover 模式：无 cropInfo 时，回退到居中裁切（兼容旧数据）
       return (
         <img
           src={previewUrl}

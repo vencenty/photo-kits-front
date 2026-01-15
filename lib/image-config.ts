@@ -288,11 +288,12 @@ export interface SimpleCropInfo {
  * @returns 带裁剪参数的 URL
  */
 export function buildOssCropUrl(
-  originalUrl: string, 
-  cropInfo: SimpleCropInfo, 
+  originalUrl: string,
+  cropInfo: SimpleCropInfo,
   options?: {
     autoRotated?: boolean
     targetWidth?: number
+    useShortEdge?: boolean
     quality?: number
     format?: string
   }
@@ -314,7 +315,7 @@ export function buildOssCropUrl(
   }
 
   const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
-  const { autoRotated, targetWidth, quality, format } = options || {}
+  const { autoRotated, targetWidth, useShortEdge, quality, format } = options || {}
 
   const params: string[] = []
 
@@ -329,7 +330,13 @@ export function buildOssCropUrl(
 
   // 添加压缩参数（用于列表页）
   if (targetWidth) {
-    params.push(`resize,w_${targetWidth}`)
+    if (useShortEdge) {
+      // 使用短边缩放
+      params.push(`resize,s_${targetWidth}`)
+    } else {
+      // 使用固定宽度缩放
+      params.push(`resize,w_${targetWidth}`)
+    }
   }
 
   if (quality !== undefined) {
