@@ -7,7 +7,7 @@ import type { Area, Point } from 'react-easy-crop'
 import {
   type Image as ImageType
 } from '@/lib/store'
-import { getEditImageUrl, SimpleCropInfo, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { getEditThumbnailUrl, SimpleCropInfo, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface ImageEditorProps {
   image: ImageType
@@ -112,9 +112,9 @@ export default function ImageEditor({
     const originalUrl = photoData.thumbnailUrl || photoData.originalUrl
     if (!originalUrl) return
 
-    // 使用编辑页压缩配置，不再传递旋转参数
-    const editUrl = getEditImageUrl(originalUrl, false)
-    setImageUrl(editUrl)
+    // 使用编辑缩略图配置（短边600px），加载速度快体验友好
+    const thumbnailUrl = getEditThumbnailUrl(originalUrl)
+    setImageUrl(thumbnailUrl)
 
     // 预加载图片获取尺寸
     const img = document.createElement('img')
@@ -148,7 +148,7 @@ export default function ImageEditor({
     }
     img.onerror = () => {
       // 降级使用原图
-      if (editUrl !== originalUrl) {
+      if (thumbnailUrl !== originalUrl) {
         setImageUrl(originalUrl)
         setDisplayImageSize({
           width: photoData.width || 0,
@@ -156,7 +156,7 @@ export default function ImageEditor({
         })
       }
     }
-    img.src = editUrl
+    img.src = thumbnailUrl
 
     return () => {
       img.onload = null

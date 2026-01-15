@@ -57,6 +57,19 @@ export const IMAGE_COMPRESS_CONFIG = {
     quality: 70,    // 图片质量（0-100）
     format: 'jpg',  // 输出格式：jpg/webp/png，空字符串表示不转换
   } as OssImageConfig,
+
+  /**
+   * 编辑缩略图配置
+   * 用于编辑时的快速加载和显示，尺寸小速度快
+   * 使用短边缩放：按照短边压缩到600px，质量70%，格式化为jpg
+   */
+  editThumbnail: {
+    width: 600,      // 短边缩放尺寸（像素）
+    height: 0,      // 0 表示按宽度等比例缩放
+    quality: 70,    // 图片质量（0-100）
+    format: 'jpg',  // 输出格式：jpg/webp/png，空字符串表示不转换
+    useShortEdge: true, // 使用短边缩放
+  } as OssImageConfig & { useShortEdge?: boolean },
 } as const
 
 /**
@@ -76,7 +89,10 @@ export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolea
 
 
   // 添加尺寸参数
-  if (config.width > 0 && config.height > 0) {
+  if ((config as any).useShortEdge && config.width > 0) {
+    // 使用短边缩放：s_600 表示按照短边压缩到600px
+    params.push(`resize,s_${config.width}`)
+  } else if (config.width > 0 && config.height > 0) {
     params.push(`resize,w_${config.width},h_${config.height}`)
   } else if (config.width > 0) {
     params.push(`resize,w_${config.width}`)
@@ -153,6 +169,33 @@ export function getListImageUrl(url: string, autoRotated?: boolean): string {
  */
 export function getEditImageUrl(url: string, autoRotated?: boolean): string {
   return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit)
+}
+
+/**
+ * 获取编辑缩略图 URL
+ * 用于编辑时的快速加载和显示，图片小体验友好
+ * @param url 原始图片 URL
+ * @returns 编辑缩略图 URL
+ */
+export function getEditThumbnailUrl(url: string): string {
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.editThumbnail)
+}
+
+/**
+ * 获取预览图 URL（用于列表页）
+ * 基于裁切参数拼接，支持横图自动旋转为竖图显示
+ * @param url 原始图片 URL
+ * @param cropInfo 裁剪信息
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @returns 预览图 URL
+ */
+export function getPreviewImageUrl(url: string, cropInfo: SimpleCropInfo, autoRotated?: boolean): string {
+  return buildOssCropUrl(url, cropInfo, {
+    autoRotated,
+    targetWidth: IMAGE_COMPRESS_CONFIG.list.width,
+    quality: IMAGE_COMPRESS_CONFIG.list.quality,
+    format: IMAGE_COMPRESS_CONFIG.list.format,
+  })
 }
 
 // ==================== OSS 裁剪相关 ====================
