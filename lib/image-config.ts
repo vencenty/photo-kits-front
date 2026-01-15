@@ -172,14 +172,69 @@ export function getEditImageUrl(url: string, autoRotated?: boolean): string {
 }
 
 /**
+ * 获取短边缩略图 URL（通用方法）
+ * 可以自定义短边宽度、质量、格式等参数
+ * @param url 原始图片 URL
+ * @param options 可选参数
+ * @param options.shortEdge 短边宽度（像素），默认600
+ * @param options.quality 图片质量（0-100），默认70
+ * @param options.format 输出格式（jpg/webp/png），默认jpg
+ * @param options.autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @returns 缩略图 URL
+ */
+export function getShortEdgeThumbnailUrl(
+  url: string,
+  options?: {
+    shortEdge?: number
+    quality?: number
+    format?: string
+    autoRotated?: boolean
+  }
+): string {
+  const { shortEdge = 600, quality = 70, format = 'jpg', autoRotated } = options || {}
+  
+  const config: OssImageConfig & { useShortEdge?: boolean } = {
+    width: shortEdge,
+    height: 0,
+    quality,
+    format,
+    useShortEdge: true,
+  }
+  
+  return applyOssImageCompress(url, config, autoRotated)
+}
+
+/**
  * 获取编辑缩略图 URL
  * 用于编辑时的快速加载和显示，图片小体验友好
+ * 使用短边600px，清晰度更高
  * @param url 原始图片 URL
  * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 编辑缩略图 URL
  */
 export function getEditThumbnailUrl(url: string, autoRotated?: boolean): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.editThumbnail, autoRotated)
+  return getShortEdgeThumbnailUrl(url, {
+    shortEdge: 600,
+    quality: 70,
+    format: 'jpg',
+    autoRotated,
+  })
+}
+
+/**
+ * 获取列表页缩略图 URL
+ * 用于列表页的快速加载，使用短边300px，加载更快
+ * @param url 原始图片 URL
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @returns 列表页缩略图 URL
+ */
+export function getListThumbnailUrl(url: string, autoRotated?: boolean): string {
+  return getShortEdgeThumbnailUrl(url, {
+    shortEdge: 300,
+    quality: 70,
+    format: 'jpg',
+    autoRotated,
+  })
 }
 
 /**

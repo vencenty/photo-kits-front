@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getEditThumbnailUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { getListThumbnailUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface PhotoPreviewCardProps {
   image: ImageType
@@ -36,10 +36,10 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 获取样式类型
   const styleType = image.cropInfo?.styleType || image.editState?.mode || 'cover'
   
-  // 获取原图 URL，直接拼接缩略图参数：?x-oss-process=image/resize,s_600/quality,q_70/format,jpg
+  // 获取原图 URL，使用列表页缩略图（短边300px，加载更快）
   // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-  const previewUrl = getEditThumbnailUrl(originalUrl, image.autoRotated)
+  const previewUrl = getListThumbnailUrl(originalUrl, image.autoRotated)
 
   // 渲染图片 - 根据样式类型使用不同的 object-fit
   const renderImage = () => {
