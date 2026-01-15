@@ -162,7 +162,7 @@ export default function ImageEditor({
       img.onload = null
       img.onerror = null
     }
-  }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height, sourceSize.width, sourceSize.height])
+  }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height])
 
   // 从保存的 cropInfo 恢复状态
   // 将原图坐标转换为压缩图坐标，恢复 react-easy-crop 的位置

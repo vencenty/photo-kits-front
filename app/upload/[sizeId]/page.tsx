@@ -856,7 +856,10 @@ export default function UploadPage() {
 
   // 批量应用裁剪模式
   const handleApplyBatchCrop = async (mode: CropMode) => {
-    const targetIds = selectedIds.length === 0 ? images.map(img => img.id) : selectedIds
+    if (selectedIds.length === 0) {
+      return
+    }
+    const targetIds = selectedIds
 
     const updates = targetIds.map((id) => {
       const img = images.find(i => i.id === id)
@@ -1359,8 +1362,11 @@ export default function UploadPage() {
                     <button
                       key={mode}
                       onClick={() => handleApplyBatchCrop(mode)}
+                      disabled={selectedIds.length === 0}
                       className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
-                        batchCropMode === mode
+                        selectedIds.length === 0
+                          ? 'border-gray-300 text-gray-400 bg-gray-50 cursor-not-allowed'
+                          : batchCropMode === mode
                           ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
                           : 'border-gray-300 text-gray-600'
                       }`}
@@ -1396,7 +1402,12 @@ export default function UploadPage() {
                   clearSelection()
                   setBatchCropMode(null)
                 }}
-                className="w-full py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
+                className={`w-full py-3 rounded-full font-medium ${
+                  selectedIds.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-[#ff4d6d] text-white'
+                }`}
+                disabled={selectedIds.length === 0}
               >
                 完成
               </button>

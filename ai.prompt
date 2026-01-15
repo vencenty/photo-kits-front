@@ -1,0 +1,21 @@
+逻辑梳理
+
+用户上传图片之后直接通过oss获得一个 长边为 https://oss-proxy.vencenty.cc/uploads/1768370676882-xjbiaoknge.jpg?x-oss-process=image/resize,w_300/quality,q_80/format,jpg 的压缩图。
+
+记住这个参数  x-oss-process=image/resize,w_300/quality,q_80/format,jpg 的压缩图。
+
+1. imageEditor有三种模式，
+
+1是居中裁切模式
+2是全图打印模式
+3是四周留白模式
+
+1. 我需要用户上传图片后默认是居中裁切模式，这时候有个问题，用户打开的时候用的是缩略图，也就是上面的 x-oss-process=image/resize,l_300/quality,q_80/format,jpg 压缩过的图，这时候用户拖动图片产生了offsetX和offsetY这些裁切坐标，用户点击保存之后呢记录住这些裁切参数，直接拼接到阿里云oss后缀后面。?x-oss-process=image/crop,x_0,y_36,w_2560,h_1718。这时候会产生两个裁切参数，基于缩略图的裁切参数，用于客户端预览的。然后基于原图的裁切参数，基于原图的裁切参数最后上报给服务端服务端拖图用。
+
+
+如果用户在列表页面，图片会发生旋转，这时候在参数的最后面增加一个 rotate参数就可以了。这样裁切功能就做完了。2. 全图打印模式更简单，此模式下不允许用户编辑。进入后加载的是x-oss-process=image/resize,w_300/quality,q_80/format,jpg 的压缩图。这时候需要计算一下长图。https://oss-console-img-demo-cn-hangzhou-3az.oss-cn-hangzhou.aliyuncs.com/example1.jpg?x-oss-process=image/resize,m_pad,s_100,l_100，用m_pad模式基于照片的坐标计算出相纸的大小，比如照片原始比例是1000*2000，缩略图尺寸是100*200，那么你需要计算两个阿里云oss坐标，一个是基于缩略图的，一个是基于原图的。缩略图：假设上游的spec拿到的相纸比例是4:3，那么长边就应该是 200，短边就应该是200*相纸比例(长边处以短边)得到对应像素。原图：假设上游的spec拿到的相纸比例是4:3，那么长边就应该是 2000，短边就应该是2000*相纸比例（长边除以短边）得到对应像素。
+
+3. 四周留白样式简单：这个按照四周留白样式渲染原图就可以，如果是横图，列表页旋转一下图片。
+
+
+用户去选择批量操作的时候也是一样的道理，直接进入批量选择，入股哦用户选择批量操作，直接前端计算好对应的模式的url和缩略图的url即可，
