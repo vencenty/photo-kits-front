@@ -175,10 +175,11 @@ export function getEditImageUrl(url: string, autoRotated?: boolean): string {
  * 获取编辑缩略图 URL
  * 用于编辑时的快速加载和显示，图片小体验友好
  * @param url 原始图片 URL
+ * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
  * @returns 编辑缩略图 URL
  */
-export function getEditThumbnailUrl(url: string): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.editThumbnail)
+export function getEditThumbnailUrl(url: string, autoRotated?: boolean): string {
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.editThumbnail, autoRotated)
 }
 
 /**

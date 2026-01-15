@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getListImageUrl, buildOssCropUrl, getPreviewImageUrl, SimpleCropInfo, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { getEditThumbnailUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface PhotoPreviewCardProps {
   image: ImageType
@@ -14,17 +14,11 @@ interface PhotoPreviewCardProps {
 export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isClient, setIsClient] = useState(false)
-  const [imageError, setImageError] = useState(false)
 
   // 客户端渲染检测
   useEffect(() => {
     setIsClient(true)
   }, [])
-
-  // 图片变化时重置错误状态
-  useEffect(() => {
-    setImageError(false)
-  }, [image.id, image.cropInfo])
 
   // 如果没有 thumbnailUrl，显示占位符
   if (!image.thumbnailUrl && !image.originalUrl) {
@@ -42,106 +36,51 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 获取样式类型
   const styleType = image.cropInfo?.styleType || image.editState?.mode || 'cover'
   
-  // 获取原图 URL
+  // 获取原图 URL，直接拼接缩略图参数：?x-oss-process=image/resize,s_600/quality,q_70/format,jpg
+  // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-  
-  // 生成预览URL
-  let previewUrl: string
+  const previewUrl = getEditThumbnailUrl(originalUrl, image.autoRotated)
 
-  if (image.cropInfo && !imageError) {
-    const cropInfo = image.cropInfo as SimpleCropInfo
-
-    // 检查是否为批量设置的cover模式（没有实际裁剪，只是设置了styleType）
-    const isBatchCoverMode = cropInfo.styleType === 'cover' &&
-                            cropInfo.offsetX === 0 &&
-                            cropInfo.offsetY === 0 &&
-                            cropInfo.cropWidth === (image.autoRotated ? image.height : image.width) &&
-                            cropInfo.cropHeight === (image.autoRotated ? image.width : image.height)
-
-    if (isBatchCoverMode) {
-      // 批量cover模式：使用统一的预览缩略图基础OSS URL，与ImageEditor保持一致
-      previewUrl = getPreviewImageUrl(originalUrl, cropInfo, image.autoRotated)
-    } else {
-      // 有实际裁剪信息或非cover模式，使用裁剪URL
-      previewUrl = buildOssCropUrl(originalUrl, cropInfo, {
-        targetWidth: 300,
-        quality: 80,
-        format: 'jpg',
-        autoRotated: image.autoRotated
-      })
-    }
-  } else {
-    // 没有裁剪信息，使用普通压缩 URL
-    previewUrl = getListImageUrl(originalUrl, image.autoRotated)
-  }
-
-  // 渲染图片
+  // 渲染图片 - 根据样式类型使用不同的 object-fit
   const renderImage = () => {
-    const isLomo = styleType === 'lomo'
-    const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
-
     if (styleType === 'cover') {
-      // Cover 模式：图片裁剪后填满整个区域（与 ImageEditor 保持一致）
-      // 旋转已在 OSS 层面处理（通过 autoRotated 参数）
+      // Cover 模式：使用 object-cover 实现居中裁切
       return (
         <img
           src={previewUrl}
           alt={image.filename || '照片'}
           className="w-full h-full object-cover"
-          onError={() => {
-            console.warn('图片加载失败，降级使用原图:', previewUrl)
-            setImageError(true)
-          }}
         />
       )
     } else if (styleType === 'full') {
-      // Full 模式：完整显示图片（与 ImageEditor 保持一致）
-      // 旋转已在 OSS 层面处理（通过 autoRotated 参数）
+      // Full 模式：使用 object-contain 完整显示图片
       return (
         <div className="relative w-full h-full bg-white flex items-center justify-center">
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className="max-w-full max-h-full object-contain"
-            onError={() => setImageError(true)}
+            className="w-full h-full object-contain"
           />
         </div>
       )
     } else {
-      // Lomo 模式：留白显示（与 ImageEditor 保持一致）
-      // 旋转已在 OSS 层面处理（通过 autoRotated 参数）
+      // Lomo 模式：使用 object-contain + padding 实现留白
+      const margin = WHITE_MARGIN_PERCENT
       return (
         <div 
           className="relative w-full h-full bg-white flex items-center justify-center"
           style={{
-            padding: isLomo ? `${margin}%` : 0,
+            padding: `${margin}%`,
           }}
         >
           <img
             src={previewUrl}
             alt={image.filename || '照片'}
-            className="max-w-full max-h-full object-contain"
-            style={{
-              maxWidth: isLomo ? `${100 - margin * 2}%` : '100%',
-              maxHeight: isLomo ? `${100 - margin * 2}%` : '100%',
-            }}
-            onError={() => setImageError(true)}
+            className="w-full h-full object-contain"
           />
         </div>
       )
     }
-  }
-
-  // 降级显示（OSS 裁剪失败时）
-  const renderFallback = () => {
-    const fallbackUrl = getListImageUrl(originalUrl, image.autoRotated)
-    return (
-      <img
-        src={fallbackUrl}
-        alt={image.filename || '照片'}
-        className="w-full h-full object-cover"
-      />
-    )
   }
 
   return (
@@ -150,7 +89,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
       className="absolute inset-0 cursor-pointer"
       onClick={onClick}
     >
-      {isClient && (imageError ? renderFallback() : renderImage())}
+      {isClient && renderImage()}
     </div>
   )
 }
