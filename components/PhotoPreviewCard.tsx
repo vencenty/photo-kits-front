@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getListImageUrl, buildOssCropUrl, SimpleCropInfo, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { getListImageUrl, buildOssCropUrl, getPreviewImageUrl, SimpleCropInfo, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 interface PhotoPreviewCardProps {
   image: ImageType
@@ -45,18 +45,31 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 获取原图 URL
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
   
-  // 统一使用 buildOssCropUrl 处理，列表页需要压缩和旋转（如果是横图）
+  // 生成预览URL
   let previewUrl: string
-  
+
   if (image.cropInfo && !imageError) {
-    // 有裁剪信息，使用统一的 buildOssCropUrl
-    // cover 模式会进行裁剪，full 和 lomo 模式不会裁剪但会添加压缩和旋转参数
-    previewUrl = buildOssCropUrl(originalUrl, image.cropInfo as SimpleCropInfo, {
-      targetWidth: 300,
-      quality: 80,
-      format: 'jpg',
-      autoRotated: image.autoRotated
-    })
+    const cropInfo = image.cropInfo as SimpleCropInfo
+
+    // 检查是否为批量设置的cover模式（没有实际裁剪，只是设置了styleType）
+    const isBatchCoverMode = cropInfo.styleType === 'cover' &&
+                            cropInfo.offsetX === 0 &&
+                            cropInfo.offsetY === 0 &&
+                            cropInfo.cropWidth === (image.autoRotated ? image.height : image.width) &&
+                            cropInfo.cropHeight === (image.autoRotated ? image.width : image.height)
+
+    if (isBatchCoverMode) {
+      // 批量cover模式：使用统一的预览缩略图基础OSS URL，与ImageEditor保持一致
+      previewUrl = getPreviewImageUrl(originalUrl, cropInfo, image.autoRotated)
+    } else {
+      // 有实际裁剪信息或非cover模式，使用裁剪URL
+      previewUrl = buildOssCropUrl(originalUrl, cropInfo, {
+        targetWidth: 300,
+        quality: 80,
+        format: 'jpg',
+        autoRotated: image.autoRotated
+      })
+    }
   } else {
     // 没有裁剪信息，使用普通压缩 URL
     previewUrl = getListImageUrl(originalUrl, image.autoRotated)

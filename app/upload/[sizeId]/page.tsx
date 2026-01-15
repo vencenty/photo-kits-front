@@ -876,42 +876,18 @@ export default function UploadPage() {
       }
 
       // 创建新的 cropInfo（简化版，用于批量设置模式）
-      // 如果 autoRotated 为 true，需要基于旋转后的尺寸计算裁剪
       let cropInfo: SimpleCropInfo
-      
+
       if (mode === 'cover') {
-        // cover 模式需要计算裁剪尺寸
-        // 如果 autoRotated 为 true，基于旋转后的尺寸计算
-        const rotatedWidth = img.autoRotated ? img.height : img.width
-        const rotatedHeight = img.autoRotated ? img.width : img.height
-        const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
-        
-        // 计算裁剪尺寸（基于旋转后的图片尺寸）
-        const imageRatio = rotatedWidth / rotatedHeight
-        let cropWidth: number
-        let cropHeight: number
-        
-        if (imageRatio > paperRatio) {
-          // 图片更宽，裁剪左右
-          cropHeight = rotatedHeight
-          cropWidth = rotatedHeight * paperRatio
-        } else {
-          // 图片更高，裁剪上下
-          cropWidth = rotatedWidth
-          cropHeight = rotatedWidth / paperRatio
-        }
-        
-        // 居中裁剪
-        const offsetX = (rotatedWidth - cropWidth) / 2
-        const offsetY = (rotatedHeight - cropHeight) / 2
-        
+        // 批量cover模式：不再计算具体的裁剪坐标
+        // 直接使用与ImageEditor相同的预览URL，列表页通过CSS object-cover实现居中裁切
         cropInfo = {
-          offsetX: Math.round(offsetX),
-          offsetY: Math.round(offsetY),
-          cropWidth: Math.round(cropWidth),
-          cropHeight: Math.round(cropHeight),
-          sourceWidth: img.width, // 原图尺寸（未旋转）
-          sourceHeight: img.height, // 原图尺寸（未旋转）
+          offsetX: 0,
+          offsetY: 0,
+          cropWidth: img.autoRotated ? img.height : img.width,
+          cropHeight: img.autoRotated ? img.width : img.height,
+          sourceWidth: img.width,
+          sourceHeight: img.height,
           styleType: 'cover',
         }
       } else {
