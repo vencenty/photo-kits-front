@@ -136,6 +136,7 @@ export interface PhotoDetail {
   cropMode: string
   takenAt: string
   transform?: PhotoTransform
+  cropInfo?: CropInfo // 从服务端获取的裁剪信息
   outputUrl?: string  // 处理后的下载URL
 }
 

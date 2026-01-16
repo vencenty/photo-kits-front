@@ -348,11 +348,46 @@ export default function UploadPage() {
           result.photos.forEach(photo => {
             // 构建 transform 数据
             // 如果服务器返回的 styleType 是后端的值（cover/full/lomo），需要转换为前端值
-            const serverStyleType = photo.transform?.styleType 
+            const serverStyleType = photo.transform?.styleType
             // 如果 transform 存在但 styleType 缺失，从 cropMode 获取
             const fallbackCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
             const finalStyleType = (serverStyleType || fallbackCropMode || 'cover') as 'cover' | 'full' | 'lomo'
-            
+
+            // 将服务端的 CropInfo 转换为前端的 SimpleCropInfo
+            let simpleCropInfo: SimpleCropInfo | undefined
+            if (photo.cropInfo && currentSession) {
+              // 根据样式类型计算cropWidth和cropHeight
+              let cropWidth = photo.cropInfo.sourceWidth
+              let cropHeight = photo.cropInfo.sourceHeight
+
+              if (photo.cropInfo.styleType === 'cover') {
+                // cover模式：根据当前session的相纸比例计算裁剪尺寸
+                const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+                const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
+
+                if (imageAspectRatio > canvasAspectRatio) {
+                  // 图片更宽，裁剪左右
+                  cropWidth = photo.cropInfo.sourceHeight * canvasAspectRatio
+                  cropHeight = photo.cropInfo.sourceHeight
+                } else {
+                  // 图片更高，裁剪上下
+                  cropWidth = photo.cropInfo.sourceWidth
+                  cropHeight = photo.cropInfo.sourceWidth / canvasAspectRatio
+                }
+              }
+              // full和lomo模式使用原图尺寸
+
+              simpleCropInfo = {
+                offsetX: photo.cropInfo.offsetX,
+                offsetY: photo.cropInfo.offsetY,
+                cropWidth: cropWidth,
+                cropHeight: cropHeight,
+                sourceWidth: photo.cropInfo.sourceWidth,
+                sourceHeight: photo.cropInfo.sourceHeight,
+                styleType: (photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo'
+              }
+            }
+
             const existingImage = existingImagesMap.get(photo.photoId)
 
             if (existingImage) {
@@ -361,14 +396,16 @@ export default function UploadPage() {
                 originalUrl: photo.url,
                 thumbnailUrl: existingImage.thumbnailUrl || photo.url,
                 printCount: photo.quantity || existingImage.printCount || 1,
-                outputUrl: photo.outputUrl, // 保存最终成品URL
+                outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
                   backendSynced: true,
                 },
-                // 清除本地可能存在的 cropInfo，因为服务器数据中没有 cropInfo
-                cropInfo: undefined,
+                // 设置从服务端获取的 cropInfo
+                cropInfo: simpleCropInfo,
+                // 清除 editState，因为现在使用 cropInfo
+                editState: undefined,
               }
               
        
@@ -378,15 +415,6 @@ export default function UploadPage() {
               // 新照片，添加到列表
               // 如果服务器返回了 cropMode，需要转换为前端的 mode
               const serverCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
-              const editState: EditState = {
-                mode: finalStyleType,
-                scale: 1,
-                x: 0,
-                y: 0,
-                rotation: photo.isLandscape ? 90 : 0,
-                canvasWidth: currentSession.canvasWidth,
-                canvasHeight: currentSession.canvasHeight,
-              }
 
               newImages.push({
                 id: photo.photoId,
@@ -397,9 +425,9 @@ export default function UploadPage() {
                 width: photo.originalWidth,
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
-                editState,
+                cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
                 isLandscape: photo.isLandscape,
-                outputUrl: photo.outputUrl, // 保存最终成品URL
+                outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,

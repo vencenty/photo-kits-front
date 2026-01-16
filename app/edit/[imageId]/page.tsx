@@ -46,6 +46,7 @@ export default function EditPage() {
           editState: null, // 暂时设为 null，后续可以从 cropMode 转换
           cropInfo: undefined, // 暂时 undefined，后续可以扩展服务端支持
           transform: undefined, // 服务端和前端的 PhotoTransform 类型不兼容，先设为 undefined
+          outputUrl: response.photo.outputUrl || response.photo.url, // 设置默认值：如果不存在outputUrl，则使用原图url
         }
 
         setImage(photoData)

@@ -23,7 +23,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 如果没有 thumbnailUrl，显示占位符
   if (!image.thumbnailUrl && !image.originalUrl) {
     return (
-      <div 
+      <div
         ref={containerRef}
         className="absolute inset-0 bg-gray-100 flex flex-col items-center justify-center"
       >
@@ -33,44 +33,23 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
     )
   }
 
+
   // 获取样式类型
   const styleType = image.cropInfo?.styleType || image.editState?.mode || 'cover'
-  
+
   // 获取原图 URL，使用列表页缩略图（短边300px，加载更快）
   // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-  const previewUrl = getListThumbnailUrl(originalUrl, image.isLandscape)
 
+  const previewUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
+    isLandscape: image.isLandscape,
+    shortWidth: 300, // 列表页缩略图短边宽度
+    quality: 70,
+    format: 'jpg',
+  })
+  
   // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
   const renderImage = () => {
-    // 如果有 outputUrl（最终成品），直接使用
-    if (image.outputUrl) {
-      return (
-        <img
-          src={image.outputUrl}
-          alt={image.filename || '照片'}
-          className="w-full h-full object-cover"
-        />
-      )
-    }
-
-    // 如果有cropInfo，使用精确裁切的OSS URL（适用于任何模式）
-    if (image.cropInfo) {
-      const croppedUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
-        isLandscape: image.isLandscape,
-        shortWidth: 300, // 列表页缩略图短边宽度
-        quality: 70,
-        format: 'jpg',
-      })
-
-      return (
-        <img
-          src={croppedUrl}
-          alt={image.filename || '照片'}
-          className="w-full h-full object-cover"
-        />
-      )
-    }
 
     // 没有cropInfo时，根据样式类型使用不同的显示方式
     if (styleType === 'cover') {
@@ -96,7 +75,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
     } else {
       // Lomo 模式：使用 object-contain + padding 实现留白
       return (
-        <div 
+        <div
           className="relative w-full h-full bg-white flex items-center justify-center"
           style={{
             padding: `${WHITE_MARGIN_PERCENT}%`,
@@ -113,7 +92,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   }
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="absolute inset-0 cursor-pointer"
       onClick={onClick}

@@ -88,17 +88,17 @@ export function buildOssImageParams(config: OssImageConfig, isLandscape?: boolea
   const params: string[] = []
 
 
-  // 添加尺寸参数
-  if ((config as any).useShortEdge && config.width > 0) {
-    // 使用短边缩放：s_600 表示按照短边压缩到600px
-    params.push(`resize,s_${config.width}`)
-  } else if (config.width > 0 && config.height > 0) {
-    params.push(`resize,w_${config.width},h_${config.height}`)
-  } else if (config.width > 0) {
-    params.push(`resize,w_${config.width}`)
-  } else if (config.height > 0) {
-    params.push(`resize,h_${config.height}`)
-  }
+  // // 添加尺寸参数
+  // if ((config as any).useShortEdge && config.width > 0) {
+  //   // 使用短边缩放：s_600 表示按照短边压缩到600px
+  //   params.push(`resize,s_${config.width}`)
+  // } else if (config.width > 0 && config.height > 0) {
+  //   params.push(`resize,w_${config.width},h_${config.height}`)
+  // } else if (config.width > 0) {
+  //   params.push(`resize,w_${config.width}`)
+  // } else if (config.height > 0) {
+  //   params.push(`resize,h_${config.height}`)
+  // }
 
   // 添加质量参数
   if (config.quality > 0) {
@@ -289,7 +289,7 @@ export interface SimpleCropInfo {
  */
 export function buildOssCropUrl(
   originalUrl: string,
-  cropInfo: SimpleCropInfo,
+  cropInfo?: SimpleCropInfo,
   options?: {
     isLandscape?: boolean
     shortWidth?: number
@@ -298,6 +298,8 @@ export function buildOssCropUrl(
   }
 ): string {
   if (!originalUrl) return originalUrl
+
+  if (!cropInfo) return originalUrl
 
   // 如果是 data URL 或本地文件，不处理
   if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
@@ -313,7 +315,7 @@ export function buildOssCropUrl(
     return originalUrl
   }
 
-  const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
+  const { offsetX, offsetY, cropWidth, cropHeight, styleType} = cropInfo
   const { isLandscape, shortWidth, quality, format } = options || {}
 
   const params: string[] = []
