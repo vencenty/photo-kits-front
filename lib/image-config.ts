@@ -293,7 +293,6 @@ export function buildOssCropUrl(
   options?: {
     isLandscape?: boolean
     shortWidth?: number
-    useShortEdge?: boolean
     quality?: number
     format?: string
   }
@@ -315,7 +314,7 @@ export function buildOssCropUrl(
   }
 
   const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
-  const { isLandscape, shortWidth, useShortEdge, quality, format } = options || {}
+  const { isLandscape, shortWidth, quality, format } = options || {}
 
   const params: string[] = []
 
