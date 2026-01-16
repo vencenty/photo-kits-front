@@ -32,6 +32,19 @@ export default function EditPage() {
         setIsLoading(true)
         const response = await getPhotoDetail(imageId)
 
+        // 根据cropMode设置初始编辑状态
+        const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
+          // 将后端的cropMode转换为前端的编辑模式
+          switch (response.photo.cropMode) {
+            case 'center': return 'cover' // 后端center对应前端cover
+            case 'full': return 'full'
+            case 'lomo': return 'lomo'
+            default: return 'cover'
+          }
+        }
+
+        const initialMode = getInitialMode()
+
         // 转换服务端数据为前端格式
         const photoData: Image = {
           id: response.photo.photoId,
@@ -43,8 +56,17 @@ export default function EditPage() {
           height: response.photo.originalHeight,
           printCount: response.photo.quantity,
           isLandscape: response.photo.isLandscape,
-          editState: null, // 暂时设为 null，后续可以从 cropMode 转换
-          cropInfo: undefined, // 暂时 undefined，后续可以扩展服务端支持
+          cropMode: response.photo.cropMode, // 保存后端的cropMode
+          editState: {
+            mode: initialMode,
+            scale: 1,
+            x: 0,
+            y: 0,
+            rotation: response.photo.isLandscape ? 90 : 0,
+            canvasWidth: currentSession?.canvasWidth || 127,
+            canvasHeight: currentSession?.canvasHeight || 89,
+          },
+          cropInfo: undefined, // 编辑时重新生成
           transform: undefined, // 服务端和前端的 PhotoTransform 类型不兼容，先设为 undefined
           outputUrl: response.photo.outputUrl || response.photo.url, // 设置默认值：如果不存在outputUrl，则使用原图url
         }
