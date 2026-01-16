@@ -885,6 +885,7 @@ export default function UploadPage() {
         id,
         updates: {
           editState: newEditState,
+          cropMode: mapCropModeToServer(mode), // 更新cropMode，让PhotoPreviewCard能正确显示样式
           // 注意：批量操作不设置 cropInfo，只有真正编辑过（有精确裁剪坐标）时才设置
           // cropInfo: undefined, // 清除现有的 cropInfo
           // 清除旧的 transform
@@ -904,11 +905,18 @@ export default function UploadPage() {
         cropMode: mapCropModeToServer(mode),
       })
       console.log(`批量更新成功: ${result.updatedCount} 张照片`)
+
+      // 批量更新成功后，清空选择状态，退出批量模式
+      setIsBatchMode(false)
+      clearSelection()
     } catch (error) {
       console.error('批量更新照片裁剪模式失败:', error)
     } finally {
       setApiLoading(false, '')
     }
+
+
+
   }
 
   const totalPrintCount = images.reduce((sum, img) => sum + img.printCount, 0)
@@ -1154,14 +1162,15 @@ export default function UploadPage() {
                           className="relative bg-white"
                           style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
                         >
-                  <PhotoPreviewCard 
-                    image={image} 
+                  <PhotoPreviewCard
+                    key={`${image.id}-${image.cropMode}`} // 添加key，确保cropMode变化时重新渲染
+                    image={image}
                     aspectRatio={paperRatio}
                     onClick={
-                      isBatchMode 
+                      isBatchMode
                         ? undefined // 批量模式下，由外层 div 处理点击，避免重复触发
-                        : (image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced 
-                          ? () => handleEdit(image.id) 
+                        : (image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced
+                          ? () => handleEdit(image.id)
                           : undefined)
                     }
                   />
