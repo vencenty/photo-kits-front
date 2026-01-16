@@ -41,7 +41,6 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
 
-  console.log(originalUrl, image.cropInfo)
   const previewUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
     isLandscape: image.isLandscape,
     shortWidth: 200, // 列表页缩略图短边宽度
