@@ -148,7 +148,7 @@ export interface Image {
   editState: EditState | null
   transform?: PhotoTransform // 仿射变换信息（旧版本，保留兼容）
   cropInfo?: SimpleCropInfo // 简化的裁剪信息（新版本，用于 react-easy-crop）
-  autoRotated?: boolean // 是否自动旋转（横图转竖图）
+  isLandscape?: boolean // 是否自动旋转（横图转竖图）
   file?: File // 前端保存原始文件对象
   // 上传状态跟踪
   uploadStatus?: {
@@ -316,8 +316,8 @@ export const useStore = create<StoreState>()(
           printCount: img.printCount,
           editState: img.editState,
           transform: img.transform, // 保存变换信息（旧版本兼容）
-          cropInfo: img.cropInfo, // 保存裁剪信息（新版本，用于恢复编辑状态）
-          autoRotated: img.autoRotated, // 保存自动旋转状态
+          // cropInfo: img.cropInfo, // ❌ 移除：不保存裁剪信息，避免缓存过期数据
+          isLandscape: img.isLandscape, // 保存自动旋转状态
           // 不保存这些大数据:
           // originalUrl: undefined,
           // thumbnailUrl: undefined,

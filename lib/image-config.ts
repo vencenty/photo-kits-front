@@ -81,10 +81,10 @@ export const WHITE_MARGIN_PERCENT = 2
 /**
  * 构建 OSS 图片处理参数
  * @param config 压缩配置
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  * @returns OSS 图片处理参数字符串
  */
-export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolean): string {
+export function buildOssImageParams(config: OssImageConfig, isLandscape?: boolean): string {
   const params: string[] = []
 
 
@@ -110,8 +110,8 @@ export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolea
     params.push(`format,${config.format}`)
   }
 
-  // 如果 autoRotated 为 true，添加旋转参数（旋转应该在所有操作之后）
-  if (autoRotated) {
+  // 如果 isLandscape 为 true，添加旋转参数（旋转应该在所有操作之后）
+  if (isLandscape) {
     params.push('rotate,90')
   }
 
@@ -122,10 +122,10 @@ export function buildOssImageParams(config: OssImageConfig, autoRotated?: boolea
  * 给 OSS URL 添加压缩参数
  * @param url 原始图片 URL
  * @param config 压缩配置
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  * @returns 添加了压缩参数的 URL
  */
-export function applyOssImageCompress(url: string, config: OssImageConfig, autoRotated?: boolean): string {
+export function applyOssImageCompress(url: string, config: OssImageConfig, isLandscape?: boolean): string {
   if (!url) return url
 
   // 如果是 data URL 或本地文件，不处理
@@ -143,7 +143,7 @@ export function applyOssImageCompress(url: string, config: OssImageConfig, autoR
   }
 
   // 构建 OSS 图片处理参数
-  const ossParams = buildOssImageParams(config, autoRotated)
+  const ossParams = buildOssImageParams(config, isLandscape)
   if (!ossParams) {
     return url
   }
@@ -156,18 +156,18 @@ export function applyOssImageCompress(url: string, config: OssImageConfig, autoR
 /**
  * 获取列表页压缩后的图片 URL
  * @param url 原始图片 URL
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  */
-export function getListImageUrl(url: string, autoRotated?: boolean): string {
-  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list, autoRotated)
+export function getListImageUrl(url: string, isLandscape?: boolean): string {
+  return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.list, isLandscape)
 }
 
 /**
  * 获取编辑页压缩后的图片 URL
  * @param url 原始图片 URL
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  */
-export function getEditImageUrl(url: string, autoRotated?: boolean): string {
+export function getEditImageUrl(url: string, isLandscape?: boolean): string {
   return applyOssImageCompress(url, IMAGE_COMPRESS_CONFIG.edit)
 }
 
@@ -179,7 +179,7 @@ export function getEditImageUrl(url: string, autoRotated?: boolean): string {
  * @param options.shortEdge 短边宽度（像素），默认600
  * @param options.quality 图片质量（0-100），默认70
  * @param options.format 输出格式（jpg/webp/png），默认jpg
- * @param options.autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param options.isLandscape 是否自动旋转（横图转竖图，旋转90度）
  * @returns 缩略图 URL
  */
 export function getShortEdgeThumbnailUrl(
@@ -188,10 +188,10 @@ export function getShortEdgeThumbnailUrl(
     shortEdge?: number
     quality?: number
     format?: string
-    autoRotated?: boolean
+    isLandscape?: boolean
   }
 ): string {
-  const { shortEdge = 600, quality = 70, format = 'jpg', autoRotated } = options || {}
+  const { shortEdge = 600, quality = 70, format = 'jpg', isLandscape } = options || {}
   
   const config: OssImageConfig & { useShortEdge?: boolean } = {
     width: shortEdge,
@@ -201,7 +201,7 @@ export function getShortEdgeThumbnailUrl(
     useShortEdge: true,
   }
   
-  return applyOssImageCompress(url, config, autoRotated)
+  return applyOssImageCompress(url, config, isLandscape)
 }
 
 /**
@@ -209,15 +209,15 @@ export function getShortEdgeThumbnailUrl(
  * 用于编辑时的快速加载和显示，图片小体验友好
  * 使用短边600px，清晰度更高
  * @param url 原始图片 URL
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  * @returns 编辑缩略图 URL
  */
-export function getEditThumbnailUrl(url: string, autoRotated?: boolean): string {
+export function getEditThumbnailUrl(url: string, isLandscape?: boolean): string {
   return getShortEdgeThumbnailUrl(url, {
     shortEdge: 600,
     quality: 70,
     format: 'jpg',
-    autoRotated,
+    isLandscape,
   })
 }
 
@@ -225,15 +225,15 @@ export function getEditThumbnailUrl(url: string, autoRotated?: boolean): string 
  * 获取列表页缩略图 URL
  * 用于列表页的快速加载，使用短边300px，加载更快
  * @param url 原始图片 URL
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  * @returns 列表页缩略图 URL
  */
-export function getListThumbnailUrl(url: string, autoRotated?: boolean): string {
+export function getListThumbnailUrl(url: string, isLandscape?: boolean): string {
   return getShortEdgeThumbnailUrl(url, {
     shortEdge: 300,
     quality: 70,
     format: 'jpg',
-    autoRotated,
+    isLandscape,
   })
 }
 
@@ -242,13 +242,13 @@ export function getListThumbnailUrl(url: string, autoRotated?: boolean): string 
  * 基于裁切参数拼接，支持横图自动旋转为竖图显示
  * @param url 原始图片 URL
  * @param cropInfo 裁剪信息
- * @param autoRotated 是否自动旋转（横图转竖图，旋转90度）
+ * @param isLandscape 是否自动旋转（横图转竖图，旋转90度）
  * @returns 预览图 URL
  */
-export function getPreviewImageUrl(url: string, cropInfo: SimpleCropInfo, autoRotated?: boolean): string {
+export function getPreviewImageUrl(url: string, cropInfo: SimpleCropInfo, isLandscape?: boolean): string {
   return buildOssCropUrl(url, cropInfo, {
-    autoRotated,
-    targetWidth: IMAGE_COMPRESS_CONFIG.list.width,
+    isLandscape,
+    shortWidth: IMAGE_COMPRESS_CONFIG.list.width,
     quality: IMAGE_COMPRESS_CONFIG.list.quality,
     format: IMAGE_COMPRESS_CONFIG.list.format,
   })
@@ -281,7 +281,7 @@ export interface SimpleCropInfo {
  * @param originalUrl 原图 URL
  * @param cropInfo 裁剪信息
  * @param options 可选参数
- * @param options.autoRotated 是否自动旋转（横图转竖图，旋转90度）- 用于列表页展示
+ * @param options.isLandscape 是否自动旋转（横图转竖图，旋转90度）- 用于列表页展示
  * @param options.targetWidth 目标宽度（用于压缩）- 用于列表页展示
  * @param options.quality 图片质量（0-100）- 用于列表页展示
  * @param options.format 输出格式（jpg/webp/png）- 用于列表页展示
@@ -291,8 +291,8 @@ export function buildOssCropUrl(
   originalUrl: string,
   cropInfo: SimpleCropInfo,
   options?: {
-    autoRotated?: boolean
-    targetWidth?: number
+    isLandscape?: boolean
+    shortWidth?: number
     useShortEdge?: boolean
     quality?: number
     format?: string
@@ -315,7 +315,7 @@ export function buildOssCropUrl(
   }
 
   const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceWidth, sourceHeight } = cropInfo
-  const { autoRotated, targetWidth, useShortEdge, quality, format } = options || {}
+  const { isLandscape, shortWidth, useShortEdge, quality, format } = options || {}
 
   const params: string[] = []
 
@@ -328,18 +328,12 @@ export function buildOssCropUrl(
     params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
   }
 
-  // 添加压缩参数（用于列表页）
-  if (targetWidth) {
-    if (useShortEdge) {
-      // 使用短边缩放
-      params.push(`resize,s_${targetWidth}`)
-    } else {
-      // 使用固定宽度缩放
-      params.push(`resize,w_${targetWidth}`)
-    }
+  // 增加短边缩放参数
+  if (shortWidth) {
+      params.push(`resize,s_${shortWidth}`)
   }
 
-  if (quality !== undefined) {
+  if (quality) {
     params.push(`quality,q_${quality}`)
   }
 
@@ -347,9 +341,9 @@ export function buildOssCropUrl(
     params.push(`format,${format}`)
   }
 
-  // 如果 autoRotated 为 true，添加旋转参数（旋转应该在所有操作之后）
+  // 如果 isLandscape 为 true，添加旋转参数（旋转应该在所有操作之后）
   // 这样列表页展示时，横图会被旋转90度显示为竖图
-  if (autoRotated) {
+  if (isLandscape) {
     params.push('rotate,90')
   }
 

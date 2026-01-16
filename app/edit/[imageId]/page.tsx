@@ -195,7 +195,7 @@ export default function EditPage() {
     // 打印 OSS 裁剪 URL（调试）
     if (cropInfo && image) {
       const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, { autoRotated: image.autoRotated })
+      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, { isLandscape: image.isLandscape })
       console.log('💾 编辑页保存 - x-oss-process URL:', ossCropUrl)
     }
     
@@ -230,8 +230,6 @@ export default function EditPage() {
           sourceHeight: cropInfo.sourceHeight,
           offsetX: cropInfo.offsetX,
           offsetY: cropInfo.offsetY,
-          cropWidth: cropInfo.cropWidth, // 保存裁剪宽度
-          cropHeight: cropInfo.cropHeight, // 保存裁剪高度
           rotateAngle: 0, // react-easy-crop 不支持旋转，固定为 0
           originalUrl: image?.originalUrl || '',
           styleType: cropInfo.styleType,

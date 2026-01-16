@@ -349,21 +349,10 @@ export default function UploadPage() {
             // 构建 transform 数据
             // 如果服务器返回的 styleType 是后端的值（cover/full/lomo），需要转换为前端值
             const serverStyleType = photo.transform?.styleType 
-              ? mapCropModeFromServer(photo.transform.styleType) 
-              : undefined
             // 如果 transform 存在但 styleType 缺失，从 cropMode 获取
             const fallbackCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
             const finalStyleType = (serverStyleType || fallbackCropMode || 'cover') as 'cover' | 'full' | 'lomo'
             
-            const serverTransform = photo.transform ? {
-              matrix: photo.transform.matrix as [number, number, number, number, number, number],
-              outputWidth: photo.transform.outputWidth,
-              outputHeight: photo.transform.outputHeight,
-              sourceWidth: photo.transform.sourceWidth,
-              sourceHeight: photo.transform.sourceHeight,
-              styleType: finalStyleType,
-            } : undefined
-
             const existingImage = existingImagesMap.get(photo.photoId)
 
             if (existingImage) {
@@ -377,32 +366,11 @@ export default function UploadPage() {
                   ossUploaded: true,
                   backendSynced: true,
                 },
+                // 清除本地可能存在的 cropInfo，因为服务器数据中没有 cropInfo
+                cropInfo: undefined,
               }
               
-              // 服务器有 transform 数据时，使用服务器数据
-              if (serverTransform) {
-                updates.transform = serverTransform
-                updates.editState = {
-                  mode: serverTransform.styleType,
-                  scale: 1,
-                  x: 0,
-                  y: 0,
-                  rotation: photo.autoRotated ? 90 : 0,
-                  canvasWidth: currentSession.canvasWidth,
-                  canvasHeight: currentSession.canvasHeight,
-                }
-              } else if (fallbackCropMode) {
-                // 如果 transform 不存在，但从 cropMode 获取到了模式，创建 editState
-                updates.editState = {
-                  mode: fallbackCropMode,
-                  scale: 1,
-                  x: 0,
-                  y: 0,
-                  rotation: photo.autoRotated ? 90 : 0,
-                  canvasWidth: currentSession.canvasWidth,
-                  canvasHeight: currentSession.canvasHeight,
-                }
-              }
+       
               
               imagesToUpdate.push({ id: photo.photoId, updates })
             } else {
@@ -414,7 +382,7 @@ export default function UploadPage() {
                 scale: 1,
                 x: 0,
                 y: 0,
-                rotation: photo.autoRotated ? 90 : 0,
+                rotation: photo.isLandscape ? 90 : 0,
                 canvasWidth: currentSession.canvasWidth,
                 canvasHeight: currentSession.canvasHeight,
               }
@@ -429,8 +397,7 @@ export default function UploadPage() {
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
                 editState,
-                transform: serverTransform,
-                autoRotated: photo.autoRotated,
+                isLandscape: photo.isLandscape,
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
@@ -636,7 +603,7 @@ export default function UploadPage() {
           height: dimensions.height,
           printCount: 1,
           editState: defaultEditState,
-          autoRotated: needsRotation,
+          isLandscape: needsRotation,
           file,
           uploadStatus: {
             ossUploaded: !!ossUrl,
@@ -661,7 +628,7 @@ export default function UploadPage() {
               originalHeight: dimensions.height,
               quantity: 1,
               cropMode: mapCropModeToServer('cover'),
-              autoRotated: needsRotation,
+              isLandscape: needsRotation,
             })
             // 更新上传状态
             updateImage(photoId, {
@@ -817,7 +784,7 @@ export default function UploadPage() {
       printCount: image.printCount,
       editState: image.editState,
       cropInfo: image.cropInfo, // 新版本：保存裁剪信息
-      autoRotated: image.autoRotated,
+      isLandscape: image.isLandscape,
     }
     sessionStorage.setItem(`edit-image-${id}`, JSON.stringify(imageData))
     router.push(`/edit/${id}`)
@@ -870,46 +837,17 @@ export default function UploadPage() {
         scale: 1,
         x: 0,
         y: 0,
-        rotation: img.autoRotated ? 90 : 0,
+        rotation: img.isLandscape ? 90 : 0,
         canvasWidth: currentSession?.canvasWidth || 127,
         canvasHeight: currentSession?.canvasHeight || 89,
       }
 
-      // 创建新的 cropInfo（简化版，用于批量设置模式）
-      let cropInfo: SimpleCropInfo
-
-      if (mode === 'cover') {
-        // 批量cover模式：不再计算具体的裁剪坐标
-        // 直接使用与ImageEditor相同的预览URL，列表页通过CSS object-cover实现居中裁切
-        cropInfo = {
-          offsetX: 0,
-          offsetY: 0,
-          cropWidth: img.autoRotated ? img.height : img.width,
-          cropHeight: img.autoRotated ? img.width : img.height,
-          sourceWidth: img.width,
-          sourceHeight: img.height,
-          styleType: 'cover',
-        }
-      } else {
-        // full 和 lomo 模式不需要裁剪，使用全图
-        cropInfo = {
-          offsetX: 0,
-          offsetY: 0,
-          cropWidth: img.autoRotated ? img.height : img.width,
-          cropHeight: img.autoRotated ? img.width : img.height,
-          sourceWidth: img.width,
-          sourceHeight: img.height,
-          styleType: mode as 'cover' | 'full' | 'lomo',
-        }
-      }
-      
-      const newCropInfo = cropInfo
-
       return {
         id,
-        updates: { 
+        updates: {
           editState: newEditState,
-          cropInfo: newCropInfo,
+          // 注意：批量操作不设置 cropInfo，只有真正编辑过（有精确裁剪坐标）时才设置
+          // cropInfo: undefined, // 清除现有的 cropInfo
           // 清除旧的 transform
           transform: undefined,
         },

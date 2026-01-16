@@ -118,7 +118,7 @@ export interface PhotoInfo {
   height: number
   printCount: number
   styleType: string
-  autoRotated: boolean
+  isLandscape: boolean
   transform?: PhotoTransform
   sortOrder: number
 }
@@ -132,7 +132,7 @@ export interface PhotoDetail {
   specId: string
   originalWidth: number
   originalHeight: number
-  autoRotated: boolean
+  isLandscape: boolean
   cropMode: string
   takenAt: string
   transform?: PhotoTransform
@@ -364,7 +364,7 @@ export interface AddPhotoParams {
   originalHeight: number
   quantity?: number
   cropMode?: string
-  autoRotated?: boolean
+  isLandscape?: boolean
   transform?: PhotoTransform // 用于前端回显
   cropInfo?: CropInfo // 用于服务端处理
 }

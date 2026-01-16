@@ -39,15 +39,15 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   // 获取原图 URL，使用列表页缩略图（短边300px，加载更快）
   // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-  const previewUrl = getListThumbnailUrl(originalUrl, image.autoRotated)
+  const previewUrl = getListThumbnailUrl(originalUrl, image.isLandscape)
 
-  // 渲染图片 - 根据样式类型使用不同的 object-fit
+  // 渲染图片 - 根据是否有cropInfo和样式类型决定显示方式
   const renderImage = () => {
-    if (styleType === 'cover' && image.cropInfo) {
-      // Cover 模式：如果有 cropInfo，使用精确裁切的 OSS URL
+    // 如果有cropInfo，使用精确裁切的OSS URL（适用于任何模式）
+    if (image.cropInfo) {
       const croppedUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
-        autoRotated: image.autoRotated,
-        targetWidth: 300, // 列表页缩略图短边宽度
+        isLandscape: image.isLandscape,
+        shortWidth: 300, // 列表页缩略图短边宽度
         useShortEdge: true, // 使用短边缩放，与 getListThumbnailUrl 保持一致
         quality: 70,
         format: 'jpg',
@@ -60,8 +60,11 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           className="w-full h-full object-cover"
         />
       )
-    } else if (styleType === 'cover') {
-      // Cover 模式：无 cropInfo 时，回退到居中裁切（兼容旧数据）
+    }
+
+    // 没有cropInfo时，根据样式类型使用不同的显示方式
+    if (styleType === 'cover') {
+      // Cover 模式：直接使用缩略图压缩格式
       return (
         <img
           src={previewUrl}
@@ -82,12 +85,11 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
       )
     } else {
       // Lomo 模式：使用 object-contain + padding 实现留白
-      const margin = WHITE_MARGIN_PERCENT
       return (
         <div 
           className="relative w-full h-full bg-white flex items-center justify-center"
           style={{
-            padding: `${margin}%`,
+            padding: `${WHITE_MARGIN_PERCENT}%`,
           }}
         >
           <img
