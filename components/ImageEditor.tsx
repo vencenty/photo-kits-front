@@ -187,6 +187,8 @@ export default function ImageEditor({
 
     const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
 
+    console.log("photoData.cropInfo",photoData.cropInfo, "fuck")
+
     // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return
 
@@ -265,35 +267,6 @@ export default function ImageEditor({
 
     restoredRef.current = true // 标记已恢复，防止重复恢复
 
-    console.log('🔄 恢复编辑位置:', {
-      原图坐标: {
-        offsetX,
-        offsetY,
-        cropWidth: finalCropWidth,
-        cropHeight: finalCropHeight,
-        裁剪区域中心: {
-          x: offsetX + finalCropWidth / 2,
-          y: offsetY + finalCropHeight / 2,
-        }
-      },
-      压缩图坐标: {
-        offsetX: displayOffsetX,
-        offsetY: displayOffsetY,
-        cropWidth: displayCropWidth,
-        cropHeight: displayCropHeight,
-        裁剪区域中心: {
-          x: cropAreaCenterX,
-          y: cropAreaCenterY,
-        }
-      },
-      裁剪框中心: {
-        x: containerCenterX,
-        y: containerCenterY,
-      },
-      crop位置: { x: cropX, y: cropY },
-      缩放比例: { scaleX, scaleY },
-    })
-
   }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio])
 
   // 模式改变时重置恢复标记
@@ -332,8 +305,13 @@ export default function ImageEditor({
         styleType: 'cover',
       }
 
+      console.log("原图移动",cropInfo)
+
       const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
       const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
+
+      // setCroppedAreaPixels(croppedAreaPixels)
+     console.log("ossCropUrl",ossCropUrl, "originalUrl", originalUrl)
     }
   }, [mode, sourceSize, thumbImageSize, photoData.originalUrl, photoData.thumbnailUrl, photoData.width, photoData.height])
 
@@ -367,7 +345,7 @@ export default function ImageEditor({
     }
 
     // cover 模式，需要将压缩图坐标转换为原图坐标
-    if (mode == "cover" && croppedAreaPixels) {
+    if (croppedAreaPixels && mode == "cover") {
       // 如果没有裁剪过，使用默认居中裁剪
       console.log("aaa",croppedAreaPixels)
       // console.log("cropInfo",cropInfo)
@@ -407,6 +385,7 @@ export default function ImageEditor({
     const scaleX = sourceSize.width / thumbImageSize.width
     const scaleY = sourceSize.height / thumbImageSize.height
 
+    console.log("xxx", "scaleX", scaleX, "scaleY", scaleY)
     // 将压缩图坐标转换为原图坐标
     const realOffsetX = Math.round(croppedAreaPixels.x * scaleX)
     const realOffsetY = Math.round(croppedAreaPixels.y * scaleY)
