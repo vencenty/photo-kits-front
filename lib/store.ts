@@ -150,6 +150,7 @@ export interface Image {
   cropInfo?: SimpleCropInfo // 简化的裁剪信息（新版本，用于 react-easy-crop）
   isLandscape: boolean // 是否是横图
   outputUrl: string // 最终成品URL（带裁剪参数）
+  cropMode: string // 裁剪模式
   file?: File // 前端保存原始文件对象
   // 上传状态跟踪
   uploadStatus?: {

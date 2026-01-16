@@ -34,9 +34,6 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   }
 
 
-  // 获取样式类型
-  const styleType = image.cropInfo?.styleType || image.editState?.mode || 'cover'
-
   // 获取原图 URL，使用列表页缩略图（短边300px，加载更快）
   // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
@@ -50,9 +47,9 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   
   // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
   const renderImage = () => {
-
+    
     // 没有cropInfo时，根据样式类型使用不同的显示方式
-    if (styleType === 'cover') {
+    if (image.cropMode === 'cover') {
       // Cover 模式：直接使用缩略图压缩格式
       return (
         <img
@@ -61,7 +58,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           className="w-full h-full object-cover"
         />
       )
-    } else if (styleType === 'full') {
+    } else if (image.cropMode === 'full') {
       // Full 模式：使用 object-contain 完整显示图片
       return (
         <div className="relative w-full h-full bg-white flex items-center justify-center">
