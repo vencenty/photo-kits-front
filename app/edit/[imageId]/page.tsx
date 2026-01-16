@@ -64,7 +64,7 @@ export default function EditPage() {
     loadPhotoData()
   }, [imageId, currentSession, router])
 
-  const handleSave = async (cropInfo: SimpleCropInfo | undefined) => {
+  const handleSave = async (saveData: { cropInfo: SimpleCropInfo | undefined, downloadUrl: string, thumbUrl: string }) => {
     // 检查订单是否已锁单
     if (isOrderLocked) {
       alert('订单已锁单，无法保存编辑。如需修改，请联系客服。')
@@ -72,14 +72,13 @@ export default function EditPage() {
     }
 
     // 确定模式
-    const mode = cropInfo?.styleType || 'cover'
+    const mode = saveData.cropInfo?.styleType || 'cover'
 
-    // 打印 OSS 裁剪 URL（调试）
-    if (cropInfo && image) {
-      const originalUrl = image.originalUrl || image.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo, { isLandscape: image.isLandscape })
-      console.log('💾 编辑页保存 - x-oss-process URL:', ossCropUrl)
-    }
+    // 打印调试信息
+    console.log('💾 编辑页保存:')
+    console.log('  - 模式:', mode)
+    console.log('  - 下载URL:', saveData.downloadUrl)
+    console.log('  - 缩略图URL:', saveData.thumbUrl)
 
     try {
       setApiLoading(true, '保存编辑中...')
@@ -87,17 +86,18 @@ export default function EditPage() {
       await updatePhoto({
         photoId: imageId,
         cropMode: mapCropModeToServer(mode),
-        cropInfo: cropInfo ? {
+        cropInfo: saveData.cropInfo ? {
           canvasWidth: currentSession?.canvasWidth || 127,
           canvasHeight: currentSession?.canvasHeight || 89,
-          sourceWidth: cropInfo.sourceWidth,
-          sourceHeight: cropInfo.sourceHeight,
-          offsetX: cropInfo.offsetX,
-          offsetY: cropInfo.offsetY,
+          sourceWidth: saveData.cropInfo.sourceWidth,
+          sourceHeight: saveData.cropInfo.sourceHeight,
+          offsetX: saveData.cropInfo.offsetX,
+          offsetY: saveData.cropInfo.offsetY,
           rotateAngle: 0, // react-easy-crop 不支持旋转，固定为 0
           originalUrl: image?.originalUrl || '',
-          styleType: cropInfo.styleType,
+          styleType: saveData.cropInfo.styleType,
         } : undefined,
+        downloadUrl: saveData.downloadUrl,
       })
 
       console.log('编辑状态已保存到后端:', imageId)

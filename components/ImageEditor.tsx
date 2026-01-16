@@ -13,11 +13,16 @@ interface ImageEditorProps {
   image: ImageType
   canvasWidth: number
   canvasHeight: number
-  onSave: (cropInfo: SimpleCropInfo | undefined) => void
+  onSave: (saveData: SaveData) => void
   onCancel: () => void
 }
 
 type EditMode = 'cover' | 'full' | 'lomo'
+
+interface SaveData {
+  cropInfo: SimpleCropInfo | undefined
+  downloadUrl: string
+}
 
 /**
  * 计算 cover 模式下的裁剪尺寸
@@ -60,6 +65,10 @@ export default function ImageEditor({
   const [mode, setMode] = useState<EditMode>(getInitialMode())
   const [imageUrl, setImageUrl] = useState<string>('')
   const [imageLoaded, setImageLoaded] = useState(false)
+
+  // 计算出的URL状态
+  const [downloadUrl, setDownloadUrl] = useState<string>('')
+  const [thumbUrl, setThumbUrl] = useState<string>('')
 
   // react-easy-crop 状态
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
@@ -112,9 +121,8 @@ export default function ImageEditor({
     const originalUrl = photoData.thumbnailUrl || photoData.originalUrl
     if (!originalUrl) return
 
-    // 使用编辑缩略图配置（短边600px），加载速度快体验友好
-    const thumbnailUrl = getEditThumbnailUrl(originalUrl)
-    setImageUrl(thumbnailUrl)
+    // 直接加载 OSS 返回的原图，不要拼接任何参数
+    setImageUrl(originalUrl)
 
     // 预加载图片获取尺寸
     const img = document.createElement('img')
@@ -147,16 +155,10 @@ export default function ImageEditor({
       })
     }
     img.onerror = () => {
-      // 降级使用原图
-      if (thumbnailUrl !== originalUrl) {
-        setImageUrl(originalUrl)
-        setDisplayImageSize({
-          width: photoData.width || 0,
-          height: photoData.height || 0,
-        })
-      }
+      console.error('加载原图失败:', originalUrl)
+      // 原图加载失败时的处理（可以显示错误提示或使用默认图片）
     }
-    img.src = thumbnailUrl
+    img.src = originalUrl
 
     return () => {
       img.onload = null
@@ -275,45 +277,42 @@ export default function ImageEditor({
     isRestoringRef.current = false
   }, [mode])
 
-  // 裁剪完成回调
+  // 裁剪完成回调 - 直接基于原图尺寸计算crop meta
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
     // 如果正在恢复位置，不更新状态，避免无限循环
     if (isRestoringRef.current) return
 
-    // 保存压缩图坐标（react-easy-crop 返回的）
+    // 保存压缩图坐标（用于后续计算，但不做复杂转换）
     setCroppedAreaPixels(croppedAreaPixels)
 
-    // 转换为原图坐标并打印 OSS 裁剪 URL（调试用）
+    // 基于原图尺寸直接计算crop meta（简化版）
     if (mode === 'cover' && sourceSize.width && sourceSize.height && thumbImageSize.width && thumbImageSize.height) {
       // 计算缩放比例：原图尺寸 / 压缩图尺寸
       const scaleX = sourceSize.width / thumbImageSize.width
       const scaleY = sourceSize.height / thumbImageSize.height
 
-      // 将压缩图坐标转换为原图坐标
+      // 将压缩图坐标转换为原图坐标 - 这是我们唯一需要做的转换
       const realOffsetX = Math.round(croppedAreaPixels.x * scaleX)
       const realOffsetY = Math.round(croppedAreaPixels.y * scaleY)
       const realCropWidth = Math.round(croppedAreaPixels.width * scaleX)
       const realCropHeight = Math.round(croppedAreaPixels.height * scaleY)
 
       const cropInfo: SimpleCropInfo = {
-        offsetX: realOffsetX, // 原图移动横坐标
-        offsetY: realOffsetY, // 原图移动纵坐标
-        cropWidth: realCropWidth, // 原图裁剪宽度
-        cropHeight: realCropHeight, // 原图裁剪高度
-        sourceWidth: sourceSize.width, // 原图宽度
-        sourceHeight: sourceSize.height, // 原图高度
+        offsetX: realOffsetX,
+        offsetY: realOffsetY,
+        cropWidth: realCropWidth,
+        cropHeight: realCropHeight,
+        sourceWidth: sourceSize.width,
+        sourceHeight: sourceSize.height,
         styleType: 'cover',
       }
 
-      console.log("原图移动",cropInfo)
+      console.log("基于原图的crop meta:", cropInfo)
 
-      const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-      const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
-
-      // setCroppedAreaPixels(croppedAreaPixels)
-     console.log("ossCropUrl",ossCropUrl, "originalUrl", originalUrl)
+      // 只保存crop meta，不再生成URL（让服务端处理）
+      // URL生成逻辑移到服务端统一处理
     }
-  }, [mode, sourceSize, thumbImageSize, photoData.originalUrl, photoData.thumbnailUrl, photoData.width, photoData.height])
+  }, [mode, sourceSize, thumbImageSize])
 
   // 模式改变
   const handleModeChange = useCallback((newMode: EditMode) => {
@@ -325,13 +324,16 @@ export default function ImageEditor({
     setInitialCroppedAreaPixels(undefined)
   }, [])
 
-  // 保存
+  // 保存 - 生成带有crop参数的downloadUrl
   const handleSave = useCallback(() => {
     if (!sourceSize.width || !sourceSize.height) return
 
-    // full 和 lomo 模式不需要裁剪参数
+    let cropInfo: SimpleCropInfo | undefined
+    let downloadUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+
+    // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
     if (mode === 'full' || mode === 'lomo') {
-      const cropInfo: SimpleCropInfo = {
+      cropInfo = {
         offsetX: 0,
         offsetY: 0,
         cropWidth: sourceSize.width,
@@ -340,74 +342,60 @@ export default function ImageEditor({
         sourceHeight: sourceSize.height,
         styleType: mode,
       }
-      onSave(cropInfo)
-      return
-    }
+      // full 和 lomo 模式直接使用原图URL，不拼接crop参数
+    } else if (mode === 'cover') {
+      // cover 模式：使用当前裁剪数据或默认居中裁剪
+      if (croppedAreaPixels && thumbImageSize.width && thumbImageSize.height) {
+        // 将压缩图坐标转换为原图坐标
+        const scaleX = sourceSize.width / thumbImageSize.width
+        const scaleY = sourceSize.height / thumbImageSize.height
 
-    // cover 模式，需要将压缩图坐标转换为原图坐标
-    if (croppedAreaPixels && mode == "cover") {
-      // 如果没有裁剪过，使用默认居中裁剪
-      console.log("aaa",croppedAreaPixels)
-      // console.log("cropInfo",cropInfo)
-      const { cropWidth, cropHeight } = calculateCoverCropSize(
-        sourceSize.width,
-        sourceSize.height,
-        aspectRatio
-      )
-      const offsetX = (sourceSize.width - cropWidth) / 2
-      const offsetY = (sourceSize.height - cropHeight) / 2
+        cropInfo = {
+          offsetX: Math.round(croppedAreaPixels.x * scaleX),
+          offsetY: Math.round(croppedAreaPixels.y * scaleY),
+          cropWidth: Math.round(croppedAreaPixels.width * scaleX),
+          cropHeight: Math.round(croppedAreaPixels.height * scaleY),
+          sourceWidth: sourceSize.width,
+          sourceHeight: sourceSize.height,
+          styleType: 'cover',
+        }
+      } else {
+        // 默认居中裁剪
+        const { cropWidth, cropHeight } = calculateCoverCropSize(
+          sourceSize.width,
+          sourceSize.height,
+          aspectRatio
+        )
+        const offsetX = (sourceSize.width - cropWidth) / 2
+        const offsetY = (sourceSize.height - cropHeight) / 2
 
-      const cropInfo: SimpleCropInfo = {
-        offsetX: Math.round(offsetX),
-        offsetY: Math.round(offsetY),
-        cropWidth: Math.round(cropWidth),
-        cropHeight: Math.round(cropHeight),
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
-        styleType: 'cover',
+        cropInfo = {
+          offsetX: Math.round(offsetX),
+          offsetY: Math.round(offsetY),
+          cropWidth: Math.round(cropWidth),
+          cropHeight: Math.round(cropHeight),
+          sourceWidth: sourceSize.width,
+          sourceHeight: sourceSize.height,
+          styleType: 'cover',
+        }
       }
 
-      // 打印最终的 OSS URL
-      const ossCropUrl = buildOssCropUrl(photoData.originalUrl, cropInfo)
-      console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
-
-      onSave(cropInfo)
-      return
+      // cover 模式：在原图URL基础上拼接crop参数
+      if (cropInfo) {
+        downloadUrl = buildOssCropUrl(downloadUrl, cropInfo)
+      }
     }
 
-    // 有裁剪数据，需要转换坐标
-    if (!thumbImageSize.width || !thumbImageSize.height) {
-      console.warn('⚠️ 压缩图尺寸未加载，无法转换坐标')
-      return
+    if (cropInfo) {
+      console.log('🎯 保存基于原图的crop meta:', cropInfo)
+      console.log('🔗 生成的downloadUrl:', downloadUrl)
+
+      // 传递crop meta和生成的downloadUrl
+      onSave({
+        cropInfo,
+        downloadUrl,
+      })
     }
-
-    // 计算缩放比例：原图尺寸 / 压缩图尺寸
-    const scaleX = sourceSize.width / thumbImageSize.width
-    const scaleY = sourceSize.height / thumbImageSize.height
-
-    console.log("xxx", "scaleX", scaleX, "scaleY", scaleY)
-    // 将压缩图坐标转换为原图坐标
-    const realOffsetX = Math.round(croppedAreaPixels.x * scaleX)
-    const realOffsetY = Math.round(croppedAreaPixels.y * scaleY)
-    const realCropWidth = Math.round(croppedAreaPixels.width * scaleX)
-    const realCropHeight = Math.round(croppedAreaPixels.height * scaleY)
-
-    const cropInfo: SimpleCropInfo = {
-      offsetX: realOffsetX,
-      offsetY: realOffsetY,
-      cropWidth: realCropWidth,
-      cropHeight: realCropHeight,
-      sourceWidth: sourceSize.width,
-      sourceHeight: sourceSize.height,
-      styleType: 'cover',
-    }
-
-    // 打印最终的 OSS URL
-    const originalUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
-    const ossCropUrl = buildOssCropUrl(originalUrl, cropInfo)
-    console.log('🔗 最终 x-oss-process URL:', ossCropUrl)
-
-    onSave(cropInfo)
   }, [croppedAreaPixels, sourceSize, thumbImageSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 渲染 full 或 lomo 模式（不可编辑）

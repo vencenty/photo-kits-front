@@ -136,6 +136,7 @@ export interface PhotoDetail {
   cropMode: string
   takenAt: string
   transform?: PhotoTransform
+  downloadUrl?: string  // 处理后的下载URL
 }
 
 export interface OssSignature {
@@ -386,6 +387,8 @@ export interface UpdatePhotoParams {
   cropMode?: string
   transform?: PhotoTransform // 用于前端回显
   cropInfo?: CropInfo // 用于服务端处理
+  downloadUrl?: string
+  listThumbUrl?: string
 }
 
 /**
