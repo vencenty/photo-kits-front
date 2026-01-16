@@ -76,7 +76,7 @@ export const IMAGE_COMPRESS_CONFIG = {
  * Lomo 模式白边配置
  * 用于控制四周留白模式下的白边宽度（百分比）
  */
-export const WHITE_MARGIN_PERCENT = 2
+export const WHITE_MARGIN_PERCENT = 5
 
 /**
  * 构建 OSS 图片处理参数

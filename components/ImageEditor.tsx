@@ -417,11 +417,7 @@ export default function ImageEditor({
         <img
           src={imageUrl}
           alt="预览"
-          className="max-w-full max-h-full object-contain"
-          style={{
-            maxWidth: isLomo ? `${100 - margin * 2}%` : '100%',
-            maxHeight: isLomo ? `${100 - margin * 2}%` : '100%',
-          }}
+          className="w-full h-full object-contain"
         />
       </div>
     )
