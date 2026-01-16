@@ -400,6 +400,7 @@ export default function UploadPage() {
                 thumbnailUrl: existingImage.thumbnailUrl || photo.url,
                 printCount: photo.quantity || existingImage.printCount || 1,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
+                cropMode: photo.cropMode, // 设置从服务端获取的cropMode
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
@@ -429,6 +430,7 @@ export default function UploadPage() {
                 width: photo.originalWidth,
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
+                cropMode: photo.cropMode, // 设置从服务端获取的cropMode
                 cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
                 isLandscape: photo.isLandscape,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值

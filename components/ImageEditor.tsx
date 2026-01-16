@@ -469,7 +469,7 @@ export default function ImageEditor({
                     showGrid={true}
                     style={{
                       containerStyle: {
-                        backgroundColor: 'white',
+                        backgroundColor: 'black',
                       },
                       mediaStyle: {
                         backgroundColor: '#ffffff',

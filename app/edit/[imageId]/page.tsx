@@ -45,6 +45,44 @@ export default function EditPage() {
 
         const initialMode = getInitialMode()
 
+        // 从后端cropInfo创建前端SimpleCropInfo
+        let simpleCropInfo: SimpleCropInfo | undefined
+        if (response.photo.cropInfo && currentSession) {
+          // 优先使用后端保存的cropWidth和cropHeight，如果没有则重新计算
+          let cropWidth = response.photo.cropInfo.cropWidth || response.photo.cropInfo.sourceWidth
+          let cropHeight = response.photo.cropInfo.cropHeight || response.photo.cropInfo.sourceHeight
+
+          // 如果后端没有保存cropWidth/cropHeight，则根据样式类型重新计算
+          if (!response.photo.cropInfo.cropWidth || !response.photo.cropInfo.cropHeight) {
+            if (response.photo.cropInfo.styleType === 'cover') {
+              // cover模式：根据当前session的相纸比例计算裁剪尺寸
+              const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+              const imageAspectRatio = response.photo.cropInfo.sourceWidth / response.photo.cropInfo.sourceHeight
+
+              if (imageAspectRatio > canvasAspectRatio) {
+                // 图片更宽，裁剪左右
+                cropWidth = response.photo.cropInfo.sourceHeight * canvasAspectRatio
+                cropHeight = response.photo.cropInfo.sourceHeight
+              } else {
+                // 图片更高，裁剪上下
+                cropWidth = response.photo.cropInfo.sourceWidth
+                cropHeight = response.photo.cropInfo.sourceWidth / canvasAspectRatio
+              }
+            }
+            // full和lomo模式使用原图尺寸（已经是默认值了）
+          }
+
+          simpleCropInfo = {
+            offsetX: response.photo.cropInfo.offsetX,
+            offsetY: response.photo.cropInfo.offsetY,
+            cropWidth: cropWidth,
+            cropHeight: cropHeight,
+            sourceWidth: response.photo.cropInfo.sourceWidth,
+            sourceHeight: response.photo.cropInfo.sourceHeight,
+            styleType: (response.photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo'
+          }
+        }
+
         // 转换服务端数据为前端格式
         const photoData: Image = {
           id: response.photo.photoId,
@@ -66,7 +104,7 @@ export default function EditPage() {
             canvasWidth: currentSession?.canvasWidth || 127,
             canvasHeight: currentSession?.canvasHeight || 89,
           },
-          cropInfo: undefined, // 编辑时重新生成
+          cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
           transform: undefined, // 服务端和前端的 PhotoTransform 类型不兼容，先设为 undefined
           outputUrl: response.photo.outputUrl || response.photo.url, // 设置默认值：如果不存在outputUrl，则使用原图url
         }

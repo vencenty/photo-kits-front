@@ -47,7 +47,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   
   // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
   const renderImage = () => {
-    
+    console.log(image.cropMode)
     // 没有cropInfo时，根据样式类型使用不同的显示方式
     if (image.cropMode === 'cover') {
       // Cover 模式：直接使用缩略图压缩格式
