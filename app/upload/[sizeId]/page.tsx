@@ -425,6 +425,7 @@ export default function UploadPage() {
                 originalUrl: photo.url,
                 thumbnailUrl: photo.url,
                 filename: photo.photoId,
+                editState: null,
                 width: photo.originalWidth,
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
@@ -637,7 +638,9 @@ export default function UploadPage() {
           printCount: 1,
           editState: defaultEditState,
           isLandscape: needsRotation,
+          outputUrl: ossUrl || dataUrl, // 刚上传的图片，outputUrl等于originalUrl
           file,
+          cropInfo: undefined,
           uploadStatus: {
             ossUploaded: !!ossUrl,
             backendSynced: false,
@@ -660,6 +663,7 @@ export default function UploadPage() {
               originalWidth: dimensions.width,
               originalHeight: dimensions.height,
               quantity: 1,
+              cropInfo: undefined,
               cropMode: mapCropModeToServer('cover'),
               isLandscape: needsRotation,
             })

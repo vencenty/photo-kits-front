@@ -299,37 +299,38 @@ export function buildOssCropUrl(
 ): string {
   if (!originalUrl) return originalUrl
 
-  if (!cropInfo) return originalUrl
-
   // 如果是 data URL 或本地文件，不处理
   if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
     return originalUrl
   }
 
   // 判断是否为 OSS URL
-  const isOssUrl = originalUrl.includes('aliyuncs.com') || 
-                   originalUrl.includes('oss-proxy') || 
+  const isOssUrl = originalUrl.includes('aliyuncs.com') ||
+                   originalUrl.includes('oss-proxy') ||
                    originalUrl.includes('vencenty.cc')
 
   if (!isOssUrl) {
     return originalUrl
   }
 
-  const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceHeight, sourceWidth} = cropInfo
   const { isLandscape, shortWidth, quality, format } = options || {}
-
   const params: string[] = []
 
-  // cover 模式需要裁剪
-  if (styleType === 'cover') {
-    const x = Math.round(offsetX)
-    const y = Math.round(offsetY)
-    const w = Math.round(cropWidth)
-    const h = Math.round(cropHeight)
-    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+  // 如果有cropInfo，处理裁剪参数
+  if (cropInfo) {
+    const { offsetX, offsetY, cropWidth, cropHeight, styleType } = cropInfo
+
+    // cover 模式需要裁剪
+    if (styleType === 'cover') {
+      const x = Math.round(offsetX)
+      const y = Math.round(offsetY)
+      const w = Math.round(cropWidth)
+      const h = Math.round(cropHeight)
+      params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
+    }
   }
 
-  console.log(params)
+  // 无论是否有cropInfo，都增加这些基础处理参数
   // 增加短边缩放参数
   if (shortWidth) {
       params.push(`resize,s_${shortWidth}`)
@@ -358,7 +359,7 @@ export function buildOssCropUrl(
   let cleanUrl = originalUrl
   if (originalUrl.includes('x-oss-process=')) {
     cleanUrl = originalUrl.replace(/[?&]x-oss-process=[^&]+/, '')
-    // 清理可能留下的 ? 或 & 
+    // 清理可能留下的 ? 或 &
     cleanUrl = cleanUrl.replace(/\?$/, '').replace(/\?&/, '?').replace(/&&/, '&')
   }
 
