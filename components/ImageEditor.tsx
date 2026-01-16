@@ -353,14 +353,14 @@ export default function ImageEditor({
       // cover 模式：使用当前裁剪数据或默认居中裁剪
       if (croppedAreaPixels && thumbImageSize.width && thumbImageSize.height) {
         // 将压缩图坐标转换为原图坐标
-        const scaleX = sourceSize.width / thumbImageSize.width
-        const scaleY = sourceSize.height / thumbImageSize.height
+        // const scaleX = sourceSize.width / thumbImageSize.width
+        // const scaleY = sourceSize.height / thumbImageSize.height
 
         cropInfo = {
-          offsetX: Math.round(croppedAreaPixels.x * scaleX),
-          offsetY: Math.round(croppedAreaPixels.y * scaleY),
-          cropWidth: Math.round(croppedAreaPixels.width * scaleX),
-          cropHeight: Math.round(croppedAreaPixels.height * scaleY),
+          offsetX: croppedAreaPixels.x,
+          offsetY: croppedAreaPixels.y,
+          cropWidth: croppedAreaPixels.width,
+          cropHeight: croppedAreaPixels.height,
           sourceWidth: sourceSize.width,
           sourceHeight: sourceSize.height,
           styleType: 'cover',

@@ -355,27 +355,30 @@ export default function UploadPage() {
 
             // 将服务端的 CropInfo 转换为前端的 SimpleCropInfo
             let simpleCropInfo: SimpleCropInfo | undefined
-            if (photo.cropInfo && currentSession) {
-              // 根据样式类型计算cropWidth和cropHeight
-              let cropWidth = photo.cropInfo.sourceWidth
-              let cropHeight = photo.cropInfo.sourceHeight
+            if (photo.cropInfo) {
+              // 优先使用后端保存的cropWidth和cropHeight，如果没有则重新计算
+              let cropWidth = photo.cropInfo.cropWidth || photo.cropInfo.sourceWidth
+              let cropHeight = photo.cropInfo.cropHeight || photo.cropInfo.sourceHeight
 
-              if (photo.cropInfo.styleType === 'cover') {
-                // cover模式：根据当前session的相纸比例计算裁剪尺寸
-                const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
-                const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
+              // 如果后端没有保存cropWidth/cropHeight，则根据样式类型重新计算
+              if (!photo.cropInfo.cropWidth || !photo.cropInfo.cropHeight) {
+                if (photo.cropInfo.styleType === 'cover' && currentSession) {
+                  // cover模式：根据当前session的相纸比例计算裁剪尺寸
+                  const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+                  const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
 
-                if (imageAspectRatio > canvasAspectRatio) {
-                  // 图片更宽，裁剪左右
-                  cropWidth = photo.cropInfo.sourceHeight * canvasAspectRatio
-                  cropHeight = photo.cropInfo.sourceHeight
-                } else {
-                  // 图片更高，裁剪上下
-                  cropWidth = photo.cropInfo.sourceWidth
-                  cropHeight = photo.cropInfo.sourceWidth / canvasAspectRatio
+                  if (imageAspectRatio > canvasAspectRatio) {
+                    // 图片更宽，裁剪左右
+                    cropWidth = photo.cropInfo.sourceHeight * canvasAspectRatio
+                    cropHeight = photo.cropInfo.sourceHeight
+                  } else {
+                    // 图片更高，裁剪上下
+                    cropWidth = photo.cropInfo.sourceWidth
+                    cropHeight = photo.cropInfo.sourceWidth / canvasAspectRatio
+                  }
                 }
+                // full和lomo模式使用原图尺寸（已经是默认值了）
               }
-              // full和lomo模式使用原图尺寸
 
               simpleCropInfo = {
                 offsetX: photo.cropInfo.offsetX,

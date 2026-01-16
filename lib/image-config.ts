@@ -315,7 +315,7 @@ export function buildOssCropUrl(
     return originalUrl
   }
 
-  const { offsetX, offsetY, cropWidth, cropHeight, styleType} = cropInfo
+  const { offsetX, offsetY, cropWidth, cropHeight, styleType, sourceHeight, sourceWidth} = cropInfo
   const { isLandscape, shortWidth, quality, format } = options || {}
 
   const params: string[] = []
@@ -329,6 +329,7 @@ export function buildOssCropUrl(
     params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
   }
 
+  console.log(params)
   // 增加短边缩放参数
   if (shortWidth) {
       params.push(`resize,s_${shortWidth}`)
