@@ -41,8 +41,19 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
   const previewUrl = getListThumbnailUrl(originalUrl, image.isLandscape)
 
-  // 渲染图片 - 根据是否有cropInfo和样式类型决定显示方式
+  // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
   const renderImage = () => {
+    // 如果有 outputUrl（最终成品），直接使用
+    if (image.outputUrl) {
+      return (
+        <img
+          src={image.outputUrl}
+          alt={image.filename || '照片'}
+          className="w-full h-full object-cover"
+        />
+      )
+    }
+
     // 如果有cropInfo，使用精确裁切的OSS URL（适用于任何模式）
     if (image.cropInfo) {
       const croppedUrl = buildOssCropUrl(originalUrl, image.cropInfo, {

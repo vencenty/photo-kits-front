@@ -21,7 +21,7 @@ type EditMode = 'cover' | 'full' | 'lomo'
 
 interface SaveData {
   cropInfo: SimpleCropInfo | undefined
-  downloadUrl: string
+  outputUrl: string
 }
 
 /**
@@ -67,7 +67,7 @@ export default function ImageEditor({
   const [imageLoaded, setImageLoaded] = useState(false)
 
   // 计算出的URL状态
-  const [downloadUrl, setDownloadUrl] = useState<string>('')
+  const [outputUrl, setOutputUrl] = useState<string>('')
   const [thumbUrl, setThumbUrl] = useState<string>('')
 
   // react-easy-crop 状态
@@ -285,6 +285,12 @@ export default function ImageEditor({
     // 保存压缩图坐标（用于后续计算，但不做复杂转换）
     setCroppedAreaPixels(croppedAreaPixels)
 
+    // 记录用户当前的编辑状态，用于下次进入页面时恢复
+    // 只有在 cover 模式且图片尺寸已知时才更新
+    if (mode === 'cover' && thumbImageSize.width && thumbImageSize.height) {
+      setInitialCroppedAreaPixels(croppedAreaPixels)
+    }
+
     // 基于原图尺寸直接计算crop meta（简化版）
     if (mode === 'cover' && sourceSize.width && sourceSize.height && thumbImageSize.width && thumbImageSize.height) {
       // 计算缩放比例：原图尺寸 / 压缩图尺寸
@@ -324,12 +330,12 @@ export default function ImageEditor({
     setInitialCroppedAreaPixels(undefined)
   }, [])
 
-  // 保存 - 生成带有crop参数的downloadUrl
+  // 保存 - 生成带有crop参数的outputUrl
   const handleSave = useCallback(() => {
     if (!sourceSize.width || !sourceSize.height) return
 
     let cropInfo: SimpleCropInfo | undefined
-    let downloadUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+    let outputUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
 
     // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
     if (mode === 'full' || mode === 'lomo') {
@@ -382,18 +388,18 @@ export default function ImageEditor({
 
       // cover 模式：在原图URL基础上拼接crop参数
       if (cropInfo) {
-        downloadUrl = buildOssCropUrl(downloadUrl, cropInfo)
+        outputUrl = buildOssCropUrl(outputUrl, cropInfo)
       }
     }
 
     if (cropInfo) {
       console.log('🎯 保存基于原图的crop meta:', cropInfo)
-      console.log('🔗 生成的downloadUrl:', downloadUrl)
+      console.log('🔗 生成的outputUrl:', outputUrl)
 
-      // 传递crop meta和生成的downloadUrl
+      // 传递crop meta和生成的outputUrl
       onSave({
         cropInfo,
-        downloadUrl,
+        outputUrl,
       })
     }
   }, [croppedAreaPixels, sourceSize, thumbImageSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])

@@ -361,6 +361,7 @@ export default function UploadPage() {
                 originalUrl: photo.url,
                 thumbnailUrl: existingImage.thumbnailUrl || photo.url,
                 printCount: photo.quantity || existingImage.printCount || 1,
+                outputUrl: photo.outputUrl, // 保存最终成品URL
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
@@ -398,6 +399,7 @@ export default function UploadPage() {
                 printCount: photo.quantity || 1,
                 editState,
                 isLandscape: photo.isLandscape,
+                outputUrl: photo.outputUrl, // 保存最终成品URL
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,

@@ -64,7 +64,7 @@ export default function EditPage() {
     loadPhotoData()
   }, [imageId, currentSession, router])
 
-  const handleSave = async (saveData: { cropInfo: SimpleCropInfo | undefined, downloadUrl: string, thumbUrl: string }) => {
+  const handleSave = async (saveData: { cropInfo: SimpleCropInfo | undefined, outputUrl: string }) => {
     // 检查订单是否已锁单
     if (isOrderLocked) {
       alert('订单已锁单，无法保存编辑。如需修改，请联系客服。')
@@ -77,8 +77,7 @@ export default function EditPage() {
     // 打印调试信息
     console.log('💾 编辑页保存:')
     console.log('  - 模式:', mode)
-    console.log('  - 下载URL:', saveData.downloadUrl)
-    console.log('  - 缩略图URL:', saveData.thumbUrl)
+    console.log('  - 输出URL:', saveData.outputUrl)
 
     try {
       setApiLoading(true, '保存编辑中...')
@@ -97,7 +96,7 @@ export default function EditPage() {
           originalUrl: image?.originalUrl || '',
           styleType: saveData.cropInfo.styleType,
         } : undefined,
-        downloadUrl: saveData.downloadUrl,
+        outputUrl: saveData.outputUrl,
       })
 
       console.log('编辑状态已保存到后端:', imageId)

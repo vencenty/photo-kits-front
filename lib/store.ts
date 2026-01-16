@@ -149,6 +149,7 @@ export interface Image {
   transform?: PhotoTransform // 仿射变换信息（旧版本，保留兼容）
   cropInfo?: SimpleCropInfo // 简化的裁剪信息（新版本，用于 react-easy-crop）
   isLandscape?: boolean // 是否自动旋转（横图转竖图）
+  outputUrl?: string // 最终成品URL（带裁剪参数）
   file?: File // 前端保存原始文件对象
   // 上传状态跟踪
   uploadStatus?: {
