@@ -940,6 +940,8 @@ export default function UploadPage() {
           sourceHeight: img.cropInfo.sourceHeight,
           offsetX: img.cropInfo.offsetX,
           offsetY: img.cropInfo.offsetY,
+          cropWidth: img.cropInfo.cropWidth,
+          cropHeight: img.cropInfo.cropHeight,
           rotateAngle: 0, // react-easy-crop 不支持旋转
           originalUrl: img.originalUrl,
           styleType: img.cropInfo.styleType,

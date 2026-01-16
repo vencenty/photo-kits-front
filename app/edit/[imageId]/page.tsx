@@ -93,6 +93,8 @@ export default function EditPage() {
           sourceHeight: saveData.cropInfo.sourceHeight,
           offsetX: saveData.cropInfo.offsetX,
           offsetY: saveData.cropInfo.offsetY,
+          cropWidth: saveData.cropInfo.cropWidth,
+          cropHeight: saveData.cropInfo.cropHeight,
           rotateAngle: 0, // react-easy-crop 不支持旋转，固定为 0
           originalUrl: image?.originalUrl || '',
           styleType: saveData.cropInfo.styleType,

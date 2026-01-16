@@ -90,6 +90,8 @@ export interface CropInfo {
   sourceHeight: number // 原图高度（像素）
   offsetX: number // 原图坐标系中的X偏移量（px），裁剪起始位置
   offsetY: number // 原图坐标系中的Y偏移量（px），裁剪起始位置
+  cropWidth: number // 裁剪宽度（像素）
+  cropHeight: number // 裁剪高度（像素）
   rotateAngle: number // 旋转角度（仅0/90/180/270°）
   originalUrl: string // 原图地址（服务端能访问的路径）
   styleType?: string // 样式类型（可选）
