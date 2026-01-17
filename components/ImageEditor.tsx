@@ -252,7 +252,12 @@ export default function ImageEditor({
     // 【步骤4】设置恢复的位置和区域
     // 
     // setCrop：设置图片中心相对于裁剪框中心的偏移，react-easy-crop 会根据这个值定位图片
-    setCrop({ x: cropX, y: cropY })
+    // lomo模式下始终居中，不恢复拖拽位置
+    if (mode === 'lomo') {
+      setCrop({ x: 0, y: 0 }) // lomo模式：图片居中
+    } else {
+      setCrop({ x: cropX, y: cropY }) // cover模式：恢复之前的位置
+    }
     setZoom(1) // 缩放设为1（不缩放）
 
     // setCroppedAreaPixels：保存压缩图上的裁剪区域坐标
@@ -322,12 +327,23 @@ export default function ImageEditor({
   // 模式改变
   const handleModeChange = useCallback((newMode: EditMode) => {
     setMode(newMode)
-    // 重置裁剪状态
+    // 重置裁剪状态，确保图片居中
     setCrop({ x: 0, y: 0 })
     setZoom(1)
     setCroppedAreaPixels(null)
     setInitialCroppedAreaPixels(undefined)
   }, [])
+
+  // lomo模式下的crop变化处理：锁定在中心位置
+  const handleCropChange = useCallback((newCrop: Point) => {
+    if (mode === 'lomo') {
+      // lomo模式下始终保持图片居中，不允许拖拽
+      setCrop({ x: 0, y: 0 })
+    } else {
+      // 其他模式允许正常拖拽
+      setCrop(newCrop)
+    }
+  }, [mode])
 
   // 保存 - 生成带有crop参数的outputUrl
   const handleSave = useCallback(() => {
@@ -468,7 +484,7 @@ export default function ImageEditor({
                       crop={crop}
                       zoom={zoom}
                       aspect={aspectRatio}
-                      onCropChange={setCrop}
+                      onCropChange={handleCropChange}
                       onZoomChange={setZoom}
                       onCropComplete={onCropComplete}
                       initialCroppedAreaPixels={initialCroppedAreaPixels}
@@ -476,7 +492,7 @@ export default function ImageEditor({
                       objectFit='contain'
                       minZoom={minZoomValue}
                       maxZoom={1}
-                      restrictPosition={true} // lomo模式允许自由移动图片位置
+                      restrictPosition={true} // 限制拖拽，防止图片跑出裁剪框
                       showGrid={false} // 不显示网格
                       style={{
                         containerStyle: {
