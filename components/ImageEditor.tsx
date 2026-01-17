@@ -76,8 +76,8 @@ export default function ImageEditor({
 
   // 原图尺寸（从 photoData 获取，这是真实的原图尺寸）
   const [sourceSize, setSourceSize] = useState({
-    width: photoData.width || 0,
-    height: photoData.height || 0,
+    width: (photoData && typeof photoData.width === 'number') ? photoData.width : 0,
+    height: (photoData && typeof photoData.height === 'number') ? photoData.height : 0,
   })
 
   // 压缩图尺寸（前端实际加载的图片尺寸，用于坐标转换）
@@ -113,6 +113,9 @@ export default function ImageEditor({
     // 例如：相纸是 3:4（竖），图片是横图，则使用 4:3（横）
     return canvasHeight / canvasWidth
   }, [sourceSize.width, sourceSize.height, paperAspectRatio, canvasWidth, canvasHeight])
+
+  // 计算最小缩放比例
+  const minZoomValue = mode === 'lomo' ? 0.5 : 1 // lomo模式允许缩小到0.5倍，其他模式固定1倍
 
   // 加载图片
   useEffect(() => {
@@ -183,14 +186,12 @@ export default function ImageEditor({
     if (restoredRef.current) return
     if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return
     if (!thumbImageSize.width || !thumbImageSize.height) return // 等待压缩图尺寸加载完成
-    if (mode !== 'cover') return
+    if (mode !== 'cover' && mode !== 'lomo') return
 
     const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
 
-    console.log("photoData.cropInfo",photoData.cropInfo, "fuck")
-
-    // 只有 cover 模式且有有效数据时才恢复
-    if (styleType !== 'cover') return
+    // 只有 cover 或 lomo 模式且有有效数据时才恢复
+    if (styleType !== mode) return
 
     // 如果 cropWidth 和 cropHeight 不存在，从裁剪框比例计算
     let finalCropWidth = cropWidth
@@ -284,13 +285,13 @@ export default function ImageEditor({
     setCroppedAreaPixels(croppedAreaPixels)
 
     // 记录用户当前的编辑状态，用于下次进入页面时恢复
-    // 只有在 cover 模式且图片尺寸已知时才更新
-    if (mode === 'cover' && thumbImageSize.width && thumbImageSize.height) {
+    // 只有在 cover 或 lomo 模式且图片尺寸已知时才更新
+    if ((mode === 'cover' || mode === 'lomo') && thumbImageSize.width && thumbImageSize.height) {
       setInitialCroppedAreaPixels(croppedAreaPixels)
     }
 
     // 基于原图尺寸直接计算crop meta（简化版）
-    if (mode === 'cover' && sourceSize.width && sourceSize.height && thumbImageSize.width && thumbImageSize.height) {
+    if ((mode === 'cover' || mode === 'lomo') && sourceSize.width && sourceSize.height && thumbImageSize.width && thumbImageSize.height) {
       // 计算缩放比例：原图尺寸 / 压缩图尺寸
       const scaleX = sourceSize.width / thumbImageSize.width
       const scaleY = sourceSize.height / thumbImageSize.height
@@ -335,8 +336,8 @@ export default function ImageEditor({
     let cropInfo: SimpleCropInfo | undefined
     let outputUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
 
-    // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
-    if (mode === 'full' || mode === 'lomo') {
+    // full 模式不需要裁剪参数，直接使用原图URL
+    if (mode === 'full') {
       cropInfo = {
         offsetX: 0,
         offsetY: 0,
@@ -346,8 +347,8 @@ export default function ImageEditor({
         sourceHeight: sourceSize.height,
         styleType: mode,
       }
-      // full 和 lomo 模式直接使用原图URL，不拼接crop参数
-    } else if (mode === 'cover') {
+      // full 模式直接使用原图URL，不拼接crop参数
+    } else if (mode === 'cover' || mode === 'lomo') {
       // cover 模式：使用当前裁剪数据或默认居中裁剪
       if (croppedAreaPixels && thumbImageSize.width && thumbImageSize.height) {
         // 将压缩图坐标转换为原图坐标
@@ -432,10 +433,10 @@ export default function ImageEditor({
           <span className="text-blue-400">
             {mode === 'cover' ? '居中裁剪模式：可拖拽移动图片位置' :
               mode === 'full' ? '打印整图模式：图片完整显示，不可编辑' :
-                '四周留白模式：图片完整显示，不可编辑'}
+                '四周留白模式：可拖拽移动图片位置'}
           </span>
         </div>
-        {mode === 'cover' && (
+        {(mode === 'cover' || mode === 'lomo') && (
           <p className="text-center text-red-400 text-sm mt-1">超出红色边框部分将被裁剪</p>
         )}
       </div>
@@ -450,41 +451,52 @@ export default function ImageEditor({
           >
             <div className="absolute inset-0">
               {imageLoaded && imageUrl && (
-                mode === 'cover' ? (
-                  // Cover 模式：使用 react-easy-crop 
-                  <Cropper
-                    image={imageUrl}
-                    crop={crop}
-                    zoom={zoom}
-                    aspect={aspectRatio}
-                    onCropChange={setCrop}
-                    onZoomChange={setZoom}
-                    onCropComplete={onCropComplete}
-                    initialCroppedAreaPixels={initialCroppedAreaPixels}
-                    // 禁止缩放，只允许拖拽
-                    objectFit='contain'
-                    minZoom={1}
-                    maxZoom={1}
-                    restrictPosition={true}
-                    showGrid={true}
-                    style={{
-                      containerStyle: {
-                        backgroundColor: 'black',
-                      },
-                      mediaStyle: {
-                        backgroundColor: '#ffffff',
-                      },
-                      cropAreaStyle: {
-                        border: '3px dashed #ef4444',
-                      },
-                    }}
-                    classes={{
-                      containerClassName: 'rounded-none',
-                    }}
-                  />
-                ) : (
-                  // Full 和 Lomo 模式：静态显示
+                mode === 'full' ? (
+                  // Full 模式：静态显示
                   renderStaticMode()
+                ) : (
+                  // Cover 和 Lomo 模式：使用 react-easy-crop
+                  <div
+                    className="relative w-full h-full"
+                    style={{
+                      padding: mode === 'lomo' ? `${WHITE_MARGIN_PERCENT}%` : 0,
+                      backgroundColor: 'black',
+                    }}
+                  >
+                    <Cropper
+                      image={imageUrl}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={aspectRatio}
+                      onCropChange={setCrop}
+                      onZoomChange={setZoom}
+                      onCropComplete={onCropComplete}
+                      initialCroppedAreaPixels={initialCroppedAreaPixels}
+                      // lomo模式允许缩放，其他模式禁止缩放
+                      objectFit='contain'
+                      minZoom={minZoomValue}
+                      maxZoom={1}
+                      restrictPosition={true} // lomo模式允许自由移动图片位置
+                      showGrid={false} // 不显示网格
+                      style={{
+                        containerStyle: {
+                          backgroundColor: 'white',
+                        },
+                        mediaStyle: {
+                          backgroundColor: '#ffffff',
+                        },
+                        cropAreaStyle: mode === 'lomo' ? {
+                          border: '2px solid #666', // lomo模式显示细边框，不显示遮罩
+                          boxShadow: 'none',
+                        } : {
+                          border: '3px dashed #ef4444',
+                        },
+                      }}
+                      classes={{
+                        containerClassName: 'rounded-none',
+                      }}
+                    />
+                  </div>
                 )
               )}
 
