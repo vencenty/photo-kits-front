@@ -7,7 +7,7 @@ import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { updatePhoto, getPhotoDetail } from '@/lib/api'
-import { mapCropModeToServer } from '@/lib/utils'
+import { mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import { buildOssCropUrl } from '@/lib/image-config'
 
 export default function EditPage() {
@@ -35,12 +35,8 @@ export default function EditPage() {
         // 根据cropMode设置初始编辑状态
         const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
           // 将后端的cropMode转换为前端的编辑模式
-          switch (response.photo.cropMode) {
-            case 'center': return 'cover' // 后端center对应前端cover
-            case 'full': return 'full'
-            case 'lomo': return 'lomo'
-            default: return 'cover'
-          }
+          const cropMode = response.photo.cropMode ? mapCropModeFromServer(response.photo.cropMode) : 'cover'
+          return cropMode
         }
 
         const initialMode = getInitialMode()
@@ -94,7 +90,7 @@ export default function EditPage() {
           height: response.photo.originalHeight,
           printCount: response.photo.quantity,
           isLandscape: response.photo.isLandscape,
-          cropMode: response.photo.cropMode, // 保存后端的cropMode
+          cropMode: response.photo.cropMode ? mapCropModeFromServer(response.photo.cropMode) : 'cover', // 保存后端的cropMode
           editState: {
             mode: initialMode,
             scale: 1,

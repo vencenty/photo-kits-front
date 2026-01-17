@@ -56,11 +56,11 @@ export default function ImageEditor({
   onCancel,
 }: ImageEditorProps) {
   // 获取初始模式
-  const getInitialMode = (): string => {
+  const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
     return photoData.cropMode
   }
 
-  const [mode, setMode] = useState<string>(getInitialMode())
+  const [mode, setMode] = useState<'cover' | 'full' | 'lomo'>(getInitialMode())
   const [imageUrl, setImageUrl] = useState<string>('')
   const [imageLoaded, setImageLoaded] = useState(false)
 
