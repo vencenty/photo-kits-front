@@ -39,7 +39,6 @@ function UploadPageContent() {
   const [isLoadingPhotos, setIsLoadingPhotos] = useState(true)
   const [ossSignature, setOssSignature] = useState<OssSignature | null>(null)
   const loadedRef = useRef(false) // 防止重复加载
-  const ossSignatureFetchedRef = useRef(false) // 防止重复获取 OSS 签名
   const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁单
 
   const currentSession = useStore((state) => state.currentSession)
@@ -464,34 +463,20 @@ function UploadPageContent() {
     loadPhotosFromServer()
   }, [currentSession, getOrderSn, allImages, addImages, updateImages])
 
-  // 初始化获取 OSS 签名（只获取一次）
+  // 初始化获取 OSS 签名（带缓存）
   useEffect(() => {
-    // 防止重复调用（React StrictMode 会执行两次，或者已经获取过）
-    if (ossSignatureFetchedRef.current) {
-      return
-    }
-    
     const fetchSignature = async () => {
-      // 双重检查，防止并发调用
-      if (ossSignatureFetchedRef.current) {
-        return
-      }
-      
-      ossSignatureFetchedRef.current = true
       try {
         setApiLoading(true, '获取上传签名...')
         const signature = await getOssSignature()
         setOssSignature(signature)
       } catch (error) {
         console.error('获取 OSS 签名失败:', error)
-        // 如果获取失败，重置标志，允许重试
-        ossSignatureFetchedRef.current = false
       } finally {
         setApiLoading(false, '')
       }
     }
     fetchSignature()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 只在组件挂载时执行一次
 
   /**
@@ -550,44 +535,27 @@ function UploadPageContent() {
     const orderSn = getOrderSn()
     const specId = currentSession.sizeId
 
-    // 如果没有签名，先获取（防止并发调用）
+    // 获取 OSS 签名（带缓存）
     let signature = ossSignature
     if (!signature) {
-      // 如果正在获取，等待一下再检查
-      if (ossSignatureFetchedRef.current) {
-        // 等待一小段时间，让初始化完成
-        await new Promise(resolve => setTimeout(resolve, 200))
-        signature = ossSignature
-      }
-      
-      // 如果还是没有，且没有正在获取，则获取
-      if (!signature && !ossSignatureFetchedRef.current) {
-        try {
-          console.log('开始获取 OSS 签名...')
-          ossSignatureFetchedRef.current = true
-          setApiLoading(true, '获取上传签名...')
-          signature = await getOssSignature()
-          console.log('OSS 签名获取成功:', {
-            host: signature.host,
-            dir: signature.dir,
-            hasPolicy: !!signature.policy,
-            hasSignature: !!signature.signature,
-          })
-          setOssSignature(signature)
-        } catch (error) {
-          console.error('获取 OSS 签名失败:', error)
-          ossSignatureFetchedRef.current = false // 允许重试
-          setIsUploading(false)
-          alert('获取上传签名失败，请重试')
-          return
-        } finally {
-          setApiLoading(false, '')
-        }
-      } else if (!signature) {
-        // 如果正在获取但还没完成，提示用户等待
+      try {
+        console.log('开始获取 OSS 签名...')
+        setApiLoading(true, '获取上传签名...')
+        signature = await getOssSignature()
+        console.log('OSS 签名获取成功:', {
+          host: signature.host,
+          dir: signature.dir,
+          hasPolicy: !!signature.policy,
+          hasSignature: !!signature.signature,
+        })
+        setOssSignature(signature)
+      } catch (error) {
+        console.error('获取 OSS 签名失败:', error)
         setIsUploading(false)
-        alert('正在获取上传签名，请稍候再试')
+        alert('获取上传签名失败，请重试')
         return
+      } finally {
+        setApiLoading(false, '')
       }
     }
 

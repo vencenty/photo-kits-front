@@ -157,11 +157,121 @@ export interface OssSignature {
 
 // ==================== OSS 相关 ====================
 
+// OSS 签名缓存配置
+const OSS_SIGNATURE_CACHE_KEY = 'oss-signature-cache'
+const OSS_SIGNATURE_CACHE_DURATION = 30 * 60 * 1000 // 30分钟
+
+interface OssSignatureCache {
+  signature: OssSignature
+  timestamp: number
+}
+
 /**
- * 获取 OSS 上传签名
+ * 获取 OSS 上传签名（带缓存）
  */
 export async function getOssSignature(): Promise<OssSignature> {
-  return request<OssSignature>('/api/oss/signature')
+  // 检查缓存
+  const cached = getCachedSignature()
+  if (cached) {
+    console.log('✅ 使用缓存的 OSS 签名')
+    return cached
+  }
+
+  console.log('🔄 从服务器获取新的 OSS 签名...')
+  // 从服务器获取新签名
+  const signature = await request<OssSignature>('/api/oss/signature')
+
+  // 缓存签名
+  setCachedSignature(signature)
+  console.log('💾 OSS 签名已缓存（30分钟内有效）')
+
+  return signature
+}
+
+/**
+ * 获取缓存的 OSS 签名
+ */
+function getCachedSignature(): OssSignature | null {
+  // 只在客户端使用缓存
+  if (typeof window === 'undefined') return null
+
+  try {
+    const cached = localStorage.getItem(OSS_SIGNATURE_CACHE_KEY)
+    if (!cached) return null
+
+    const cache: OssSignatureCache = JSON.parse(cached)
+    const now = Date.now()
+
+    // 检查是否过期
+    if (now - cache.timestamp > OSS_SIGNATURE_CACHE_DURATION) {
+      localStorage.removeItem(OSS_SIGNATURE_CACHE_KEY)
+      return null
+    }
+
+    return cache.signature
+  } catch (error) {
+    console.warn('读取 OSS 签名缓存失败:', error)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(OSS_SIGNATURE_CACHE_KEY)
+    }
+    return null
+  }
+}
+
+/**
+ * 缓存 OSS 签名
+ */
+function setCachedSignature(signature: OssSignature): void {
+  // 只在客户端缓存
+  if (typeof window === 'undefined') return
+
+  try {
+    const cache: OssSignatureCache = {
+      signature,
+      timestamp: Date.now()
+    }
+    localStorage.setItem(OSS_SIGNATURE_CACHE_KEY, JSON.stringify(cache))
+  } catch (error) {
+    console.warn('缓存 OSS 签名失败:', error)
+  }
+}
+
+/**
+ * 清除 OSS 签名缓存
+ */
+export function clearOssSignatureCache(): void {
+  if (typeof window === 'undefined') return
+
+  try {
+    localStorage.removeItem(OSS_SIGNATURE_CACHE_KEY)
+  } catch (error) {
+    console.warn('清除 OSS 签名缓存失败:', error)
+  }
+}
+
+/**
+ * 获取 OSS 签名缓存信息（调试用）
+ */
+export function getOssSignatureCacheInfo(): { cached: boolean, age: number, expiresIn: number } | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const cached = localStorage.getItem(OSS_SIGNATURE_CACHE_KEY)
+    if (!cached) return null
+
+    const cache: OssSignatureCache = JSON.parse(cached)
+    const now = Date.now()
+    const age = now - cache.timestamp
+    const expiresIn = OSS_SIGNATURE_CACHE_DURATION - age
+
+    return {
+      cached: true,
+      age,
+      expiresIn
+    }
+  } catch (error) {
+    return null
+  }
 }
 
 // 固定代理域名，用于图片回显
