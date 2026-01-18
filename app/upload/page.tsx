@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
@@ -27,10 +27,10 @@ import {
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
 
-export default function UploadPage() {
+function UploadPageContent() {
   const router = useRouter()
-  const params = useParams()
-  const sizeId = params.sizeId as string
+  const searchParams = useSearchParams()
+  const sizeId = searchParams.get('sizeId') as string
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -827,7 +827,7 @@ export default function UploadPage() {
       isLandscape: image.isLandscape,
     }
     sessionStorage.setItem(`edit-image-${id}`, JSON.stringify(imageData))
-    router.push(`/edit/${id}`)
+    router.push(`/edit?imageId=${id}`)
   }
 
   const handleBatchDelete = async () => {
@@ -1431,5 +1431,17 @@ export default function UploadPage() {
       {/* 全局 Loading */}
       <GlobalLoading />
     </div>
+  )
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-[#ff4d6d] animate-spin" />
+      </div>
+    }>
+      <UploadPageContent />
+    </Suspense>
   )
 }

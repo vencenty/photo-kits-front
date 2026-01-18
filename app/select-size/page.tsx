@@ -192,7 +192,7 @@ export default function SelectSizePage() {
     setCurrentSession(session)
     clearImages()
 
-    router.push(`/upload/${size.id}`)
+    router.push(`/upload?sizeId=${size.id}`)
   }
 
   // 删除规格

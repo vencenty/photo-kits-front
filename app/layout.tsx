@@ -1,10 +1,4 @@
-import type { Metadata } from 'next'
 import './globals.css'
-
-export const metadata: Metadata = {
-  title: '测试 - 传图',
-  description: '',
-}
 
 export default function RootLayout({
   children,
@@ -14,6 +8,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
+        <title>测试 - 传图</title>
+        <meta name="description" content="" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       </head>
       <body>{children}</body>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
@@ -10,10 +10,10 @@ import { updatePhoto, getPhotoDetail } from '@/lib/api'
 import { mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import { buildOssCropUrl } from '@/lib/image-config'
 
-export default function EditPage() {
+function EditPageContent() {
   const router = useRouter()
-  const params = useParams()
-  const imageId = params.imageId as string
+  const searchParams = useSearchParams()
+  const imageId = searchParams.get('imageId') as string
 
   const currentSession = useStore((state) => state.currentSession)
   const setApiLoading = useStore((state) => state.setApiLoading)
@@ -112,7 +112,7 @@ export default function EditPage() {
       } catch (error) {
         console.error('获取图片详情失败:', error)
         // 出错时跳转回列表页
-        router.push(`/upload/${currentSession.sizeId}`)
+        router.push(`/upload?sizeId=${currentSession?.sizeId}`)
       } finally {
         setIsLoading(false)
       }
@@ -161,7 +161,7 @@ export default function EditPage() {
       console.log('编辑状态已保存到后端:', imageId)
 
       // 保存成功，跳转回列表页
-      router.push(`/upload/${currentSession?.sizeId}`)
+      router.push(`/upload?sizeId=${currentSession?.sizeId}`)
 
     } catch (error) {
       console.error('保存编辑状态失败:', error)
@@ -206,5 +206,17 @@ export default function EditPage() {
       {/* 全局 Loading */}
       <GlobalLoading />
     </div>
+  )
+}
+
+export default function EditPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-white animate-spin" />
+      </div>
+    }>
+      <EditPageContent />
+    </Suspense>
   )
 }
