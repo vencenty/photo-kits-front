@@ -205,6 +205,12 @@ interface StoreState {
   updateImages: (updates: { id: string; updates: Partial<Image> }[]) => void // 批量更新
   deleteImage: (id: string) => void
   clearImages: () => void
+  
+  // 缓存管理
+  lastFetchTime: number | null // 最后一次从服务器加载数据的时间戳
+  setLastFetchTime: (time: number) => void
+  shouldRefetch: () => boolean // 判断是否需要重新从服务器获取数据
+  forceRefetch: () => void // 强制标记需要刷新（清空缓存时间戳）
 
   // Selection (批量编辑)
   selectedIds: string[]
@@ -277,6 +283,23 @@ export const useStore = create<StoreState>()(
             : null,
         })),
       clearImages: () => set({ images: [] }),
+      
+      // 缓存管理
+      lastFetchTime: null,
+      setLastFetchTime: (time) => set({ lastFetchTime: time }),
+      shouldRefetch: () => {
+        const state = get()
+        // 如果从未获取过数据，需要获取
+        if (!state.lastFetchTime) return true
+        // 如果没有 images 数据，需要获取
+        if (state.images.length === 0) return true
+        // 如果距离上次获取超过 5 分钟，需要刷新（防止数据过期）
+        const CACHE_DURATION = 5 * 60 * 1000 // 5 分钟
+        const now = Date.now()
+        return now - state.lastFetchTime > CACHE_DURATION
+      },
+      // 🚀 强制标记需要刷新（清空缓存时间戳）
+      forceRefetch: () => set({ lastFetchTime: null }),
 
       // Selection
       selectedIds: [],
@@ -308,13 +331,20 @@ export const useStore = create<StoreState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         currentSession: state.currentSession,
-        // 完全不持久化 images 数据，提升性能
-        // images 数据会在页面加载时从服务器重新获取
+        // 持久化 images 数据(排除 file 对象以减小存储空间)
+        images: state.images.map(img => {
+          const { file, ...imageWithoutFile } = img
+          return imageWithoutFile
+        }),
+        // 持久化最后获取时间，用于判断缓存是否过期
+        lastFetchTime: state.lastFetchTime,
       }),
       // Hydration 完成后设置标志
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
       },
+      // 版本控制，如果数据结构变化可以增加版本号清除旧缓存
+      version: 1,
     }
   )
 )

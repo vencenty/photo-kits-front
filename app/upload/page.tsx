@@ -58,6 +58,10 @@ function UploadPageContent() {
   const toggleSelection = useStore((state) => state.toggleSelection)
   const clearSelection = useStore((state) => state.clearSelection)
   const selectAll = useStore((state) => state.selectAll)
+  
+  // 缓存管理
+  const shouldRefetch = useStore((state) => state.shouldRefetch)
+  const setLastFetchTime = useStore((state) => state.setLastFetchTime)
 
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
@@ -119,45 +123,45 @@ function UploadPageContent() {
     overscan: 3, // 上下各多渲染 3 行，滚动更平滑
   })
 
-  // 使用 ResizeObserver 监听行高变化并触发重新测量
+  // 🚀 优化：合并虚拟滚动测量逻辑，减少重复测量
   useEffect(() => {
-    if (rowRefs.current.size === 0) return
+    if (!rowVirtualizer) return
     
-    const observer = new ResizeObserver(() => {
-      // 当行高变化时，重新测量所有行（更安全，避免单个元素测量的问题）
-      rowVirtualizer.measure()
-    })
+    // Debounce 测量函数，避免频繁调用
+    let measureTimer: NodeJS.Timeout | null = null
+    const debouncedMeasure = () => {
+      if (measureTimer) clearTimeout(measureTimer)
+      measureTimer = setTimeout(() => {
+        rowVirtualizer.measure()
+      }, 50) // 减少延迟从 100ms 到 50ms
+    }
     
-    // 观察所有已渲染的行
-    rowRefs.current.forEach((element) => {
-      observer.observe(element)
-    })
+    // 1. ResizeObserver - 监听行高变化
+    let resizeObserver: ResizeObserver | null = null
+    if (rowRefs.current.size > 0) {
+      resizeObserver = new ResizeObserver(debouncedMeasure)
+      rowRefs.current.forEach((element) => {
+        resizeObserver?.observe(element)
+      })
+    }
+    
+    // 2. 窗口大小变化监听
+    const handleResize = debouncedMeasure
+    window.addEventListener('resize', handleResize)
+    
+    // 3. 图片列表变化时测量（仅在数量变化时）
+    if (images.length > 0) {
+      debouncedMeasure()
+    }
     
     return () => {
-      observer.disconnect()
+      if (measureTimer) clearTimeout(measureTimer)
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', handleResize)
     }
-  }, [rowVirtualizer, images.length])
+  }, [rowVirtualizer, images.length]) // 🚀 优化：只在必要时触发
 
-  // 窗口大小变化时重新测量行高
-  useEffect(() => {
-    const handleResize = () => {
-      rowVirtualizer.measure()
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [rowVirtualizer])
-
-  // 当图片列表变化时，重新测量
-  useEffect(() => {
-    // 延迟测量，确保 DOM 已更新
-    const timer = setTimeout(() => {
-      rowVirtualizer.measure()
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [images.length, rowVirtualizer])
-
-  // 恢复滚动位置（从编辑页返回时）- 无感恢复方案
-  // 使用 useLayoutEffect 确保在浏览器 paint 前完成定位
+  // 🚀 优化：恢复滚动位置（从编辑页返回时）- 更快速、无闪烁
   useEffect(() => {
     if (!hasHydrated || !currentSession || images.length === 0 || isLoadingPhotos) return
     if (!scrollContainerRef.current || !rowVirtualizer) return
@@ -170,105 +174,57 @@ function UploadPageContent() {
         const scrollData = JSON.parse(savedData)
         const container = scrollContainerRef.current
         
-        // 步骤1：隐藏内容，防止用户看到中间态
+        // 🚀 优化：使用更轻量的方式隐藏内容
         setIsRestoringScroll(true)
         
-        // 步骤2：锁定滚动容器，防止意外滚动
-        const originalOverflow = container.style.overflow
-        const originalScrollBehavior = container.style.scrollBehavior
-        container.style.overflow = 'hidden'
-        container.style.scrollBehavior = 'auto'
-        
-        // 步骤3：等待虚拟滚动初始化完成
+        // 快速恢复滚动位置
         const restoreScroll = () => {
           if (!container || !rowVirtualizer) return
           
           try {
-            // 方案A：使用 index + offset（推荐）
+            // 方案A：使用 index + offset
             if (scrollData.index !== undefined && scrollData.offset !== undefined) {
-              console.log('恢复滚动位置:', scrollData)
-              
-              // 先强制测量所有行，确保虚拟滚动器有准确的数据
               rowVirtualizer.measure()
+              rowVirtualizer.scrollToIndex(scrollData.index, { align: 'start' })
               
-              // 使用 scrollToIndex 定位到目标行
-              rowVirtualizer.scrollToIndex(scrollData.index, {
-                align: 'start',
-              })
-              
-              // 等待虚拟滚动器完成测量和渲染
-              // 使用多个 RAF 确保虚拟滚动已完成
-              const applyOffset = () => {
-                if (!container || !rowVirtualizer) return
-                
-                // 再次测量，确保数据最新
-                rowVirtualizer.measure()
-                
-                // 获取虚拟 items
-                const virtualItems = rowVirtualizer.getVirtualItems()
-                const targetItem = virtualItems.find(
-                  item => item.index === scrollData.index
-                )
-                
-                if (targetItem) {
-                  // 使用虚拟滚动器的 start 值 + offset
-                  const finalScrollTop = targetItem.start + scrollData.offset
-                  container.scrollTop = finalScrollTop
-                  console.log('恢复完成，最终位置:', finalScrollTop, '目标:', scrollData)
-                  
-                  // 恢复并显示
-                  container.style.overflow = originalOverflow
-                  container.style.scrollBehavior = originalScrollBehavior
-                  setIsRestoringScroll(false)
-                  sessionStorage.removeItem(scrollKey)
-                } else {
-                  // 如果找不到目标 item，再等一帧
-                  console.warn('找不到目标 item，等待下一帧')
-                  requestAnimationFrame(applyOffset)
-                }
-              }
-              
-              // 三重 RAF 确保虚拟滚动完成
+              // 🚀 优化：减少 RAF 嵌套，从三重改为双重
               requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                  requestAnimationFrame(applyOffset)
+                  const virtualItems = rowVirtualizer.getVirtualItems()
+                  const targetItem = virtualItems.find(item => item.index === scrollData.index)
+                  
+                  if (targetItem) {
+                    container.scrollTop = targetItem.start + scrollData.offset
+                    setIsRestoringScroll(false)
+                    sessionStorage.removeItem(scrollKey)
+                  } else {
+                    // 降级方案：直接使用 scrollTop
+                    container.scrollTop = scrollData.scrollTop || 0
+                    setIsRestoringScroll(false)
+                    sessionStorage.removeItem(scrollKey)
+                  }
                 })
               })
             } else if (scrollData.scrollTop !== undefined) {
-              console.log('恢复滚动位置（降级）:', scrollData.scrollTop)
-              // 方案B：降级使用 scrollTop（备用方案）
+              // 方案B：降级使用 scrollTop
               container.scrollTop = scrollData.scrollTop
-              
               requestAnimationFrame(() => {
-                container.style.overflow = originalOverflow
-                container.style.scrollBehavior = originalScrollBehavior
                 setIsRestoringScroll(false)
                 sessionStorage.removeItem(scrollKey)
               })
             }
           } catch (error) {
             console.error('恢复滚动位置失败:', error)
-            // 恢复状态
-            container.style.overflow = originalOverflow
-            container.style.scrollBehavior = originalScrollBehavior
             setIsRestoringScroll(false)
             sessionStorage.removeItem(scrollKey)
           }
         }
         
-        // 延迟执行，确保虚拟滚动已初始化
-        const timer = setTimeout(() => {
-          // 使用 requestAnimationFrame 确保在渲染前执行
-          requestAnimationFrame(restoreScroll)
-        }, 150) // 增加延迟，确保虚拟滚动完全初始化
+        // 🚀 优化：减少延迟从 150ms 到 50ms
+        const timer = setTimeout(restoreScroll, 50)
         
         return () => {
           clearTimeout(timer)
-          // 清理时恢复状态
-          if (container) {
-            container.style.overflow = originalOverflow
-            container.style.scrollBehavior = originalScrollBehavior
-          }
           setIsRestoringScroll(false)
         }
       } catch (error) {
@@ -301,7 +257,7 @@ function UploadPageContent() {
     }
   }, [currentSession, sizeId, router, hasHydrated])
 
-  // 从后端加载已上传的照片
+  // 从后端加载已上传的照片 - 智能缓存版本
   useEffect(() => {
     const loadPhotosFromServer = async () => {
       if (!currentSession || loadedRef.current) return
@@ -315,6 +271,31 @@ function UploadPageContent() {
       }
 
       loadedRef.current = true
+      
+      // 🚀 智能缓存：检查是否需要重新获取数据
+      const needRefetch = shouldRefetch()
+      
+      // 如果有缓存数据且未过期，直接使用缓存，无需显示 loading
+      if (!needRefetch && images.length > 0) {
+        console.log('📦 使用缓存数据，跳过 API 调用 (图片数:', images.length, ')')
+        setIsLoadingPhotos(false)
+        
+        // 后台静默更新订单状态（不影响用户体验）
+        getOrderDetail(orderSn)
+          .then(orderDetail => {
+            setIsOrderLocked(orderDetail.status === 2)
+          })
+          .catch(error => {
+            console.error('获取订单状态失败:', error)
+          })
+        
+        return
+      }
+      
+      // 需要刷新时打印日志
+      console.log('🔄 需要刷新数据:', needRefetch ? '缓存已过期/被强制刷新' : '首次加载')
+
+      // 需要从服务器加载数据
       setIsLoadingPhotos(true)
 
       try {
@@ -330,6 +311,9 @@ function UploadPageContent() {
         }
         
         const result = await listPhotos(orderSn, specId)
+        
+        // 更新最后获取时间
+        setLastFetchTime(Date.now())
         
         if (result.photos && result.photos.length > 0) {
           // 获取当前 session 已有的图片
@@ -461,7 +445,7 @@ function UploadPageContent() {
     }
 
     loadPhotosFromServer()
-  }, [currentSession, getOrderSn, allImages, addImages, updateImages])
+  }, [currentSession, hasHydrated]) // 🚀 优化：只在 session 或 hydration 变化时触发
 
   // 初始化获取 OSS 签名（带缓存）
   useEffect(() => {

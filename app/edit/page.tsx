@@ -17,6 +17,9 @@ function EditPageContent() {
 
   const currentSession = useStore((state) => state.currentSession)
   const setApiLoading = useStore((state) => state.setApiLoading)
+  // 🚀 乐观更新：获取 store 方法
+  const updateImage = useStore((state) => state.updateImage)
+  const forceRefetch = useStore((state) => state.forceRefetch)
 
   const [image, setImage] = useState<Image | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -139,6 +142,7 @@ function EditPageContent() {
     try {
       setApiLoading(true, '保存编辑中...')
 
+      // 1️⃣ 保存到后端
       await updatePhoto({
         photoId: imageId,
         cropMode: mapCropModeToServer(mode),
@@ -158,9 +162,21 @@ function EditPageContent() {
         outputUrl: saveData.outputUrl,
       })
 
-      console.log('编辑状态已保存到后端:', imageId)
+      console.log('✅ 编辑状态已保存到后端:', imageId)
 
-      // 保存成功，跳转回列表页
+      // 2️⃣ 🚀 乐观更新：立即更新本地 store
+      updateImage(imageId, {
+        cropInfo: saveData.cropInfo,
+        cropMode: mode,
+        outputUrl: saveData.outputUrl,
+      })
+      console.log('✅ 本地缓存已更新:', { mode, cropInfo: saveData.cropInfo })
+
+      // 3️⃣ 🚀 标记需要后台刷新验证
+      forceRefetch()
+      console.log('✅ 已标记需要后台刷新')
+
+      // 4️⃣ 跳转回列表页（用户立即看到更新效果）
       router.push(`/upload?sizeId=${currentSession?.sizeId}`)
 
     } catch (error) {

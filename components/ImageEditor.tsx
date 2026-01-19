@@ -61,12 +61,9 @@ export default function ImageEditor({
   }
 
   const [mode, setMode] = useState<'cover' | 'full' | 'lomo'>(getInitialMode())
-  const [imageUrl, setImageUrl] = useState<string>('')
+  // 🚀 优化：直接使用传入的 URL，不需要状态
+  const imageUrl = photoData.thumbnailUrl || photoData.originalUrl
   const [imageLoaded, setImageLoaded] = useState(false)
-
-  // 计算出的URL状态
-  const [outputUrl, setOutputUrl] = useState<string>('')
-  const [thumbUrl, setThumbUrl] = useState<string>('')
 
   // react-easy-crop 状态
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
@@ -74,16 +71,16 @@ export default function ImageEditor({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [initialCroppedAreaPixels, setInitialCroppedAreaPixels] = useState<Area | undefined>(undefined)
 
-  // 原图尺寸（从 photoData 获取，这是真实的原图尺寸）
-  const [sourceSize, setSourceSize] = useState({
+  // 🚀 优化：直接从 photoData 获取尺寸，避免异步加载
+  const sourceSize = useMemo(() => ({
     width: photoData.width || 0,
     height: photoData.height || 0,
-  })
+  }), [photoData.width, photoData.height])
 
   // 压缩图尺寸（前端实际加载的图片尺寸，用于坐标转换）
   const [thumbImageSize, setDisplayImageSize] = useState({
-    width: 0,
-    height: 0,
+    width: photoData.width || 0,
+    height: photoData.height || 0,
   })
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -114,75 +111,41 @@ export default function ImageEditor({
     return canvasHeight / canvasWidth
   }, [sourceSize.width, sourceSize.height, paperAspectRatio, canvasWidth, canvasHeight])
 
-  // 加载图片
+  // 🚀 优化：简化图片加载，只在图片实际渲染时获取尺寸
   useEffect(() => {
-    const originalUrl = photoData.thumbnailUrl || photoData.originalUrl
-    if (!originalUrl) return
+    if (!imageUrl) return
 
-    // 直接加载 OSS 返回的原图，不要拼接任何参数
-    setImageUrl(originalUrl)
-
-    // 预加载图片获取尺寸
+    // 只预加载获取压缩图尺寸（用于坐标转换）
     const img = document.createElement('img')
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       setImageLoaded(true)
-
-      // 1. 设置原图尺寸（从 photoData 获取，这是真实的原图尺寸）
-      if (!sourceSize.width || !sourceSize.height) {
-        setSourceSize({
-          width: photoData.width || img.naturalWidth,
-          height: photoData.height || img.naturalHeight,
-        })
-      }
-
-      // 2. 设置压缩图尺寸（这是前端实际加载的图片尺寸，用于坐标转换）
-      // naturalWidth/naturalHeight 是图片的原始像素尺寸（即使被 CSS 缩放）
+      
+      // 设置压缩图尺寸（用于坐标转换）
       setDisplayImageSize({
         width: img.naturalWidth,
         height: img.naturalHeight,
       })
-
-      console.log('📏 图片尺寸信息:', {
-        原图尺寸: { width: photoData.width || img.naturalWidth, height: photoData.height || img.naturalHeight },
-        压缩图尺寸: { width: img.naturalWidth, height: img.naturalHeight },
-        缩放比例: {
-          x: (photoData.width || img.naturalWidth) / img.naturalWidth,
-          y: (photoData.height || img.naturalHeight) / img.naturalHeight,
-        },
-      })
     }
     img.onerror = () => {
-      console.error('加载原图失败:', originalUrl)
-      // 原图加载失败时的处理（可以显示错误提示或使用默认图片）
+      console.error('加载图片失败:', imageUrl)
+      // 失败时也标记为已加载，避免卡住
+      setImageLoaded(true)
     }
-    img.src = originalUrl
+    img.src = imageUrl
 
     return () => {
       img.onload = null
       img.onerror = null
     }
-  }, [photoData.thumbnailUrl, photoData.originalUrl, photoData.width, photoData.height])
+  }, [imageUrl])
 
-  // 从保存的 cropInfo 恢复状态
-  // 
-  // 【坐标转换原理】
-  // 1. 保存时：用户在压缩图（600px短边）上编辑，react-easy-crop 返回压缩图坐标
-  //    → 转换为原图坐标保存：原图坐标 = 压缩图坐标 × (原图尺寸 / 压缩图尺寸)
-  //    → 例如：压缩图300×400，原图3000×4000，压缩图上移动10px → 原图移动100px
-  //
-  // 2. 恢复时：从数据库读取的是原图坐标（cropInfo）
-  //    → 转换为压缩图坐标：压缩图坐标 = 原图坐标 × (压缩图尺寸 / 原图尺寸)
-  //    → 例如：原图移动100px → 压缩图移动10px，设置到 react-easy-crop
-  //
-  // 3. react-easy-crop 的 crop Point：
-  //    - 表示图片中心相对于裁剪框中心的偏移（像素单位）
-  //    - 裁剪框是居中的，所以需要计算图片中心位置
+  // 🚀 优化：从保存的 cropInfo 恢复状态（简化版）
   useEffect(() => {
     // 防止重复恢复
     if (restoredRef.current) return
     if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return
-    if (!thumbImageSize.width || !thumbImageSize.height) return // 等待压缩图尺寸加载完成
+    if (!thumbImageSize.width || !thumbImageSize.height) return
     if (mode !== 'cover') return
 
     const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
