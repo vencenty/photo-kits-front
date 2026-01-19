@@ -2,6 +2,9 @@
 const nextConfig = {
   // 纯静态导出模式
   output: 'export',
+  compress: true,
+  swcMinify: true,
+  productionBrowserSourceMaps: false,
   // 禁用图片优化（静态导出必须）
   images: {
     unoptimized: true,

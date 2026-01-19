@@ -40,10 +40,10 @@ export const IMAGE_COMPRESS_CONFIG = {
    * 建议：较小的尺寸和较低的质量，以提升加载速度
    */
   list: {
-    width: 300,      // 列表页缩略图宽度（像素）
+    width: 200,      // 列表页缩略图宽度（像素）
     height: 0,      // 0 表示按宽度等比例缩放
-    quality: 80,    // 图片质量（0-100）
-    format: 'jpg',  // 输出格式：jpg/webp/png，空字符串表示不转换
+    quality: 65,    // 图片质量（0-100）
+    format: 'webp',  // 输出格式：jpg/webp/png，空字符串表示不转换
   } as OssImageConfig,
 
   /**
