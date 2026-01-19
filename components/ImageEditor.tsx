@@ -87,11 +87,12 @@ export default function ImageEditor({
   const restoredRef = useRef(false) // 标记是否已恢复过位置
   const isRestoringRef = useRef(false) // 标记是否正在恢复位置，用于防止 onCropComplete 触发更新
 
-  // 计算相纸比例
-  const paperAspectRatio = canvasWidth / canvasHeight
+  // 🚀 优化：稳定化相纸比例，避免每次render重新计算
+  const paperAspectRatio = useMemo(() => canvasWidth / canvasHeight, [canvasWidth, canvasHeight])
 
-  // 根据图片方向动态调整裁剪框比例，让图片可保留的区域最大化
+  // 🚀 优化：根据图片方向动态调整裁剪框比例，让图片可保留的区域最大化
   // 如果图片是横图，裁剪框也应该是横的；如果图片是竖图，裁剪框也应该是竖的
+  // 使用 useMemo 确保稳定性，避免无限循环
   const aspectRatio = useMemo(() => {
     if (!sourceSize.width || !sourceSize.height) {
       return paperAspectRatio // 默认使用相纸比例
@@ -106,10 +107,34 @@ export default function ImageEditor({
       return paperAspectRatio
     }
 
-    // 如果图片和相纸方向不一致，反转相纸比例
-    // 例如：相纸是 3:4（竖），图片是横图，则使用 4:3（横）
-    return canvasHeight / canvasWidth
-  }, [sourceSize.width, sourceSize.height, paperAspectRatio, canvasWidth, canvasHeight])
+    // 🚀 关键：如果图片和相纸方向不一致，反转相纸比例
+    // 例如：相纸是 3:4（竖 0.75），图片是横图，则使用 4:3（横 1.33）
+    // 使用倒数避免重新计算 canvasHeight / canvasWidth，减少依赖
+    return 1 / paperAspectRatio
+  }, [sourceSize.width, sourceSize.height, paperAspectRatio])
+
+  // 🚀 优化：固化图片压缩参数，避免每次render创建新对象
+  const imageCompressOptions = useMemo(() => ({
+    quality: 70,
+    format: 'jpg'
+  }), [])
+
+  // 🚀 优化：固化样式对象，避免每次render创建新对象
+  const cropperStyle = useMemo(() => ({
+    containerStyle: {
+      backgroundColor: 'black',
+    },
+    mediaStyle: {
+      backgroundColor: '#ffffff',
+    },
+    cropAreaStyle: {
+      border: '3px dashed #ef4444',
+    },
+  }), [])
+
+  const cropperClasses = useMemo(() => ({
+    containerClassName: 'rounded-none',
+  }), [])
 
   // 🚀 优化：简化图片加载，只在图片实际渲染时获取尺寸
   useEffect(() => {
@@ -416,10 +441,7 @@ export default function ImageEditor({
                 mode === 'cover' ? (
                   // Cover 模式：使用 react-easy-crop 
                   <Cropper
-                    image={buildOssCropUrl(imageUrl, undefined, {
-                      quality: 70,
-                      format: 'jpg'
-                    })}
+                    image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
                     crop={crop}
                     zoom={zoom}
                     aspect={aspectRatio}
@@ -433,20 +455,8 @@ export default function ImageEditor({
                     maxZoom={1}
                     restrictPosition={true}
                     showGrid={true}
-                    style={{
-                      containerStyle: {
-                        backgroundColor: 'black',
-                      },
-                      mediaStyle: {
-                        backgroundColor: '#ffffff',
-                      },
-                      cropAreaStyle: {
-                        border: '3px dashed #ef4444',
-                      },
-                    }}
-                    classes={{
-                      containerClassName: 'rounded-none',
-                    }}
+                    style={cropperStyle}
+                    classes={cropperClasses}
                   />
                 ) : (
                   // Full 和 Lomo 模式：静态显示
