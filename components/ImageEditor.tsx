@@ -453,7 +453,10 @@ export default function ImageEditor({
                 mode === 'cover' ? (
                   // Cover 模式：使用 react-easy-crop 
                   <Cropper
-                    image={imageUrl}
+                    image={buildOssCropUrl(imageUrl, undefined, {
+                      quality: 70,
+                      format: 'jpg'
+                    })}
                     crop={crop}
                     zoom={zoom}
                     aspect={aspectRatio}
