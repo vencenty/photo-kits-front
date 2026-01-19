@@ -344,13 +344,7 @@ export default function SuccessPage() {
                 )}
               </button>
             )}
-            <button
-              onClick={handleViewImages}
-              className="w-full py-3 bg-white border-2 border-gray-300 text-gray-600 font-medium rounded-lg shadow-sm hover:bg-gray-50 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              <Image className="w-5 h-5" />
-              查看已上传照片
-            </button>
+           
             <button
               onClick={handleBackHome}
               className="w-full py-3 gradient-primary text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
