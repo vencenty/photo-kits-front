@@ -308,23 +308,8 @@ export const useStore = create<StoreState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         currentSession: state.currentSession,
-        // 只保存图片元数据，不保存图片数据（base64太大会导致 QuotaExceededError）
-        images: state.images.map(img => ({
-          id: img.id,
-          sessionId: img.sessionId,
-          filename: img.filename,
-          width: img.width,
-          height: img.height,
-          printCount: img.printCount,
-          editState: img.editState,
-          transform: img.transform, // 保存变换信息（旧版本兼容）
-          // cropInfo: img.cropInfo, // ❌ 移除：不保存裁剪信息，避免缓存过期数据
-          isLandscape: img.isLandscape, // 保存自动旋转状态
-          // 不保存这些大数据:
-          // originalUrl: undefined,
-          // thumbnailUrl: undefined,
-          // file: undefined,
-        })),
+        // 完全不持久化 images 数据，提升性能
+        // images 数据会在页面加载时从服务器重新获取
       }),
       // Hydration 完成后设置标志
       onRehydrateStorage: () => (state) => {
