@@ -159,7 +159,7 @@ export default function SuccessPage() {
     setCurrentSession(session)
     clearImages()
 
-    router.push(`/upload/${size.id}`)
+    router.push(`/upload?sizeId=${size.id}`)
   }, [orderNumber, setCurrentSession, clearImages, router])
 
   // 锁单功能
