@@ -6,7 +6,7 @@ import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'l
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
-import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
+import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
 import { GlobalLoading } from '@/components/GlobalLoading'
@@ -544,10 +544,21 @@ function UploadPageContent() {
     }
 
     for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i]
-      setUploadProgress(`上传中 ${i + 1}/${validFiles.length}`)
+      let file = validFiles[i]
+      setUploadProgress(`处理中 ${i + 1}/${validFiles.length}`)
       
       try {
+        // 转换图片格式为 JPEG（如果需要）
+        try {
+          file = await convertToJpeg(file)
+        } catch (conversionError) {
+          console.error('图片格式转换失败:', conversionError)
+          alert(`"${validFiles[i].name}" 格式转换失败，已跳过`)
+          continue
+        }
+
+        setUploadProgress(`上传中 ${i + 1}/${validFiles.length}`)
+        
         // 获取原图尺寸
         const dimensions = await getImageDimensions(file)
         
@@ -1332,7 +1343,7 @@ function UploadPageContent() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,image/heic,image/heif,image/webp,.heic,.heif"
+        accept="image/*"
         multiple
         onChange={handleFileSelect}
         className="hidden"
