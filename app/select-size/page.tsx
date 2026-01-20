@@ -7,6 +7,7 @@ import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/l
 import { useStore, Session } from '@/lib/store'
 import { addSpec, deleteSpec, createOrder, listSpecs, getOrderDetail, SpecInfo } from '@/lib/api'
 import { GlobalLoading } from '@/components/GlobalLoading'
+import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 // 已添加的规格项（包含数据库 ID）
 interface AddedSize {
@@ -26,6 +27,7 @@ export default function SelectSizePage() {
   const router = useRouter()
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
   const [receiverName, setReceiverName] = useState<string>('') // 收货人信息
+  const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁定
   const [addedSizes, setAddedSizes] = useState<AddedSize[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
@@ -64,9 +66,10 @@ export default function SelectSizePage() {
       // 先尝试创建/获取订单
       await createOrder(orderNumber)
       
-      // 获取订单详情（包含收货人信息）
+      // 获取订单详情（包含收货人信息和锁定状态）
       const orderDetail = await getOrderDetail(orderNumber, false)
       setReceiverName(orderDetail.receiverName || '')
+      setIsOrderLocked(checkOrderLocked(orderDetail.status)) // 使用常量检查订单是否已锁定
       
       // 从后端获取规格列表
       const response = await listSpecs(orderNumber)
@@ -111,6 +114,13 @@ export default function SelectSizePage() {
   // 添加新规格
   const handleAddSize = async () => {
     if (!selectedPaper || !selectedSize || !orderNumber) return
+
+    // 检查订单是否已锁定
+    if (isOrderLocked) {
+      showToastMessage('订单已锁定，无法添加规格')
+      setShowAddModal(false)
+      return
+    }
 
     const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
     const size = SIZE_OPTIONS.find(s => s.id === selectedSize)
@@ -206,6 +216,12 @@ export default function SelectSizePage() {
     
     if (!orderNumber) return
 
+    // 检查订单是否已锁定
+    if (isOrderLocked) {
+      showToastMessage('订单已锁定，无法删除规格')
+      return
+    }
+
     // 始终弹出确认对话框
     const confirmMessage = size.imageCount > 0
       ? `确定要删除「${size.paperName} ${size.sizeName}」吗？\n该规格已上传 ${size.imageCount} 张照片，删除后数据将丢失。`
@@ -268,26 +284,39 @@ export default function SelectSizePage() {
                     👤 收货人：<span className="font-medium">{receiverName}</span>
                   </p>
                 </div>
-                <button
-                  onClick={() => router.push(`/guide?orderNo=${orderNumber}`)}
-                  className="ml-2 p-1.5 text-blue-600 hover:bg-blue-200 rounded transition-colors flex-shrink-0"
-                  title="编辑收货人信息"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
+                {!isOrderLocked && (
+                  <button
+                    onClick={() => router.push(`/guide?orderNo=${orderNumber}`)}
+                    className="ml-2 p-1.5 text-blue-600 hover:bg-blue-200 rounded transition-colors flex-shrink-0"
+                    title="编辑收货人信息"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {/* 锁定状态提示 */}
+            {isOrderLocked && (
+              <div className="px-4 py-2.5 bg-green-100/50 border-t border-green-200">
+                <p className="text-sm text-green-700">
+                  🔒 订单已锁定，正在制作中
+                </p>
               </div>
             )}
           </div>
         )}
 
         {/* 添加规格按钮 */}
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-[#ff4d6d] hover:bg-pink-50 transition-colors active:scale-[0.98]"
-        >
-          <Plus className="w-5 h-5" />
-          <span className="font-medium">添加规格</span>
-        </button>
+        {!isOrderLocked && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-[#ff4d6d] hover:bg-pink-50 transition-colors active:scale-[0.98]"
+          >
+            <Plus className="w-5 h-5" />
+            <span className="font-medium">添加规格</span>
+          </button>
+        )}
 
         {/* 加载中 */}
         {isLoading && (
@@ -341,17 +370,19 @@ export default function SelectSizePage() {
                     </div>
 
                     {/* 删除按钮 */}
-                    <button
-                      onClick={(e) => handleDeleteSize(size, e)}
-                      disabled={isDeleting === size.id}
-                      className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
-                    >
-                      {isDeleting === size.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <X className="w-4 h-4" />
-                      )}
-                    </button>
+                    {!isOrderLocked && (
+                      <button
+                        onClick={(e) => handleDeleteSize(size, e)}
+                        disabled={isDeleting === size.id}
+                        className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
+                      >
+                        {isDeleting === size.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <X className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
 
                     {/* 箭头 */}
                     <ChevronRight className="w-5 h-5 text-gray-300" />

@@ -8,6 +8,7 @@ import { GlobalLoading } from '@/components/GlobalLoading'
 import { lockOrder, getOrderDetail } from '@/lib/api'
 import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
+import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 // 闪光动画样式
 const shimmerStyle = `
@@ -103,8 +104,8 @@ export default function SuccessPage() {
         
         // 设置订单状态
         setOrderStatus(orderDetail.status)
-        // 状态2（生产中）表示客户已确认/锁单
-        setIsLocked(orderDetail.status === 2)
+        // 使用常量检查订单是否已锁定
+        setIsLocked(checkOrderLocked(orderDetail.status))
         
         // 从订单详情中获取规格列表
         const specs = orderDetail.specs || []

@@ -7,6 +7,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
+import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
 import { GlobalLoading } from '@/components/GlobalLoading'
@@ -283,7 +284,7 @@ function UploadPageContent() {
         // 后台静默更新订单状态（不影响用户体验）
         getOrderDetail(orderSn)
           .then(orderDetail => {
-            setIsOrderLocked(orderDetail.status === 2)
+            setIsOrderLocked(checkOrderLocked(orderDetail.status))
           })
           .catch(error => {
             console.error('获取订单状态失败:', error)
@@ -304,8 +305,8 @@ function UploadPageContent() {
         // 检查订单状态
         try {
           const orderDetail = await getOrderDetail(orderSn)
-          // 状态2（生产中）表示客户已确认/锁单
-          setIsOrderLocked(orderDetail.status === 2)
+          // 使用常量检查订单是否已锁定
+          setIsOrderLocked(checkOrderLocked(orderDetail.status))
         } catch (error) {
           console.error('获取订单状态失败:', error)
         }

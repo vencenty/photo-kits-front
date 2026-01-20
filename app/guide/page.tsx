@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2, User } from 'lucide-react'
-import { updateOrder } from '@/lib/api'
+import { updateOrder, getOrderDetail } from '@/lib/api'
+import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 function GuidePageContent() {
   const router = useRouter()
@@ -12,12 +13,30 @@ function GuidePageContent() {
 
   const [receiverName, setReceiverName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isOrderLocked, setIsOrderLocked] = useState(false)
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true)
 
-  // 如果没有订单号，返回首页
+  // 检查订单状态
   useEffect(() => {
     if (!orderNo) {
       router.push('/')
+      return
     }
+
+    // 加载订单信息（包含收货人和锁定状态）
+    const loadOrderInfo = async () => {
+      try {
+        const orderDetail = await getOrderDetail(orderNo, false)
+        setReceiverName(orderDetail.receiverName || '')
+        setIsOrderLocked(checkOrderLocked(orderDetail.status))
+      } catch (error) {
+        console.error('获取订单状态失败:', error)
+      } finally {
+        setIsLoadingStatus(false)
+      }
+    }
+
+    loadOrderInfo()
   }, [orderNo, router])
 
   const handleSubmit = async () => {
@@ -48,6 +67,15 @@ function GuidePageContent() {
     return null
   }
 
+  // 加载中状态
+  if (isLoadingStatus) {
+    return (
+      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-[#ff4d6d] animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
       {/* Header */}
@@ -59,7 +87,9 @@ function GuidePageContent() {
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-lg font-semibold">欢迎使用照片冲印服务</h1>
+          <h1 className="text-lg font-semibold">
+            {isOrderLocked ? '订单信息' : '欢迎使用照片冲印服务'}
+          </h1>
         </div>
       </div>
 
@@ -72,20 +102,30 @@ function GuidePageContent() {
           </p>
         </div>
 
+        {/* 订单已锁定提示 */}
+        {isOrderLocked && (
+          <div className="mb-6 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-700 font-medium">
+              🔒 订单已锁定，正在制作中，无法修改收货人信息
+            </p>
+          </div>
+        )}
+
         {/* 收货人信息表单 */}
         <div className="bg-white rounded-xl p-4 mb-6 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <User className="w-5 h-5 text-[#ff4d6d]" />
             <h2 className="text-base font-semibold">收货人信息</h2>
-            <span className="text-red-500 text-sm">*</span>
+            {!isOrderLocked && <span className="text-red-500 text-sm">*</span>}
           </div>
           
           <textarea
             value={receiverName}
             onChange={(e) => setReceiverName(e.target.value)}
             placeholder="请输入收货人姓名或粘贴完整收货地址"
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-[#ff4d6d] focus:outline-none resize-none"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-[#ff4d6d] focus:outline-none resize-none disabled:bg-gray-100 disabled:text-gray-500"
             rows={4}
+            disabled={isOrderLocked}
           />
           
           <p className="mt-2 text-xs text-gray-400">
@@ -153,18 +193,27 @@ function GuidePageContent() {
 
       {/* 底部按钮 */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting || !receiverName.trim()}
-          className={`w-full py-3 rounded-full font-medium text-base flex items-center justify-center gap-2 ${
-            isSubmitting || !receiverName.trim()
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-[#ff4d6d] text-white active:scale-[0.98]'
-          }`}
-        >
-          {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-          {isSubmitting ? '提交中...' : '下一步，开始上传照片'}
-        </button>
+        {isOrderLocked ? (
+          <button
+            onClick={() => router.push('/select-size')}
+            className="w-full py-3 bg-gray-600 text-white rounded-full font-medium text-base active:scale-[0.98]"
+          >
+            返回
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !receiverName.trim()}
+            className={`w-full py-3 rounded-full font-medium text-base flex items-center justify-center gap-2 ${
+              isSubmitting || !receiverName.trim()
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-[#ff4d6d] text-white active:scale-[0.98]'
+            }`}
+          >
+            {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
+            {isSubmitting ? '提交中...' : '下一步，开始上传照片'}
+          </button>
+        )}
       </div>
     </div>
   )

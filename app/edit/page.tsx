@@ -9,6 +9,7 @@ import { GlobalLoading } from '@/components/GlobalLoading'
 import { updatePhoto, getPhotoDetail } from '@/lib/api'
 import { mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import { buildOssCropUrl } from '@/lib/image-config'
+import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 function EditPageContent() {
   const router = useRouter()
@@ -110,7 +111,7 @@ function EditPageContent() {
 
         setImage(photoData)
         // 检查订单状态，设置是否锁单
-        setIsOrderLocked(response.orderStatus > 1) // 1-已提交 2-生产中等状态锁单
+        setIsOrderLocked(checkOrderLocked(response.orderStatus)) // 使用常量检查订单是否已锁定
 
       } catch (error) {
         console.error('获取图片详情失败:', error)
