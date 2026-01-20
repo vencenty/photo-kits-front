@@ -1,6 +1,5 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import heic2any from 'heic2any'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -47,6 +46,9 @@ export async function convertToJpeg(file: File): Promise<File> {
   if (fileType === 'image/heic' || fileType === 'image/heif' || 
       fileName.endsWith('.heic') || fileName.endsWith('.heif')) {
     try {
+      // 动态导入 heic2any，避免 SSR 问题
+      const heic2any = (await import('heic2any')).default
+      
       const convertedBlob = await heic2any({
         blob: file,
         toType: 'image/jpeg',
