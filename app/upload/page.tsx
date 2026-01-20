@@ -824,17 +824,23 @@ function UploadPageContent() {
 
   const isAllSelected = images.length > 0 && selectedIds.length === images.length
 
-  // 批量应用裁剪模式
-  const handleApplyBatchCrop = async (mode: CropMode) => {
-    if (selectedIds.length === 0) {
+  // 批量应用裁剪模式 - 只设置选择状态，不执行操作
+  const handleApplyBatchCrop = (mode: CropMode) => {
+    setBatchCropMode(mode)
+  }
+
+  // 执行批量操作（在点击完成按钮时调用）
+  const executeBatchCrop = async () => {
+    if (selectedIds.length === 0 || !batchCropMode) {
       return
     }
     const targetIds = selectedIds
+    const mode = batchCropMode
 
     const updates = targetIds.map((id) => {
       const img = images.find(i => i.id === id)
       if (!img) return null
-      
+
       const newEditState: EditState = {
         mode,
         scale: 1,
@@ -859,7 +865,6 @@ function UploadPageContent() {
     }).filter(Boolean) as { id: string; updates: Partial<ImageType> }[]
 
     updateImages(updates)
-    setBatchCropMode(mode)
 
     // 使用批量 API 同步到后端（一次性更新所有照片，而不是循环调用）
     try {
@@ -873,14 +878,12 @@ function UploadPageContent() {
       // 批量更新成功后，清空选择状态，退出批量模式
       setIsBatchMode(false)
       clearSelection()
+      setBatchCropMode(null)
     } catch (error) {
       console.error('批量更新照片裁剪模式失败:', error)
     } finally {
       setApiLoading(false, '')
     }
-
-
-
   }
 
   const totalPrintCount = images.reduce((sum, img) => sum + img.printCount, 0)
@@ -1325,12 +1328,13 @@ function UploadPageContent() {
               </div>
 
               <button
-                onClick={() => {
-                  setIsBatchMode(false)
-                  clearSelection()
-                  setBatchCropMode(null)
-                }}
-                className="w-full py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
+                onClick={executeBatchCrop}
+                disabled={selectedIds.length === 0 || !batchCropMode}
+                className={`w-full py-3 rounded-full font-medium ${
+                  selectedIds.length === 0 || !batchCropMode
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-[#ff4d6d] text-white'
+                }`}
               >
                 完成
               </button>
