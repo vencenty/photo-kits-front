@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, Search, Loader2 } from 'lucide-react'
 import { GlobalLoading } from '@/components/GlobalLoading'
+import { getOrderDetail } from '@/lib/api'
 
 export default function Home() {
   const [orderNumber, setOrderNumber] = useState('')
@@ -21,15 +22,29 @@ export default function Home() {
     setIsLoading(true)
     setError('')
 
-    // 模拟查询延迟
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    // 保存订单号到 sessionStorage，供 select-size 页面使用
-    sessionStorage.setItem('pending-order-number', trimmedOrder)
-    
-    setIsLoading(false)
-    // 无论订单是否存在，都跳转到尺寸选择页
-    router.push('/select-size')
+    try {
+      // 查询订单详情，判断是否已查看引导页
+      const orderDetail = await getOrderDetail(trimmedOrder, false)
+      
+      // 保存订单号到 sessionStorage
+      sessionStorage.setItem('pending-order-number', trimmedOrder)
+      
+      // 根据 guideViewed 决定跳转页面
+      if (orderDetail.guideViewed === 1) {
+        // 已查看过引导页，直接跳转到 select-size
+        router.push('/select-size')
+      } else {
+        // 未查看引导页，跳转到 guide 页面
+        router.push(`/guide?orderNo=${trimmedOrder}`)
+      }
+    } catch (error) {
+      console.error('查询订单失败:', error)
+      // 查询失败时，默认跳转到 guide 页面（可能是新订单）
+      sessionStorage.setItem('pending-order-number', trimmedOrder)
+      router.push(`/guide?orderNo=${trimmedOrder}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

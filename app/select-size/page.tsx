@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } from 'lucide-react'
 import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
-import { addSpec, deleteSpec, createOrder, listSpecs, SpecInfo } from '@/lib/api'
+import { addSpec, deleteSpec, createOrder, listSpecs, getOrderDetail, SpecInfo } from '@/lib/api'
 import { GlobalLoading } from '@/components/GlobalLoading'
 
 // 已添加的规格项（包含数据库 ID）
@@ -25,6 +25,7 @@ interface AddedSize {
 export default function SelectSizePage() {
   const router = useRouter()
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
+  const [receiverName, setReceiverName] = useState<string>('') // 收货人信息
   const [addedSizes, setAddedSizes] = useState<AddedSize[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
@@ -62,6 +63,10 @@ export default function SelectSizePage() {
       setApiLoading(true, '加载规格列表...')
       // 先尝试创建/获取订单
       await createOrder(orderNumber)
+      
+      // 获取订单详情（包含收货人信息）
+      const orderDetail = await getOrderDetail(orderNumber, false)
+      setReceiverName(orderDetail.receiverName || '')
       
       // 从后端获取规格列表
       const response = await listSpecs(orderNumber)
@@ -245,12 +250,33 @@ export default function SelectSizePage() {
 
       {/* Content */}
       <div className="p-4">
-        {/* 订单号显示 */}
+        {/* 订单信息显示 */}
         {orderNumber && (
-          <div className="mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-700">
-              📦 订单编号：<span className="font-bold">{orderNumber}</span>
-            </p>
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
+            {/* 订单号 */}
+            <div className="px-4 py-2.5">
+              <p className="text-sm text-blue-700">
+                📦 订单编号：<span className="font-bold">{orderNumber}</span>
+              </p>
+            </div>
+            
+            {/* 收货人信息 */}
+            {receiverName && (
+              <div className="px-4 py-2.5 bg-blue-100/50 border-t border-blue-200 flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-blue-700">
+                    👤 收货人：<span className="font-medium">{receiverName}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push(`/guide?orderNo=${orderNumber}`)}
+                  className="ml-2 p-1.5 text-blue-600 hover:bg-blue-200 rounded transition-colors flex-shrink-0"
+                  title="编辑收货人信息"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 

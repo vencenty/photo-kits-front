@@ -375,6 +375,23 @@ export async function createOrder(orderNo: string): Promise<OrderInfo> {
   })
 }
 
+/**
+ * 更新订单信息（收货人、引导页状态）
+ * 后端路由: PUT /api/order/:orderNo/update
+ * @param orderNo 订单号
+ * @param receiverName 收货人信息（姓名或完整地址）
+ */
+export async function updateOrder(orderNo: string, receiverName: string): Promise<{
+  success: boolean
+  receiverName: string
+  guideViewed: number
+}> {
+  return request(`/api/order/${orderNo}/update`, {
+    method: 'PUT',
+    body: JSON.stringify({ receiverName }),
+  })
+}
+
 export interface OrderDetailResponse {
   orderId: string
   orderSn: string
@@ -386,6 +403,7 @@ export interface OrderDetailResponse {
   status: number
   submitTime: string
   receiverName: string
+  guideViewed: number // 是否已查看引导页：0-未查看 1-已查看
   photos?: PhotoDetail[] // 可选，根据 includePhotos 参数决定
   specs?: SpecInfo[] // 规格列表
   createdAt: string
