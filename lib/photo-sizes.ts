@@ -15,19 +15,19 @@ export const PAPER_TYPES: PaperType[] = [
     id: 'fuji-glossy',
     name: '富士光面',
     description: '光泽亮丽，色彩鲜艳',
-    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '7inch', '8inch', '10inch', 'A4']
+    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '6inch-large', '7inch', '8inch', '10inch', 'A4']
   },
   {
     id: 'fuji-matte',
     name: '富士绒面',
     description: '柔和质感，不反光',
-    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '7inch', '8inch', '10inch', 'A4']
+    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '6inch-large', '7inch', '8inch', '10inch', 'A4']
   },
   {
     id: 'pantone-glossy',
     name: '泛太克光面',
     description: '专业级色彩还原',
-    supportedSizes: ['5inch', '6inch', '7inch', '8inch', '10inch', 'A4'] // 不支持3寸和4寸
+    supportedSizes: ['5inch', '6inch', '6inch-large', '7inch', '8inch', '10inch', 'A4'] // 不支持3寸和4寸
   },
 ]
 
@@ -46,9 +46,9 @@ export const SIZE_OPTIONS: SizeOption[] = [
   { "id": "3inch", "name": "3寸", "width": 63.5, "height": 89, "ratio": 63.5/89 },
   { "id": "4inch", "name": "4寸", "width": 76, "height": 102, "ratio": 76/102 },
   { "id": "5inch", "name": "5寸", "width": 89, "height": 127, "ratio": 89/127 },
-  { "id": "5inch-large", "name": "大5寸", "width": 89, "height": 127, "ratio": 89/127 },
+  { "id": "large5inch", "name": "大5寸", "width": 95, "height": 127, "ratio": 95/127 },
   { "id": "6inch", "name": "6寸", "width": 102, "height": 152, "ratio": 102/152 },
-  { "id": "6inch-large", "name": "大6寸", "width": 102, "height": 152, "ratio": 102/152 },
+  { "id": "large6inch", "name": "大6寸", "width": 114, "height": 152, "ratio": 114/152 },
   { "id": "7inch", "name": "7寸", "width": 127, "height": 178, "ratio": 127/178 },
   { "id": "7inch-large", "name": "大7寸", "width": 127, "height": 178, "ratio": 127/178 },
   { "id": "8inch", "name": "8寸", "width": 152, "height": 203, "ratio": 152/203 },

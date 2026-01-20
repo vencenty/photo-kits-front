@@ -1319,12 +1319,7 @@ function UploadPageContent() {
                   clearSelection()
                   setBatchCropMode(null)
                 }}
-                className={`w-full py-3 rounded-full font-medium ${
-                  selectedIds.length === 0
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-[#ff4d6d] text-white'
-                }`}
-                disabled={selectedIds.length === 0}
+                className="w-full py-3 bg-[#ff4d6d] text-white rounded-full font-medium"
               >
                 完成
               </button>
