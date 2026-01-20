@@ -15,19 +15,19 @@ export const PAPER_TYPES: PaperType[] = [
     id: 'fuji-glossy',
     name: '富士光面',
     description: '光泽亮丽，色彩鲜艳',
-    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '6inch-large', '7inch', '8inch', '10inch', 'A4']
+    supportedSizes: ['3inch', '4inch', '5inch', '6inch', 'large6inch', '7inch', '8inch', '10inch', 'A4']
   },
   {
     id: 'fuji-matte',
     name: '富士绒面',
     description: '柔和质感，不反光',
-    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '6inch-large', '7inch', '8inch', '10inch', 'A4']
+    supportedSizes: ['3inch', '4inch', '5inch', '6inch', 'large6inch', '7inch', '8inch', '10inch', 'A4']
   },
   {
     id: 'pantone-glossy',
     name: '泛太克光面',
     description: '专业级色彩还原',
-    supportedSizes: ['5inch', '6inch', '6inch-large', '7inch', '8inch', '10inch', 'A4'] // 不支持3寸和4寸
+    supportedSizes: ['5inch', '6inch', 'large6inch', '7inch', '8inch', '10inch', 'A4'] // 不支持3寸和4寸
   },
 ]
 
