@@ -1019,7 +1019,7 @@ function UploadPageContent() {
       <div className="bg-[#fff8f5] px-4 py-3 flex items-start gap-2">
         <span className="text-xl">🔥</span>
         <p className="text-sm text-[#ff6b35] leading-relaxed flex-1">
-          请进行预览或编辑，未显示部分将不会冲印；预览图已压缩，冲印时会使用原图
+          列表预览图已压缩，冲印时会使用原图。列表页所见即冲印最终效果参考。
         </p>
       </div>
 

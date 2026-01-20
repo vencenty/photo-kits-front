@@ -55,9 +55,24 @@ export default function ImageEditor({
   onSave,
   onCancel,
 }: ImageEditorProps) {
+  // 安全检查：确保必需的 props 有效
+  if (!photoData || !canvasWidth || !canvasHeight || canvasWidth <= 0 || canvasHeight <= 0) {
+    console.error('ImageEditor: 无效的 props', { photoData, canvasWidth, canvasHeight })
+    return (
+      <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+        <div className="text-white text-center">
+          <p>图片编辑器加载失败</p>
+          <button onClick={onCancel} className="mt-4 px-4 py-2 bg-red-500 rounded">
+            返回
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // 获取初始模式
   const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
-    return photoData.cropMode
+    return photoData.cropMode || 'cover'
   }
 
   const [mode, setMode] = useState<'cover' | 'full' | 'lomo'>(getInitialMode())
@@ -68,6 +83,46 @@ export default function ImageEditor({
   // react-easy-crop 状态
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
+
+  // 安全的 setCrop 包装函数，防止设置无效值
+  const safetSetCrop = useCallback((newCrop: Point | ((prev: Point) => Point)) => {
+    if (typeof newCrop === 'function') {
+      setCrop(prev => {
+        const computed = newCrop(prev)
+        if (isNaN(computed.x) || isNaN(computed.y) || !isFinite(computed.x) || !isFinite(computed.y)) {
+          console.error('尝试设置无效的 crop 值:', computed)
+          return prev
+        }
+        return computed
+      })
+    } else {
+      if (isNaN(newCrop.x) || isNaN(newCrop.y) || !isFinite(newCrop.x) || !isFinite(newCrop.y)) {
+        console.error('尝试设置无效的 crop 值:', newCrop)
+        return
+      }
+      setCrop(newCrop)
+    }
+  }, [])
+
+  // 安全的 setZoom 包装函数，防止设置无效值
+  const safeSetZoom = useCallback((newZoom: number | ((prev: number) => number)) => {
+    if (typeof newZoom === 'function') {
+      setZoom(prev => {
+        const computed = newZoom(prev)
+        if (isNaN(computed) || !isFinite(computed) || computed <= 0) {
+          console.error('尝试设置无效的 zoom 值:', computed)
+          return prev
+        }
+        return computed
+      })
+    } else {
+      if (isNaN(newZoom) || !isFinite(newZoom) || newZoom <= 0) {
+        console.error('尝试设置无效的 zoom 值:', newZoom)
+        return
+      }
+      setZoom(newZoom)
+    }
+  }, [])
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [initialCroppedAreaPixels, setInitialCroppedAreaPixels] = useState<Area | undefined>(undefined)
 
@@ -88,13 +143,18 @@ export default function ImageEditor({
   const isRestoringRef = useRef(false) // 标记是否正在恢复位置，用于防止 onCropComplete 触发更新
 
   // 🚀 优化：稳定化相纸比例，避免每次render重新计算
-  const paperAspectRatio = useMemo(() => canvasWidth / canvasHeight, [canvasWidth, canvasHeight])
+  const paperAspectRatio = useMemo(() => {
+    if (!canvasWidth || !canvasHeight || canvasWidth <= 0 || canvasHeight <= 0) {
+      return 1 // 默认 1:1，防止除以 0
+    }
+    return canvasWidth / canvasHeight
+  }, [canvasWidth, canvasHeight])
 
   // 🚀 优化：根据图片方向动态调整裁剪框比例，让图片可保留的区域最大化
   // 如果图片是横图，裁剪框也应该是横的；如果图片是竖图，裁剪框也应该是竖的
   // 使用 useMemo 确保稳定性，避免无限循环
   const aspectRatio = useMemo(() => {
-    if (!sourceSize.width || !sourceSize.height) {
+    if (!sourceSize.width || !sourceSize.height || sourceSize.width <= 0 || sourceSize.height <= 0) {
       return paperAspectRatio // 默认使用相纸比例
     }
 
@@ -110,7 +170,7 @@ export default function ImageEditor({
     // 🚀 关键：如果图片和相纸方向不一致，反转相纸比例
     // 例如：相纸是 3:4（竖 0.75），图片是横图，则使用 4:3（横 1.33）
     // 使用倒数避免重新计算 canvasHeight / canvasWidth，减少依赖
-    return 1 / paperAspectRatio
+    return paperAspectRatio > 0 ? 1 / paperAspectRatio : 1
   }, [sourceSize.width, sourceSize.height, paperAspectRatio])
 
   // 🚀 优化：固化图片压缩参数，避免每次render创建新对象
@@ -180,6 +240,14 @@ export default function ImageEditor({
     // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return
 
+    // 安全检查：确保 offsetX 和 offsetY 是有效数值
+    if (typeof offsetX !== 'number' || typeof offsetY !== 'number' || 
+        isNaN(offsetX) || isNaN(offsetY) || !isFinite(offsetX) || !isFinite(offsetY)) {
+      console.error('cropInfo 中的偏移值无效:', { offsetX, offsetY })
+      restoredRef.current = true
+      return
+    }
+
     // 如果 cropWidth 和 cropHeight 不存在，从裁剪框比例计算
     let finalCropWidth = cropWidth
     let finalCropHeight = cropHeight
@@ -236,11 +304,18 @@ export default function ImageEditor({
     const cropX = cropAreaCenterX - containerCenterX
     const cropY = cropAreaCenterY - containerCenterY
 
+    // 安全检查：确保 crop 值有效
+    if (isNaN(cropX) || isNaN(cropY) || !isFinite(cropX) || !isFinite(cropY)) {
+      console.error('计算出的 crop 值无效:', { cropX, cropY })
+      restoredRef.current = true
+      return
+    }
+
     // 【步骤4】设置恢复的位置和区域
     // 
     // setCrop：设置图片中心相对于裁剪框中心的偏移，react-easy-crop 会根据这个值定位图片
-    setCrop({ x: cropX, y: cropY })
-    setZoom(1) // 缩放设为1（不缩放）
+    safetSetCrop({ x: cropX, y: cropY })
+    safeSetZoom(1) // 缩放设为1（不缩放）
 
     // setCroppedAreaPixels：保存压缩图上的裁剪区域坐标
     // 这个值会在用户保存时使用，避免重新计算（因为 react-easy-crop 的 onCropComplete 会更新它）
@@ -255,7 +330,7 @@ export default function ImageEditor({
 
     restoredRef.current = true // 标记已恢复，防止重复恢复
 
-  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio])
+  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, safetSetCrop, safeSetZoom])
 
   // 模式改变时重置恢复标记
   useEffect(() => {
@@ -265,11 +340,24 @@ export default function ImageEditor({
 
   // 裁剪完成回调 - 直接基于原图尺寸计算crop meta
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
-    // 如果正在恢复位置，不更新状态，避免无限循环
-    if (isRestoringRef.current) return
+    try {
+      // 如果正在恢复位置，不更新状态，避免无限循环
+      if (isRestoringRef.current) return
 
-    // 保存压缩图坐标（用于后续计算，但不做复杂转换）
-    setCroppedAreaPixels(croppedAreaPixels)
+      // 安全检查：确保 croppedAreaPixels 有效
+      if (!croppedAreaPixels || 
+          typeof croppedAreaPixels.x !== 'number' || 
+          typeof croppedAreaPixels.y !== 'number' ||
+          typeof croppedAreaPixels.width !== 'number' || 
+          typeof croppedAreaPixels.height !== 'number' ||
+          isNaN(croppedAreaPixels.x) || isNaN(croppedAreaPixels.y) ||
+          isNaN(croppedAreaPixels.width) || isNaN(croppedAreaPixels.height)) {
+        console.error('无效的 croppedAreaPixels:', croppedAreaPixels)
+        return
+      }
+
+      // 保存压缩图坐标（用于后续计算，但不做复杂转换）
+      setCroppedAreaPixels(croppedAreaPixels)
 
     // 记录用户当前的编辑状态，用于下次进入页面时恢复
     // 只有在 cover 模式且图片尺寸已知时才更新
@@ -304,24 +392,28 @@ export default function ImageEditor({
       // 只保存crop meta，不再生成URL（让服务端处理）
       // URL生成逻辑移到服务端统一处理
     }
+    } catch (error) {
+      console.error('onCropComplete 出错:', error)
+    }
   }, [mode, sourceSize, thumbImageSize])
 
   // 模式改变
   const handleModeChange = useCallback((newMode: EditMode) => {
     setMode(newMode)
     // 重置裁剪状态
-    setCrop({ x: 0, y: 0 })
-    setZoom(1)
+    safetSetCrop({ x: 0, y: 0 })
+    safeSetZoom(1)
     setCroppedAreaPixels(null)
     setInitialCroppedAreaPixels(undefined)
-  }, [])
+  }, [safetSetCrop, safeSetZoom])
 
   // 保存 - 生成带有crop参数的outputUrl
   const handleSave = useCallback(() => {
-    if (!sourceSize.width || !sourceSize.height) return
+    try {
+      if (!sourceSize.width || !sourceSize.height) return
 
-    let cropInfo: SimpleCropInfo | undefined
-    let outputUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+      let cropInfo: SimpleCropInfo | undefined
+      let outputUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
 
     // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
     if (mode === 'full' || mode === 'lomo') {
@@ -388,6 +480,10 @@ export default function ImageEditor({
         outputUrl,
       })
     }
+    } catch (error) {
+      console.error('handleSave 出错:', error)
+      alert('保存失败，请重试')
+    }
   }, [croppedAreaPixels, sourceSize, thumbImageSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 渲染 full 或 lomo 模式（不可编辑）
@@ -437,7 +533,9 @@ export default function ImageEditor({
             style={{ paddingTop: `${(1 / aspectRatio) * 100}%` }}
           >
             <div className="absolute inset-0">
-              {imageLoaded && imageUrl && (
+              {imageLoaded && imageUrl && aspectRatio > 0 && 
+               thumbImageSize.width > 0 && thumbImageSize.height > 0 &&
+               sourceSize.width > 0 && sourceSize.height > 0 && (
                 mode === 'cover' ? (
                   // Cover 模式：使用 react-easy-crop 
                   <Cropper
@@ -445,8 +543,8 @@ export default function ImageEditor({
                     crop={crop}
                     zoom={zoom}
                     aspect={aspectRatio}
-                    onCropChange={setCrop}
-                    onZoomChange={setZoom}
+                    onCropChange={safetSetCrop}
+                    onZoomChange={safeSetZoom}
                     onCropComplete={onCropComplete}
                     initialCroppedAreaPixels={initialCroppedAreaPixels}
                     // 禁止缩放，只允许拖拽
