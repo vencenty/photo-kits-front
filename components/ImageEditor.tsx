@@ -490,7 +490,6 @@ export default function ImageEditor({
   const renderStaticMode = () => {
     const isLomo = mode === 'lomo'
     const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
-
     return (
       <div
         className="relative w-full h-full bg-white flex items-center justify-center"
@@ -499,7 +498,7 @@ export default function ImageEditor({
         }}
       >
         <img
-          src={imageUrl}
+          src={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
           alt="预览"
           className="w-full h-full object-contain"
         />
@@ -539,7 +538,7 @@ export default function ImageEditor({
                 mode === 'cover' ? (
                   // Cover 模式：使用 react-easy-crop 
                   <Cropper
-                    image={imageUrl}
+                    image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
                     crop={crop}
                     zoom={zoom}
                     aspect={aspectRatio}
