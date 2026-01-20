@@ -331,7 +331,6 @@ export async function uploadToOss(file: File, signature: OssSignature): Promise<
     console.error('OSS上传失败:', response.status, errorText)
     throw new Error(`OSS上传失败: ${response.status}`)
   }
-
   // 使用固定代理域名回显图片
   const ossUrl = `${OSS_PROXY_DOMAIN}/${key}`
   console.log('OSS上传成功:', ossUrl)
