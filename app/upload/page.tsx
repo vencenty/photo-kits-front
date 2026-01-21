@@ -1110,7 +1110,7 @@ function UploadPageContent() {
                       <div
                         key={image.id}
                         className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
-                          isBatchMode ? 'cursor-pointer' : ''
+                          isBatchMode && !isOrderLocked ? 'cursor-pointer' : ''
                         }`}
                         style={{
                           ...(selectedIds.includes(image.id) && isBatchMode 
@@ -1121,7 +1121,7 @@ function UploadPageContent() {
                             : {})
                         }}
                         onClick={() => {
-                          if (isBatchMode) {
+                          if (isBatchMode && !isOrderLocked) {
                             toggleSelection(image.id)
                           }
                         }}
@@ -1137,13 +1137,13 @@ function UploadPageContent() {
                     onClick={
                       isBatchMode
                         ? undefined // 批量模式下，由外层 div 处理点击，避免重复触发
-                        : (image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced
+                        : (image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced && !isOrderLocked
                           ? () => handleEdit(image.id)
                           : undefined)
                     }
                   />
                           
-                          {!isBatchMode && (
+                          {!isBatchMode && !isOrderLocked && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -1169,7 +1169,7 @@ function UploadPageContent() {
                             </div>
                           )}
 
-                          {!isBatchMode && (
+                          {!isBatchMode && !isOrderLocked && (
                             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
                               <div className="flex items-center bg-[#e8e8e8] rounded-full">
                                 <button
@@ -1196,9 +1196,20 @@ function UploadPageContent() {
                               </div>
                             </div>
                           )}
+                          
+                          {/* 锁定状态下显示数量，但不可编辑 */}
+                          {!isBatchMode && isOrderLocked && (
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
+                              <div className="flex items-center bg-[#e8e8e8] rounded-full px-3 py-1">
+                                <span className="text-sm font-medium text-gray-700">
+                                  ×{image.printCount}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {!isBatchMode && (
+                        {!isBatchMode && !isOrderLocked && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -1209,6 +1220,13 @@ function UploadPageContent() {
                           >
                             {image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced ? '编辑' : '上传中...'}
                           </button>
+                        )}
+                        
+                        {/* 锁定状态下显示"仅查看"文字 */}
+                        {!isBatchMode && isOrderLocked && (
+                          <div className="w-full py-2.5 bg-[#f5f5f5] text-gray-500 text-sm font-medium text-center">
+                            仅查看
+                          </div>
                         )}
                       </div>
                     ))}
@@ -1259,7 +1277,7 @@ function UploadPageContent() {
                 )}
               </div>
               
-              {canSubmit && (
+              {canSubmit && !isOrderLocked && (
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
@@ -1269,7 +1287,7 @@ function UploadPageContent() {
                 </button>
               )}
             </>
-          ) : (
+          ) : !isOrderLocked ? (
             <>
               <div className="flex items-center justify-between mb-3">
                 <button
@@ -1340,7 +1358,7 @@ function UploadPageContent() {
                 完成
               </button>
             </>
-          )}
+          ) : null}
         </div>
       </div>
 

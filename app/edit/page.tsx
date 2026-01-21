@@ -111,7 +111,15 @@ function EditPageContent() {
 
         setImage(photoData)
         // 检查订单状态，设置是否锁单
-        setIsOrderLocked(checkOrderLocked(response.orderStatus)) // 使用常量检查订单是否已锁定
+        const locked = checkOrderLocked(response.orderStatus)
+        setIsOrderLocked(locked)
+        
+        // 如果订单已锁定，直接跳转回列表页
+        if (locked) {
+          alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
+          router.push(`/upload?sizeId=${currentSession?.sizeId}`)
+          return
+        }
 
       } catch (error) {
         console.error('获取图片详情失败:', error)
