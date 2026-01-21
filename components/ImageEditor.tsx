@@ -8,11 +8,13 @@ import {
   type Image as ImageType
 } from '@/lib/store'
 import { getEditThumbnailUrl, SimpleCropInfo, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { getCropConfigForSize } from '@/lib/photo-sizes'
 
 interface ImageEditorProps {
   image: ImageType
   canvasWidth: number
   canvasHeight: number
+  sizeId?: string  // 新增：用于获取裁剪配置
   onSave: (saveData: SaveData) => void
   onCancel: () => void
 }
@@ -52,6 +54,7 @@ export default function ImageEditor({
   image: photoData,
   canvasWidth,
   canvasHeight,
+  sizeId,
   onSave,
   onCancel,
 }: ImageEditorProps) {
@@ -70,9 +73,16 @@ export default function ImageEditor({
     )
   }
 
+  // 获取当前尺寸的裁剪样式配置
+  const cropConfig = sizeId 
+    ? getCropConfigForSize(sizeId) 
+    : { defaultMode: 'cover' as EditMode, availableModes: ['cover', 'full', 'lomo'] as EditMode[] }
+
   // 获取初始模式
   const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
-    return photoData.cropMode || 'cover'
+    const mode = photoData.cropMode || cropConfig.defaultMode
+    // 确保初始模式在可选模式列表中
+    return cropConfig.availableModes.includes(mode) ? mode : cropConfig.defaultMode
   }
 
   const [mode, setMode] = useState<'cover' | 'full' | 'lomo'>(getInitialMode())
@@ -590,36 +600,41 @@ export default function ImageEditor({
 
       {/* 底部控制栏 */}
       <div className="bg-gray-900 border-t border-gray-800 p-4 pb-8">
-        {/* 模式选择器 */}
+        {/* 模式选择器 - 根据配置显示可选模式 */}
         <div className="flex gap-2 mb-4 justify-center">
-          <button
-            onClick={() => handleModeChange('cover')}
-            className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'cover'
-                ? 'bg-pink-500 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-          >
-            居中裁剪
-          </button>
-          <button
-            onClick={() => handleModeChange('full')}
-            className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'full'
-                ? 'bg-pink-500 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-          >
-            打印整图
-          </button>
-          <button
-            onClick={() => handleModeChange('lomo')}
-            className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'lomo'
-                ? 'bg-pink-500 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-          >
-
-            四周留白
-          </button>
+          {cropConfig.availableModes.includes('cover') && (
+            <button
+              onClick={() => handleModeChange('cover')}
+              className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'cover'
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+            >
+              居中裁剪
+            </button>
+          )}
+          {cropConfig.availableModes.includes('full') && (
+            <button
+              onClick={() => handleModeChange('full')}
+              className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'full'
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+            >
+              打印整图
+            </button>
+          )}
+          {cropConfig.availableModes.includes('lomo') && (
+            <button
+              onClick={() => handleModeChange('lomo')}
+              className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'lomo'
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+            >
+              四周留白
+            </button>
+          )}
         </div>
 
         {/* 操作按钮 */}

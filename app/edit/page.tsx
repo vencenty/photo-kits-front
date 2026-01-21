@@ -105,7 +105,6 @@ function EditPageContent() {
             canvasHeight: currentSession?.canvasHeight || 89,
           },
           cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
-          transform: undefined, // 服务端和前端的 PhotoTransform 类型不兼容，先设为 undefined
           outputUrl: response.photo.outputUrl || response.photo.url, // 设置默认值：如果不存在outputUrl，则使用原图url
         }
 
@@ -224,6 +223,7 @@ function EditPageContent() {
         image={image}
         canvasWidth={currentSession.canvasWidth}
         canvasHeight={currentSession.canvasHeight}
+        sizeId={currentSession.sizeId}
         onSave={handleSave}
         onCancel={() => router.back()}
       />

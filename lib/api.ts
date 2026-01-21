@@ -66,22 +66,6 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
 
 // ==================== 类型定义 ====================
 
-/** 照片变换信息 - 用于前端回显 */
-export interface PhotoTransform {
-  matrix?: number[] // 兼容旧版本
-  outputWidth: number // 前端显示宽度（像素）
-  outputHeight: number // 前端显示高度（像素）
-  sourceWidth: number // 原图宽度（像素）
-  sourceHeight: number // 原图高度（像素）
-  styleType?: string // 样式类型
-  // 变换参数（用于前端回显）
-  rotateAngle?: number // 旋转角度（仅0/90/180/270°）
-  scale?: number // 等比例缩放
-  translateX?: number // X平移（px）
-  translateY?: number // Y平移（px）
-  originalUrl?: string // 原图地址
-}
-
 /** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
 export interface CropInfo {
   canvasWidth: number // 相纸宽度（mm），用于计算相纸比例
@@ -121,7 +105,6 @@ export interface PhotoInfo {
   printCount: number
   styleType: string
   isLandscape: boolean
-  transform?: PhotoTransform
   sortOrder: number
 }
 
@@ -137,7 +120,6 @@ export interface PhotoDetail {
   isLandscape: boolean
   cropMode: string
   takenAt: string
-  transform?: PhotoTransform
   cropInfo?: CropInfo // 从服务端获取的裁剪信息
   outputUrl?: string  // 处理后的下载URL
 }
@@ -498,7 +480,6 @@ export interface AddPhotoParams {
   quantity?: number
   cropMode?: string
   isLandscape?: boolean
-  transform?: PhotoTransform // 用于前端回显
   cropInfo?: CropInfo // 用于服务端处理
 }
 
@@ -517,7 +498,6 @@ export interface UpdatePhotoParams {
   photoId: string
   quantity?: number
   cropMode?: string
-  transform?: PhotoTransform // 用于前端回显
   cropInfo?: CropInfo // 用于服务端处理
   outputUrl?: string
   listThumbUrl?: string
@@ -537,7 +517,6 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
 export interface BatchUpdatePhotosParams {
   photoIds: string[]
   cropMode?: string
-  transform?: PhotoTransform
 }
 
 /**
@@ -595,7 +574,6 @@ export interface SubmitOrderParams {
     id: string
     url: string
     quantity: number
-    transform?: PhotoTransform // 用于前端回显
     cropInfo?: CropInfo // 用于服务端处理
   }[]
 }
@@ -618,6 +596,23 @@ export async function submitOrder(params: SubmitOrderParams): Promise<{ orderId:
 export async function submitOrderStatus(orderNo: string): Promise<{ code: number; message: string }> {
   return request<{ code: number; message: string }>(`/api/order/${orderNo}/submit`, {
     method: 'PUT',
+  })
+}
+
+/**
+ * 提交订单制作（新接口）
+ * 功能：将订单状态改为已提交，创建审核记录
+ * 后端路由: POST /api/order/submit
+ */
+export interface SubmitOrderForProductionParams {
+  orderSn: string
+  receiverName?: string
+}
+
+export async function submitOrderForProduction(params: SubmitOrderForProductionParams): Promise<{ message: string }> {
+  return request<{ message: string }>('/api/order/submit', {
+    method: 'POST',
+    body: JSON.stringify(params),
   })
 }
 

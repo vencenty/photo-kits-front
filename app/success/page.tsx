@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { lockOrder, getOrderDetail } from '@/lib/api'
+import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
 import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
@@ -163,7 +163,45 @@ export default function SuccessPage() {
     router.push(`/upload?sizeId=${size.id}`)
   }, [orderNumber, setCurrentSession, clearImages, router])
 
-  // 锁单功能
+  // 提交订单制作功能（新逻辑）
+  const handleSubmitOrder = async () => {
+    if (!orderNumber || isLocked) return
+
+    // 检查是否有照片
+    const totalPhotos = allSizes.reduce((sum, size) => sum + size.imageCount, 0)
+    if (totalPhotos === 0) {
+      alert('订单中没有照片，无法提交！')
+      return
+    }
+
+    if (!confirm('确认提交订单吗？提交后订单将进入审核流程。')) {
+      return
+    }
+
+    setIsLocking(true)
+    try {
+      setApiLoading(true, '提交订单中...')
+      await submitOrderForProduction({
+        orderSn: orderNumber,
+        receiverName: '', // 可选，后续可以添加收件人信息
+      })
+      
+      // 提交成功后，重新加载订单详情以获取最新状态
+      const orderDetail = await getOrderDetail(orderNumber, false)
+      setOrderStatus(orderDetail.status)
+      setIsLocked(checkOrderLocked(orderDetail.status))
+      
+      alert('订单提交成功！订单已进入审核流程，通过审核后将开始制作。')
+    } catch (error) {
+      console.error('提交订单失败:', error)
+      alert('提交失败，请重试')
+    } finally {
+      setIsLocking(false)
+      setApiLoading(false, '')
+    }
+  }
+
+  // 保留原有的锁单功能（备用）
   const handleLockOrder = async () => {
     if (!orderNumber || isLocked) return
 
@@ -324,18 +362,18 @@ export default function SuccessPage() {
             {isLocked ? (
               <div className="w-full py-3 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
                 <CheckCircle2 className="w-5 h-5" />
-                订单已锁定，正在制作中
+                订单已提交，等待审核
               </div>
             ) : (
               <button
-                onClick={handleLockOrder}
+                onClick={handleSubmitOrder}
                 disabled={isLocking || !orderNumber}
                 className="w-full py-3 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLocking ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    锁单中...
+                    提交中...
                   </>
                 ) : (
                   <>

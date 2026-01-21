@@ -5,24 +5,22 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
-import { getPhotoSizeById } from '@/lib/photo-sizes'
+import { getPhotoSizeById, getCropConfigForSize } from '@/lib/photo-sizes'
 import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { 
-  getOssSignature, 
-  uploadToOss, 
-  addPhotoToOrder, 
-  updatePhoto, 
-  deletePhotoFromOrder, 
-  submitOrder,
+import {
+  getOssSignature,
+  uploadToOss,
+  addPhotoToOrder,
+  updatePhoto,
+  deletePhotoFromOrder,
   listPhotos,
   batchUpdatePhotos,
   getOrderDetail,
-  OssSignature,
-  PhotoTransform
+  OssSignature
 } from '@/lib/api'
 
 // 裁剪模式类型
@@ -33,7 +31,7 @@ function UploadPageContent() {
   const searchParams = useSearchParams()
   const sizeId = searchParams.get('sizeId') as string
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [showSubmitModal, setShowSubmitModal] = useState(false)
+  // const [showSubmitModal, setShowSubmitModal] = useState(false) // 已废弃：不再使用弹框
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -78,6 +76,9 @@ function UploadPageContent() {
   const photoSize = getPhotoSizeById(sizeId)
   // 计算相纸比例
   const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
+  
+  // 获取当前尺寸的裁剪样式配置
+  const cropConfig = sizeId ? getCropConfigForSize(sizeId) : { defaultMode: 'cover' as CropMode, availableModes: ['cover', 'full', 'lomo'] as CropMode[] }
 
   // 计算行数
   const rowCount = Math.ceil(images.length / COLUMNS)
@@ -330,12 +331,8 @@ function UploadPageContent() {
           const imagesToUpdate: { id: string; updates: Partial<ImageType> }[] = []
 
           result.photos.forEach(photo => {
-            // 构建 transform 数据
-            // 如果服务器返回的 styleType 是后端的值（cover/full/lomo），需要转换为前端值
-            const serverStyleType = photo.transform?.styleType
-            // 如果 transform 存在但 styleType 缺失，从 cropMode 获取
-            const fallbackCropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : undefined
-            const finalStyleType = (serverStyleType || fallbackCropMode || 'cover') as 'cover' | 'full' | 'lomo'
+            // 从 cropMode 获取样式类型
+            const finalStyleType = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover'
 
             // 将服务端的 CropInfo 转换为前端的 SimpleCropInfo
             let simpleCropInfo: SimpleCropInfo | undefined
@@ -384,7 +381,7 @@ function UploadPageContent() {
                 thumbnailUrl: existingImage.thumbnailUrl || photo.url,
                 printCount: photo.quantity || existingImage.printCount || 1,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
-                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover', // 设置从服务端获取的cropMode
+                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
@@ -414,7 +411,7 @@ function UploadPageContent() {
                 width: photo.originalWidth,
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
-                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover', // 设置从服务端获取的cropMode
+                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
                 cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
                 isLandscape: photo.isLandscape,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
@@ -584,7 +581,7 @@ function UploadPageContent() {
 
         // 默认编辑状态
         const defaultEditState: EditState = {
-          mode: 'cover',
+          mode: cropConfig.defaultMode, // 使用配置的默认裁剪模式
           scale: 1,
           x: 0,
           y: 0,
@@ -594,7 +591,7 @@ function UploadPageContent() {
         }
 
         const image: ImageType = {
-          cropMode: "cover",
+          cropMode: cropConfig.defaultMode, // 使用配置的默认裁剪模式
           id: photoId,
           sessionId: currentSession.id,
           originalUrl: ossUrl || dataUrl, // OSS URL 或本地缩略图
@@ -631,7 +628,7 @@ function UploadPageContent() {
               originalHeight: dimensions.height,
               quantity: 1,
               cropInfo: undefined,
-              cropMode: mapCropModeToServer('cover'),
+              cropMode: mapCropModeToServer(cropConfig.defaultMode), // 使用配置的默认裁剪模式
               isLandscape: needsRotation,
             })
             // 更新上传状态
@@ -859,8 +856,6 @@ function UploadPageContent() {
           cropMode: mapCropModeToServer(mode), // 更新cropMode，让PhotoPreviewCard能正确显示样式
           // 注意：批量操作不设置 cropInfo，只有真正编辑过（有精确裁剪坐标）时才设置
           // cropInfo: undefined, // 清除现有的 cropInfo
-          // 清除旧的 transform
-          transform: undefined,
         },
       }
     }).filter(Boolean) as { id: string; updates: Partial<ImageType> }[]
@@ -899,91 +894,30 @@ function UploadPageContent() {
       return
     }
     
-    setShowSubmitModal(true)
+    // 直接跳转到 success 页面，不再显示弹框
+    handleConfirmSubmit()
   }
 
   const handleConfirmSubmit = async () => {
     if (!currentSession) return
     
-    setIsSubmitting(true)
-    const orderSn = getOrderSn()
-
-    try {
-      // 构建照片列表
-      const photos = images.map(img => {
-        // 获取模式（从 cropInfo 或 editState 中获取）
-        const mode = img.cropInfo?.styleType || img.editState?.mode || 'cover'
-        
-        // lomo 和 full 模式不需要裁剪信息
-        const shouldClearCropInfo = mode === 'lomo' || mode === 'full'
-        
-        // 将 SimpleCropInfo 转换为 API 期望的 CropInfo 格式
-        const apiCropInfo = (!shouldClearCropInfo && img.cropInfo) ? {
-          canvasWidth: currentSession.canvasWidth,
-          canvasHeight: currentSession.canvasHeight,
-          sourceWidth: img.cropInfo.sourceWidth,
-          sourceHeight: img.cropInfo.sourceHeight,
-          offsetX: img.cropInfo.offsetX,
-          offsetY: img.cropInfo.offsetY,
-          cropWidth: img.cropInfo.cropWidth,
-          cropHeight: img.cropInfo.cropHeight,
-          rotateAngle: 0, // react-easy-crop 不支持旋转
-          originalUrl: img.originalUrl,
-          styleType: img.cropInfo.styleType,
-        } : undefined
-        
-        return {
-          id: img.id,
-          url: img.originalUrl,
-          quantity: img.printCount,
-          // 创建简化的 transform（只包含 styleType）
-          transform: {
-            outputWidth: currentSession.canvasWidth,
-            outputHeight: currentSession.canvasHeight,
-            sourceWidth: img.width,
-            sourceHeight: img.height,
-            styleType: mode,
-          },
-          cropInfo: apiCropInfo,
-        }
-      })
-
-      // 调用后端提交订单
-      setApiLoading(true, '提交订单中...')
-      await submitOrder({
-        orderSn: orderSn,
-        photos,
-        submitTime: new Date().toISOString(),
-        watermarkConfig: {
-          enabled: false,
-          position: 'bottom-right',
-        },
-        size: currentSession.sizeName,
-        style: '',
-        total: 0,
-        totalQuantity: totalPrintCount,
-      })
-
-      // 更新本地订单状态
-      const savedOrders = localStorage.getItem('photo-orders')
-      const orders = savedOrders ? JSON.parse(savedOrders) : {}
-      orders[currentSession.id] = {
-        ...currentSession,
-        currentCount: totalPrintCount,
-        status: 'submitted',
-        submittedAt: new Date().toISOString(),
-      }
-      localStorage.setItem('photo-orders', JSON.stringify(orders))
-      
-      setShowSubmitModal(false)
-      router.push('/success')
-    } catch (error) {
-      console.error('提交订单失败:', error)
-      alert('提交失败，请重试')
-    } finally {
-      setIsSubmitting(false)
-      setApiLoading(false, '')
+    // 简化逻辑：直接跳转到 success 页面
+    // 照片已经通过 addPhotoToOrder 实时同步到数据库了
+    // 在 success 页面会有"确认订单，提交制作"按钮来最终提交
+    
+    // 更新本地订单状态（可选）
+    const savedOrders = localStorage.getItem('photo-orders')
+    const orders = savedOrders ? JSON.parse(savedOrders) : {}
+    orders[currentSession.id] = {
+      ...currentSession,
+      currentCount: totalPrintCount,
+      status: 'uploaded', // 状态改为已上传，尚未最终提交
+      uploadedAt: new Date().toISOString(),
     }
+    localStorage.setItem('photo-orders', JSON.stringify(orders))
+    
+    // 直接跳转到 success 页面
+    router.push('/success')
   }
 
   const handleBack = () => {
@@ -1308,7 +1242,8 @@ function UploadPageContent() {
 
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex gap-2 flex-wrap">
-                  {(['cover', 'full', 'lomo'] as CropMode[]).map((mode) => (
+                  {/* 根据当前尺寸的配置显示可选的裁剪模式 */}
+                  {cropConfig.availableModes.map((mode) => (
                     <button
                       key={mode}
                       onClick={() => handleApplyBatchCrop(mode)}
@@ -1372,7 +1307,8 @@ function UploadPageContent() {
         className="hidden"
       />
 
-      {/* Submit Modal */}
+      {/* Submit Modal - 已废弃，不再使用弹框确认 */}
+      {/* 
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
@@ -1408,6 +1344,7 @@ function UploadPageContent() {
           </div>
         </div>
       )}
+      */}
 
       {/* 全局 Loading */}
       <GlobalLoading />

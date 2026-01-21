@@ -1,84 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
-// ==================== 仿射矩阵相关 ====================
-
-/**
- * 仿射变换矩阵
- * 格式: [a, b, c, d, tx, ty]
- * 
- * 矩阵表示:
- * | a  c  tx |
- * | b  d  ty |
- * | 0  0  1  |
- */
-export type AffineMatrix = [number, number, number, number, number, number]
-
-/** 单位矩阵（无变换） */
-export const IDENTITY_MATRIX: AffineMatrix = [1, 0, 0, 1, 0, 0]
-
-/** 从 scale, rotation, position 创建仿射矩阵 */
-export function createAffineMatrix(
-  scaleX: number,
-  scaleY: number,
-  rotation: number, // 角度
-  tx: number,
-  ty: number
-): AffineMatrix {
-  const rad = (rotation * Math.PI) / 180
-  const cos = Math.cos(rad)
-  const sin = Math.sin(rad)
-  
-  return [
-    scaleX * cos,   // a
-    scaleX * sin,   // b
-    -scaleY * sin,  // c
-    scaleY * cos,   // d
-    tx,             // tx
-    ty              // ty
-  ]
-}
-
-/** 从仿射矩阵解析出 scale, rotation, position */
-export function parseAffineMatrix(matrix: AffineMatrix): {
-  scaleX: number
-  scaleY: number
-  rotation: number
-  tx: number
-  ty: number
-} {
-  const [a, b, c, d, tx, ty] = matrix
-  
-  const scaleX = Math.sqrt(a * a + b * b)
-  const scaleY = Math.sqrt(c * c + d * d)
-  const rotation = Math.atan2(b, a) * (180 / Math.PI)
-  
-  return { scaleX, scaleY, rotation, tx, ty }
-}
-
-// ==================== 照片变换类型 ====================
-
-/** 照片变换信息（使用仿射矩阵）- 用于前端回显 */
-export interface PhotoTransform {
-  /** 仿射变换矩阵 [a, b, c, d, tx, ty]（兼容旧版本） */
-  matrix?: AffineMatrix
-  /** 输出宽度（像素）- 前端显示尺寸 */
-  outputWidth: number
-  /** 输出高度（像素）- 前端显示尺寸 */
-  outputHeight: number
-  /** 原图宽度（像素） */
-  sourceWidth: number
-  /** 原图高度（像素） */
-  sourceHeight: number
-  /** 样式类型 */
-  styleType: 'cover' | 'full' | 'lomo'
-  /** 变换参数（用于前端回显） */
-  rotateAngle?: number // 旋转角度（仅0/90/180/270°）
-  scale?: number // 等比例缩放
-  translateX?: number // X平移（px）
-  translateY?: number // Y平移（px）
-  originalUrl?: string // 原图地址
-}
 
 /** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
 export interface CropInfo {
@@ -146,8 +68,7 @@ export interface Image {
   height: number
   printCount: number
   editState: EditState | null
-  transform?: PhotoTransform // 仿射变换信息（旧版本，保留兼容）
-  cropInfo?: SimpleCropInfo // 简化的裁剪信息（新版本，用于 react-easy-crop）
+  cropInfo?: SimpleCropInfo // 简化的裁剪信息（用于 react-easy-crop）
   isLandscape: boolean // 是否是横图
   outputUrl: string // 最终成品URL（带裁剪参数）
   cropMode: 'cover' | 'full' | 'lomo' // 裁剪模式
@@ -332,10 +253,10 @@ export const useStore = create<StoreState>()(
       partialize: (state) => ({
         currentSession: state.currentSession,
         // 持久化 images 数据(排除 file 对象以减小存储空间)
-        images: state.images.map(img => {
-          const { file, ...imageWithoutFile } = img
-          return imageWithoutFile
-        }),
+        // images: state.images.map(img => {
+        //   const { file, ...imageWithoutFile } = img
+        //   return imageWithoutFile
+        // }),
         // 持久化最后获取时间，用于判断缓存是否过期
         lastFetchTime: state.lastFetchTime,
       }),
