@@ -262,7 +262,7 @@ export default function SuccessPage() {
               animation: 'blink 1.5s ease-in-out infinite, pulse-glow 2s ease-in-out infinite',
             }}
           >
-           确认无问题，点击锁单后，店铺安排制作。
+           确认无问题请点击锁单，店铺进入制作流程。未锁单之前可以继续修改照片。
           </p>
 
           {/* 订单信息 */}

@@ -207,8 +207,12 @@ export default function ImageEditor({
   }), [])
 
   // 🚀 优化：简化图片加载，只在图片实际渲染时获取尺寸
+  // 使用压缩图URL，避免加载原图浪费带宽
   useEffect(() => {
     if (!imageUrl) return
+
+    // 使用压缩图URL（和Cropper组件一致），避免重复加载
+    const compressedUrl = buildOssCropUrl(imageUrl, undefined, imageCompressOptions)
 
     // 只预加载获取压缩图尺寸（用于坐标转换）
     const img = document.createElement('img')
@@ -223,17 +227,17 @@ export default function ImageEditor({
       })
     }
     img.onerror = () => {
-      console.error('加载图片失败:', imageUrl)
+      console.error('加载图片失败:', compressedUrl)
       // 失败时也标记为已加载，避免卡住
       setImageLoaded(true)
     }
-    img.src = imageUrl
+    img.src = compressedUrl
 
     return () => {
       img.onload = null
       img.onerror = null
     }
-  }, [imageUrl])
+  }, [imageUrl, imageCompressOptions])
 
   // 🚀 优化：从保存的 cropInfo 恢复状态（简化版）
   useEffect(() => {
@@ -335,6 +339,17 @@ export default function ImageEditor({
       width: displayCropWidth, // 裁剪区域在压缩图上的宽度
       height: displayCropHeight, // 裁剪区域在压缩图上的高度
     }
+
+    // 安全检查：确保 initialArea 中的值都是有效的
+    if (isNaN(initialArea.x) || isNaN(initialArea.y) || 
+        isNaN(initialArea.width) || isNaN(initialArea.height) ||
+        !isFinite(initialArea.x) || !isFinite(initialArea.y) ||
+        !isFinite(initialArea.width) || !isFinite(initialArea.height)) {
+      console.error('计算出的 initialArea 无效:', initialArea)
+      restoredRef.current = true
+      return
+    }
+
     setCroppedAreaPixels(initialArea)
     setInitialCroppedAreaPixels(initialArea) // 设置初始值，只设置一次
 
@@ -555,7 +570,9 @@ export default function ImageEditor({
                     onCropChange={safetSetCrop}
                     onZoomChange={safeSetZoom}
                     onCropComplete={onCropComplete}
-                    initialCroppedAreaPixels={initialCroppedAreaPixels}
+                    {...(initialCroppedAreaPixels && {
+                      initialCroppedAreaPixels: initialCroppedAreaPixels
+                    })}
                     // 禁止缩放，只允许拖拽
                     objectFit='contain'
                     minZoom={1}
