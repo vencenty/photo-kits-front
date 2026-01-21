@@ -324,7 +324,7 @@ export default function SuccessPage() {
             {isLocked ? (
               <div className="w-full py-3 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
                 <CheckCircle2 className="w-5 h-5" />
-                订单已锁单，正在制作中
+                订单已锁定，正在制作中
               </div>
             ) : (
               <button

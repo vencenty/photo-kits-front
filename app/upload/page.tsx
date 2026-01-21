@@ -1058,7 +1058,7 @@ function UploadPageContent() {
             <p className="text-gray-500 mb-6">还没有上传照片</p>
             {isOrderLocked ? (
               <div className="px-6 py-3 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center">
-                订单已锁单，正在制作中
+                订单已锁定，正在制作中
               </div>
             ) : (
               <button
@@ -1246,7 +1246,7 @@ function UploadPageContent() {
               <div className="flex items-center gap-3">
                 {isOrderLocked ? (
                   <div className="flex-1 py-3 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center">
-                    订单已锁单，正在制作中
+                    订单已锁定，正在制作中
                   </div>
                 ) : (
                   <>
