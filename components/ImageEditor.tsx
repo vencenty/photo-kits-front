@@ -636,36 +636,58 @@ export default function ImageEditor({
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-between px-4 py-3 pt-8 bg-gray-900">
-        {/* 上一张按钮 */}
-        <button
-          onClick={onPrevious}
-          disabled={!hasPrevious}
-          className={`p-2 rounded-lg transition-all ${
-            hasPrevious 
-              ? 'bg-gray-700 text-white hover:bg-gray-600' 
-              : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-          }`}
-        >
-          <ChevronLeft className="w-6 h-6" />上一张
-        </button>
-        
-        <div className="flex-1" />
-        
-        {/* 下一张按钮 */}
-        <button
-          onClick={onNext}
-          disabled={!hasNext}
-          className={`p-2 rounded-lg transition-all ${
-            hasNext 
-              ? 'bg-gray-700 text-white hover:bg-gray-600' 
-              : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-          }`}
-        >
-          <ChevronRight className="w-6 h-6" />
-          {/* <text>下一张</text> */}
-          下一张
-        </button>
+      {/* 导航按钮区域 */}
+      <div className="px-4 py-4 bg-gray-900 border-t border-gray-800">
+        <div className="flex items-center justify-between gap-4 max-w-2xl mx-auto">
+          {/* 上一张按钮 */}
+          <button
+            onClick={onPrevious}
+            disabled={!hasPrevious}
+            className={`
+              group flex items-center gap-2 px-4 py-3 rounded-xl font-medium
+              transition-all duration-200 ease-in-out
+              ${
+                hasPrevious
+                  ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
+                  : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
+              }
+            `}
+            aria-label="上一张"
+          >
+            <ChevronLeft 
+              className={`w-5 h-5 transition-transform duration-200 ${
+                hasPrevious ? 'group-hover:-translate-x-0.5' : ''
+              }`} 
+            />
+            <span className="text-sm">上一张</span>
+          </button>
+          
+          {/* 中间占位（可以放图片计数器等） */}
+          <div className="flex-1" />
+          
+          {/* 下一张按钮 */}
+          <button
+            onClick={onNext}
+            disabled={!hasNext}
+            className={`
+              group flex items-center gap-2 px-4 py-3 rounded-xl font-medium
+              transition-all duration-200 ease-in-out
+              ${
+                hasNext
+                  ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
+                  : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
+              }
+            `}
+            aria-label="下一张"
+          >
+            <span className="text-sm">下一张</span>
+            <ChevronRight 
+              className={`w-5 h-5 transition-transform duration-200 ${
+                hasNext ? 'group-hover:translate-x-0.5' : ''
+              }`} 
+            />
+          </button>
+        </div>
       </div>
 
 
