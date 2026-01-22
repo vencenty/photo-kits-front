@@ -647,7 +647,7 @@ export default function ImageEditor({
               : 'bg-gray-800 text-gray-600 cursor-not-allowed'
           }`}
         >
-          <ChevronLeft className="w-6 h-6" />
+          <ChevronLeft className="w-6 h-6" />上一张
         </button>
         
         <div className="flex-1" />
@@ -663,6 +663,8 @@ export default function ImageEditor({
           }`}
         >
           <ChevronRight className="w-6 h-6" />
+          {/* <text>下一张</text> */}
+          下一张
         </button>
       </div>
 

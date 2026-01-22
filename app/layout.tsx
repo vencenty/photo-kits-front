@@ -1,4 +1,5 @@
 import './globals.css'
+import { Toaster } from 'sonner'
 
 export default function RootLayout({
   children,
@@ -12,7 +13,10 @@ export default function RootLayout({
         <meta name="description" content="" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster position="top-center" richColors />
+      </body>
     </html>
   )
 }

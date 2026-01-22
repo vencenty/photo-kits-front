@@ -2,6 +2,18 @@
  * API 请求封装
  */
 
+import { toast } from 'sonner'
+import {
+  BusinessError,
+  SystemError,
+  NetworkError,
+  isBusinessError,
+  isSystemError,
+  handleSpecialError,
+  reportErrorToMonitoring,
+  type ApiErrorResponse,
+} from './error-handler'
+
 // API 基础配置
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
 
@@ -18,13 +30,16 @@ interface ApiResponse<T> {
 // 请求配置
 interface RequestConfig extends RequestInit {
   params?: Record<string, string>
+  // 是否静默处理错误（不显示 toast）
+  silent?: boolean
 }
 
 /**
  * 统一请求函数
+ * 自动处理错误并显示 toast 提示
  */
 async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
-  const { params, ...init } = config
+  const { params, silent = false, ...init } = config
 
   // 构建完整 URL
   let fullUrl = `${API_BASE_URL}${url}`
@@ -39,29 +54,115 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
     ...init.headers,
   }
 
-  const response = await fetch(fullUrl, {
-    ...init,
-    headers,
-  })
+  try {
+    const response = await fetch(fullUrl, {
+      ...init,
+      headers,
+    })
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    // 处理 HTTP 错误状态码
+    if (!response.ok) {
+      // 尝试解析错误响应
+      let errorData: ApiErrorResponse | null = null
+      try {
+        errorData = await response.json()
+      } catch {
+        // 无法解析 JSON，使用默认错误信息
+      }
+
+      // 如果是业务错误格式，按业务错误处理
+      if (errorData && typeof errorData.code === 'number' && errorData.msg) {
+        return handleErrorResponse(errorData, silent)
+      }
+
+      // HTTP 状态码错误
+      throw new NetworkError(`请求失败: ${response.status} ${response.statusText}`)
+    }
+
+    const result = await response.json()
+
+    // 成功响应 (code === 0)
+    if (result.code === 0 || result.code === undefined) {
+      // 如果响应有 data 字段，返回 data 内容；否则返回整个 result
+      if (result.data !== undefined) {
+        return result.data as T
+      }
+      return result as T
+    }
+
+    // 错误响应
+    return handleErrorResponse(
+      {
+        code: result.code,
+        msg: result.msg || result.message || '请求失败',
+      },
+      silent
+    )
+  } catch (error) {
+    // 网络错误或其他异常
+    if (error instanceof NetworkError || error instanceof BusinessError || error instanceof SystemError) {
+      throw error
+    }
+
+    // 其他类型的错误（如网络断开、超时等）
+    const networkError = new NetworkError(
+      error instanceof TypeError && error.message.includes('fetch')
+        ? '网络异常，请检查网络连接'
+        : error instanceof Error
+          ? error.message
+          : '请求失败，请稍后再试'
+    )
+
+    if (!silent) {
+      toast.error(networkError.message)
+    }
+
+    throw networkError
+  }
+}
+
+/**
+ * 处理错误响应
+ */
+function handleErrorResponse(errorData: ApiErrorResponse, silent: boolean): never {
+  const { code, msg } = errorData
+
+  // 业务错误 (10000-49999)
+  if (isBusinessError(code)) {
+    // 显示 toast 提示
+    if (!silent) {
+      toast.error(msg)
+    }
+
+    // 处理特殊错误码（如跳转页面等）
+    handleSpecialError(code, msg)
+
+    // 抛出业务错误
+    throw new BusinessError(code, msg)
   }
 
-  const result = await response.json()
+  // 系统错误 (50000+)
+  if (isSystemError(code)) {
+    // 显示通用提示（不暴露具体技术错误）
+    if (!silent) {
+      toast.error('系统繁忙，请稍后再试')
+    }
 
-  // go-zero 使用 utils.OkResponse 包装响应
-  // 响应格式: { code: 0, msg: "success", data: {...} }
-  if (result.code !== undefined && result.code !== 0) {
-    throw new Error(result.msg || result.message || '请求失败')
+    // 上报到监控系统
+    reportErrorToMonitoring(errorData, {
+      url: typeof window !== 'undefined' ? window.location.href : '',
+      timestamp: new Date().toISOString(),
+    })
+
+    // 抛出系统错误
+    throw new SystemError(code, msg)
   }
 
-  // 如果响应有 data 字段，返回 data 内容；否则返回整个 result
-  if (result.data !== undefined) {
-    return result.data as T
+  // 未知错误码，按业务错误处理
+  if (!silent) {
+    toast.error(msg || '请求失败')
   }
-
-  return result as T
+  throw new BusinessError(code, msg)
 }
 
 // ==================== 类型定义 ====================
