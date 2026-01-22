@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
@@ -192,12 +193,13 @@ function EditPageContent() {
       forceRefetch()
       console.log('✅ 已标记需要后台刷新')
 
-      // 4️⃣ 跳转回列表页（用户立即看到更新效果）
-      router.push(`/upload?sizeId=${currentSession?.sizeId}`)
+      // 4️⃣ 保存成功提示，不跳转，继续停留在编辑页
+      toast.success('保存成功')
+      console.log('✅ 保存成功，继续停留在编辑页')
 
     } catch (error) {
       console.error('保存编辑状态失败:', error)
-      alert('保存失败，请重试')
+      toast.error('保存失败，请重试')
     } finally {
       setApiLoading(false)
     }
@@ -232,7 +234,7 @@ function EditPageContent() {
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 to-transparent">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push(`/upload?sizeId=${currentSession?.sizeId}`)}
             className="mr-4 p-2 hover:bg-white/10 rounded-full transition-colors"
           >
             <ArrowLeft className="w-6 h-6 text-white" />
@@ -248,11 +250,13 @@ function EditPageContent() {
         canvasHeight={currentSession.canvasHeight}
         sizeId={currentSession.sizeId}
         onSave={handleSave}
-        onCancel={() => router.back()}
+        onCancel={() => router.push(`/upload?sizeId=${currentSession?.sizeId}`)}
         onPrevious={handlePrevious}
         onNext={handleNext}
         hasPrevious={hasPrevious}
         hasNext={hasNext}
+        allImages={images}
+        currentIndex={currentIndex}
       />
 
       {/* 全局 Loading */}
