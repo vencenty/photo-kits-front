@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Check, Lightbulb } from 'lucide-react'
+import { Check, Lightbulb, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react'
 import Cropper from 'react-easy-crop'
 import type { Area, Point } from 'react-easy-crop'
 import {
@@ -17,6 +17,11 @@ interface ImageEditorProps {
   sizeId?: string  // 新增：用于获取裁剪配置
   onSave: (saveData: SaveData) => void
   onCancel: () => void
+  // 导航功能
+  onPrevious?: () => void
+  onNext?: () => void
+  hasPrevious?: boolean
+  hasNext?: boolean
 }
 
 type EditMode = 'cover' | 'full' | 'lomo'
@@ -57,6 +62,10 @@ export default function ImageEditor({
   sizeId,
   onSave,
   onCancel,
+  onPrevious,
+  onNext,
+  hasPrevious = false,
+  hasNext = false,
 }: ImageEditorProps) {
   // 安全检查：确保必需的 props 有效
   if (!photoData || !canvasWidth || !canvasHeight || canvasWidth <= 0 || canvasHeight <= 0) {
@@ -93,6 +102,9 @@ export default function ImageEditor({
   // react-easy-crop 状态
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
+  
+  // 裁剪框旋转状态：是否旋转90度（交换宽高）
+  const [isCropBoxRotated, setIsCropBoxRotated] = useState(false)
 
   // 安全的 setCrop 包装函数，防止设置无效值
   const safetSetCrop = useCallback((newCrop: Point | ((prev: Point) => Point)) => {
@@ -165,23 +177,30 @@ export default function ImageEditor({
   // 使用 useMemo 确保稳定性，避免无限循环
   const aspectRatio = useMemo(() => {
     if (!sourceSize.width || !sourceSize.height || sourceSize.width <= 0 || sourceSize.height <= 0) {
-      return paperAspectRatio // 默认使用相纸比例
+      // 如果裁剪框旋转了，反转相纸比例
+      return isCropBoxRotated && paperAspectRatio > 0 
+        ? 1 / paperAspectRatio 
+        : paperAspectRatio
     }
 
     const imageRatio = sourceSize.width / sourceSize.height
     const isImageLandscape = imageRatio > 1 // 横图
     const isPaperLandscape = paperAspectRatio > 1 // 相纸是横的
 
+    // 计算基础比例
+    let baseRatio: number
     // 如果图片和相纸方向一致，直接使用相纸比例
     if ((isImageLandscape && isPaperLandscape) || (!isImageLandscape && !isPaperLandscape)) {
-      return paperAspectRatio
+      baseRatio = paperAspectRatio
+    } else {
+      // 🚀 关键：如果图片和相纸方向不一致，反转相纸比例
+      // 例如：相纸是 3:4（竖 0.75），图片是横图，则使用 4:3（横 1.33）
+      baseRatio = paperAspectRatio > 0 ? 1 / paperAspectRatio : 1
     }
 
-    // 🚀 关键：如果图片和相纸方向不一致，反转相纸比例
-    // 例如：相纸是 3:4（竖 0.75），图片是横图，则使用 4:3（横 1.33）
-    // 使用倒数避免重新计算 canvasHeight / canvasWidth，减少依赖
-    return paperAspectRatio > 0 ? 1 / paperAspectRatio : 1
-  }, [sourceSize.width, sourceSize.height, paperAspectRatio])
+    // 如果用户点击了"旋转裁剪框"按钮，再次反转比例
+    return isCropBoxRotated && baseRatio > 0 ? 1 / baseRatio : baseRatio
+  }, [sourceSize.width, sourceSize.height, paperAspectRatio, isCropBoxRotated])
 
   // 🚀 优化：固化图片压缩参数，避免每次render创建新对象
   const imageCompressOptions = useMemo(() => ({
@@ -533,8 +552,10 @@ export default function ImageEditor({
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      {/* 顶部导航栏 */}
+     
       {/* 提示信息 */}
-      <div className="px-4 py-3 pt-8">
+      <div className="px-4 py-3">
         <div className="flex items-center justify-center gap-2 text-sm">
           <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0" />
           <span className="text-blue-400">
@@ -563,6 +584,7 @@ export default function ImageEditor({
                 mode === 'cover' ? (
                   // Cover 模式：使用 react-easy-crop 
                   <Cropper
+                    key={`cropper-${isCropBoxRotated ? 'rotated' : 'normal'}`}
                     image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
                     crop={crop}
                     zoom={zoom}
@@ -614,6 +636,36 @@ export default function ImageEditor({
           </div>
         </div>
       </div>
+      <div className="flex items-center justify-between px-4 py-3 pt-8 bg-gray-900">
+        {/* 上一张按钮 */}
+        <button
+          onClick={onPrevious}
+          disabled={!hasPrevious}
+          className={`p-2 rounded-lg transition-all ${
+            hasPrevious 
+              ? 'bg-gray-700 text-white hover:bg-gray-600' 
+              : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+          }`}
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+        
+        <div className="flex-1" />
+        
+        {/* 下一张按钮 */}
+        <button
+          onClick={onNext}
+          disabled={!hasNext}
+          className={`p-2 rounded-lg transition-all ${
+            hasNext 
+              ? 'bg-gray-700 text-white hover:bg-gray-600' 
+              : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+          }`}
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
+      </div>
+
 
       {/* 底部控制栏 */}
       <div className="bg-gray-900 border-t border-gray-800 p-4 pb-8">

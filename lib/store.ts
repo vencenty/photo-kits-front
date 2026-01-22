@@ -72,6 +72,7 @@ export interface Image {
   isLandscape: boolean // 是否是横图
   outputUrl: string // 最终成品URL（带裁剪参数）
   cropMode: 'cover' | 'full' | 'lomo' // 裁剪模式
+  isAdjusted?: boolean // 是否已调整：用户进入编辑页保存后为true
   file?: File // 前端保存原始文件对象
   // 上传状态跟踪
   uploadStatus?: {

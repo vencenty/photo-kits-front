@@ -21,10 +21,17 @@ function EditPageContent() {
   // 🚀 乐观更新：获取 store 方法
   const updateImage = useStore((state) => state.updateImage)
   const forceRefetch = useStore((state) => state.forceRefetch)
+  // 获取所有图片列表（用于上一张/下一张导航）
+  const images = useStore((state) => state.images)
 
   const [image, setImage] = useState<Image | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isOrderLocked, setIsOrderLocked] = useState(false)
+
+  // 计算当前图片的位置
+  const currentIndex = images.findIndex(img => img.id === imageId)
+  const hasPrevious = currentIndex > 0
+  const hasNext = currentIndex >= 0 && currentIndex < images.length - 1
 
 
   useEffect(() => {
@@ -163,7 +170,7 @@ function EditPageContent() {
           offsetY: saveData.cropInfo.offsetY,
           cropWidth: saveData.cropInfo.cropWidth,
           cropHeight: saveData.cropInfo.cropHeight,
-          rotateAngle: 0, // react-easy-crop 不支持旋转，固定为 0
+          rotateAngle: 0, // 不需要旋转，固定为 0
           originalUrl: image?.originalUrl || '',
           styleType: saveData.cropInfo.styleType,
         } : undefined,
@@ -177,8 +184,9 @@ function EditPageContent() {
         cropInfo: saveData.cropInfo,
         cropMode: mode,
         outputUrl: saveData.outputUrl,
+        isAdjusted: true, // 标记为已调整
       })
-      console.log('✅ 本地缓存已更新:', { mode, cropInfo: saveData.cropInfo })
+      console.log('✅ 本地缓存已更新:', { mode, cropInfo: saveData.cropInfo, isAdjusted: true })
 
       // 3️⃣ 🚀 标记需要后台刷新验证
       forceRefetch()
@@ -192,6 +200,21 @@ function EditPageContent() {
       alert('保存失败，请重试')
     } finally {
       setApiLoading(false)
+    }
+  }
+
+  // 上一张/下一张导航
+  const handlePrevious = () => {
+    if (hasPrevious) {
+      const prevImage = images[currentIndex - 1]
+      router.push(`/edit?imageId=${prevImage.id}`)
+    }
+  }
+
+  const handleNext = () => {
+    if (hasNext) {
+      const nextImage = images[currentIndex + 1]
+      router.push(`/edit?imageId=${nextImage.id}`)
     }
   }
 
@@ -226,6 +249,10 @@ function EditPageContent() {
         sizeId={currentSession.sizeId}
         onSave={handleSave}
         onCancel={() => router.back()}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
+        hasPrevious={hasPrevious}
+        hasNext={hasNext}
       />
 
       {/* 全局 Loading */}
