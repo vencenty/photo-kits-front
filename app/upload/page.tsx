@@ -65,6 +65,8 @@ function UploadPageContent() {
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
   const [isRestoringScroll, setIsRestoringScroll] = useState(false) // 是否正在恢复滚动位置
+  const [showUnadjustedDialog, setShowUnadjustedDialog] = useState(false) // 显示未调整照片确认对话框
+  const [unadjustedImages, setUnadjustedImages] = useState<ImageType[]>([]) // 未调整的照片列表
 
   // 虚拟滚动相关
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -891,19 +893,13 @@ function UploadPageContent() {
   const handleConfirmSubmit = async () => {
     if (!currentSession) return
     
-      // 🎯 检测未调整的照片
-      const unadjustedImages = images.filter(img => !img.isAdjusted)
-      if (unadjustedImages.length > 0) {
-        const firstUnadjusted = unadjustedImages[0]
-        const confirmed = window.confirm(
-          `您还有 ${unadjustedImages.length} 张照片未调整。\n为确保打印效果，请先调整所有照片。\n\n点击"确定"跳转到第一张未调整的照片。`
-        )
-        if (confirmed) {
-          // 跳转到第一张未调整的照片进行编辑
-          handleEdit(firstUnadjusted.id)
-        }
-        return
-      }
+    // 🎯 检测未调整的照片
+    const unadjusted = images.filter(img => !img.isAdjusted)
+    if (unadjusted.length > 0) {
+      setUnadjustedImages(unadjusted)
+      setShowUnadjustedDialog(true)
+      return
+    }
     // 简化逻辑：直接跳转到 success 页面
     // 照片已经通过 addPhotoToOrder 实时同步到数据库了
     // 在 success 页面会有"确认订单，提交制作"按钮来最终提交
@@ -1348,6 +1344,53 @@ function UploadPageContent() {
         </div>
       )}
       */}
+
+      {/* 未调整照片确认对话框 */}
+      {showUnadjustedDialog && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowUnadjustedDialog(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">还有照片未调整</h3>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                您还有 <span className="font-semibold text-orange-600">{unadjustedImages.length}</span> 张照片未调整。
+                <br />
+                为确保打印效果，请先调整所有照片。
+              </p>
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowUnadjustedDialog(false)}
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                稍后调整
+              </button>
+              <button
+                onClick={() => {
+                  const firstUnadjusted = unadjustedImages[0]
+                  setShowUnadjustedDialog(false)
+                  // 跳转到第一张未调整的照片进行编辑，并添加 filter=unadjusted 参数
+                  router.push(`/edit?imageId=${firstUnadjusted.id}&filter=unadjusted`)
+                }}
+                className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium hover:bg-[#ff3d5d] transition-colors"
+              >
+                去调整
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 全局 Loading */}
       <GlobalLoading />

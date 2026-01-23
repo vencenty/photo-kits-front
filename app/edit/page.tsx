@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,6 +16,7 @@ function EditPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const imageId = searchParams.get('imageId') as string
+  const filter = searchParams.get('filter') // 🎯 读取过滤参数：'unadjusted' 表示只浏览未调整的图片
 
   const currentSession = useStore((state) => state.currentSession)
   const setApiLoading = useStore((state) => state.setApiLoading)
@@ -24,7 +25,7 @@ function EditPageContent() {
   const forceRefetch = useStore((state) => state.forceRefetch)
   const hasHydrated = useStore((state) => state._hasHydrated)
   // 获取所有图片列表（用于上一张/下一张导航）
-  const images = useStore((state) => state.images)
+  const allImages = useStore((state) => state.images)
   const addImages = useStore((state) => state.addImages)
   const updateImages = useStore((state) => state.updateImages)
 
@@ -33,7 +34,23 @@ function EditPageContent() {
   const [isOrderLocked, setIsOrderLocked] = useState(false)
   const [imagesLoaded, setImagesLoaded] = useState(false) // 标记是否已加载图片列表
 
-  // 计算当前图片的位置
+  // 🎯 根据 filter 参数过滤图片列表（用于导航）
+  const images = useMemo(() => {
+    // 过滤当前 session 的图片
+    const sessionImages = allImages.filter(img => 
+      (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
+    )
+    
+    // 如果 filter=unadjusted，只返回未调整的图片
+    if (filter === 'unadjusted') {
+      return sessionImages.filter(img => !img.isAdjusted)
+    }
+    
+    // 默认返回所有图片
+    return sessionImages
+  }, [allImages, currentSession?.id, filter])
+
+  // 计算当前图片在过滤后的列表中的位置
   const currentIndex = images.findIndex(img => img.id === imageId)
   const hasPrevious = currentIndex > 0
   const hasNext = currentIndex >= 0 && currentIndex < images.length - 1
@@ -339,6 +356,33 @@ function EditPageContent() {
       forceRefetch()
       console.log('✅ 已标记需要后台刷新')
 
+      // 3.5️⃣ 🎯 如果是在 unadjusted 过滤模式下，检查是否还有未调整的图片
+      if (filter === 'unadjusted') {
+        // 获取当前 session 的所有图片
+        const sessionImages = allImages.filter(img => 
+          (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
+        )
+        
+        // 获取所有未调整的图片（排除当前刚保存的）
+        const remainingUnadjusted = sessionImages.filter(img => 
+          img.id !== imageId && !img.isAdjusted
+        )
+        
+        if (remainingUnadjusted.length === 0) {
+          // 所有图片都已调整，移除 filter 参数，恢复正常导航
+          console.log('✅ 所有图片已调整，移除 filter 参数')
+          router.replace(`/edit?imageId=${imageId}`)
+          toast.success('恭喜！所有照片已调整完成')
+        } else {
+          // 还有未调整的图片，自动跳转到下一张未调整的图片
+          const nextUnadjusted = remainingUnadjusted[0]
+          console.log(`✅ 还有 ${remainingUnadjusted.length} 张未调整，请到下一张未调整的照片进行编辑`)
+          //router.push(`/edit?imageId=${nextUnadjusted.id}&filter=unadjusted`)
+          toast.success(`保存成功！还有 ${remainingUnadjusted.length} 张照片待调整`)
+          return // 提前返回，避免显示下面的提示
+        }
+      }
+
       // 4️⃣ 保存成功提示，不跳转，继续停留在编辑页
       toast.success('保存成功，请继续编辑其他照片')
       console.log('✅ 保存成功，继续停留在编辑页')
@@ -355,14 +399,22 @@ function EditPageContent() {
   const handlePrevious = () => {
     if (hasPrevious) {
       const prevImage = images[currentIndex - 1]
-      router.push(`/edit?imageId=${prevImage.id}`)
+      // 🎯 保持 filter 参数（如果存在）
+      const url = filter 
+        ? `/edit?imageId=${prevImage.id}&filter=${filter}`
+        : `/edit?imageId=${prevImage.id}`
+      router.push(url)
     }
   }
 
   const handleNext = () => {
     if (hasNext) {
       const nextImage = images[currentIndex + 1]
-      router.push(`/edit?imageId=${nextImage.id}`)
+      // 🎯 保持 filter 参数（如果存在）
+      const url = filter 
+        ? `/edit?imageId=${nextImage.id}&filter=${filter}`
+        : `/edit?imageId=${nextImage.id}`
+      router.push(url)
     }
   }
 
