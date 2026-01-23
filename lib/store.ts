@@ -55,6 +55,16 @@ export interface SimpleCropInfo {
   sourceHeight: number
   /** 样式类型 */
   styleType: 'cover' | 'full' | 'lomo'
+  /** 
+   * 百分比坐标（用于恢复裁剪位置，官方推荐）
+   * 格式与 react-easy-crop 的 croppedArea 一致
+   */
+  croppedAreaPercent?: {
+    x: number      // 裁剪区域左上角 X 坐标的百分比
+    y: number      // 裁剪区域左上角 Y 坐标的百分比
+    width: number  // 裁剪区域宽度的百分比
+    height: number // 裁剪区域高度的百分比
+  }
 }
 
 // 图片类型

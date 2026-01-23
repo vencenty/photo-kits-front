@@ -375,7 +375,9 @@ function UploadPageContent() {
                 cropHeight: cropHeight,
                 sourceWidth: photo.cropInfo.sourceWidth,
                 sourceHeight: photo.cropInfo.sourceHeight,
-                styleType: (photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo'
+                styleType: (photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
+                // 🎯 恢复百分比坐标（官方推荐用于恢复裁剪位置）
+                croppedAreaPercent: (photo.cropInfo as any).croppedAreaPercent,
               }
             }
 

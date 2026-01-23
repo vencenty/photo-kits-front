@@ -175,6 +175,7 @@ export default function ImageEditor({
     }
   }, [])
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+  const [croppedAreaPercent, setCroppedAreaPercent] = useState<Area | null>(null) // 🎯 百分比坐标（官方推荐用于恢复）
   const [initialCroppedAreaPixels, setInitialCroppedAreaPixels] = useState<Area | undefined>(undefined)
   const [initialCroppedAreaPercentages, setInitialCroppedAreaPercentages] = useState<Area | undefined>(undefined)
 
@@ -184,11 +185,9 @@ export default function ImageEditor({
     height: photoData.height || 0,
   }), [photoData.width, photoData.height])
 
-  // 压缩图尺寸（前端实际加载的图片尺寸，用于坐标转换）
-  const [thumbImageSize, setDisplayImageSize] = useState({
-    width: photoData.width || 0,
-    height: photoData.height || 0,
-  })
+  // 实际加载的图片尺寸（原图尺寸，只做了质量压缩，没有尺寸缩放）
+  // 所以直接使用 sourceSize，不需要额外的坐标转换
+  const thumbImageSize = sourceSize
 
   const containerRef = useRef<HTMLDivElement>(null)
   const restoredRef = useRef(false) // 标记是否已恢复过位置
@@ -293,17 +292,8 @@ export default function ImageEditor({
       // 这里只需要确保过渡状态正确
     }
 
-    // 🚀 直接使用 photoData 的尺寸计算压缩图尺寸，避免重复加载图片
-    // 压缩图使用短边600px，所以压缩比例 = 600 / min(width, height)
-    if (sourceSize.width > 0 && sourceSize.height > 0) {
-      const minDimension = Math.min(sourceSize.width, sourceSize.height)
-      const scale = minDimension > 0 ? Math.min(600 / minDimension, 1) : 1
-      
-      setDisplayImageSize({
-        width: Math.round(sourceSize.width * scale),
-        height: Math.round(sourceSize.height * scale),
-      })
-    }
+    // 图片切换时的过渡处理已在上面完成
+    // 不需要计算压缩图尺寸，因为实际加载的是原图（只做了质量压缩）
   }, [imageUrl, sourceSize, photoData, imageLoaded, safetSetCrop, safeSetZoom])
 
   // 🚀 监听图片加载完成（使用与 Cropper 相同的 URL，但只加载一次用于检测）
@@ -344,19 +334,55 @@ export default function ImageEditor({
   }, [imageUrl, imageCompressOptions])
 
   // 🚀 优化：从保存的 cropInfo 恢复状态（使用 initialCroppedAreaPercentages）
-  // 根据 react-easy-crop 文档，应该使用 initialCroppedAreaPercentages 而不是 initialCroppedAreaPixels
-  // 因为像素值会被四舍五入，可能导致轻微的位置偏移
+  // 根据 react-easy-crop 官方文档，推荐使用 initialCroppedAreaPercentages（百分比）恢复
+  // 因为 croppedAreaPixels 会被四舍五入，用于恢复时可能导致轻微的位置漂移
   useEffect(() => {
     // 防止重复恢复
     if (restoredRef.current) return
     if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return
-    if (!thumbImageSize.width || !thumbImageSize.height) return
     if (mode !== 'cover') return
 
-    const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
+    const { styleType, croppedAreaPercent } = photoData.cropInfo
 
     // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return
+
+    // 🎯 官方最佳实践：优先使用保存的百分比坐标（croppedAreaPercent）
+    // 这是 onCropComplete 回调中的 croppedArea 参数，官方推荐用于恢复
+    if (croppedAreaPercent) {
+      const { x, y, width, height } = croppedAreaPercent
+      
+      // 安全检查：确保百分比值有效
+      if (typeof x === 'number' && typeof y === 'number' && 
+          typeof width === 'number' && typeof height === 'number' &&
+          !isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) &&
+          isFinite(x) && isFinite(y) && isFinite(width) && isFinite(height)) {
+        
+        console.log('📍 使用保存的百分比坐标恢复:', croppedAreaPercent)
+        
+        // 直接使用保存的百分比坐标
+        setInitialCroppedAreaPercentages({
+          x,
+          y,
+          width,
+          height,
+        })
+        
+        // 标记正在恢复，防止 onCropComplete 触发更新
+        isRestoringRef.current = true
+        
+        // 等待一帧，让 react-easy-crop 完成初始化
+        requestAnimationFrame(() => {
+          isRestoringRef.current = false
+        })
+
+        restoredRef.current = true
+        return
+      }
+    }
+
+    // 🔄 兼容旧数据：如果没有保存百分比，则从像素坐标计算
+    const { offsetX, offsetY, cropWidth, cropHeight } = photoData.cropInfo
 
     // 安全检查：确保 offsetX 和 offsetY 是有效数值
     if (typeof offsetX !== 'number' || typeof offsetY !== 'number' || 
@@ -373,38 +399,22 @@ export default function ImageEditor({
       const calculated = calculateCoverCropSize(
         sourceSize.width,
         sourceSize.height,
-        aspectRatio // 使用动态计算的裁剪框比例
+        aspectRatio
       )
       finalCropWidth = calculated.cropWidth
       finalCropHeight = calculated.cropHeight
     }
 
-    // 🎯 关键修复：将原图的像素坐标转换为压缩图的百分比格式
-    // react-easy-crop 的 initialCroppedAreaPercentages 需要的是相对于实际加载的图片（压缩图）尺寸的百分比
-    // 
-    // 步骤：
-    // 1. 将原图坐标转换为压缩图坐标
-    // 2. 将压缩图坐标转换为百分比（相对于压缩图尺寸）
-    
-    // 计算缩放比例：压缩图尺寸 / 原图尺寸
-    const scaleX = thumbImageSize.width / sourceSize.width
-    const scaleY = thumbImageSize.height / sourceSize.height
-    
-    // 将原图坐标转换为压缩图坐标
-    const displayOffsetX = offsetX * scaleX
-    const displayOffsetY = offsetY * scaleY
-    const displayCropWidth = finalCropWidth * scaleX
-    const displayCropHeight = finalCropHeight * scaleY
-    
-    // 将压缩图坐标转换为百分比（相对于压缩图尺寸）
+    // 从像素坐标计算百分比（兼容旧数据）
+    console.log('📍 从像素坐标计算百分比恢复（兼容模式）')
     const croppedAreaPercentages: Area = {
-      x: (displayOffsetX / thumbImageSize.width) * 100,           // 裁剪区域左上角X坐标的百分比（相对于压缩图）
-      y: (displayOffsetY / thumbImageSize.height) * 100,            // 裁剪区域左上角Y坐标的百分比（相对于压缩图）
-      width: (displayCropWidth / thumbImageSize.width) * 100,  // 裁剪区域宽度的百分比（相对于压缩图）
-      height: (displayCropHeight / thumbImageSize.height) * 100, // 裁剪区域高度的百分比（相对于压缩图）
+      x: (offsetX / sourceSize.width) * 100,
+      y: (offsetY / sourceSize.height) * 100,
+      width: (finalCropWidth / sourceSize.width) * 100,
+      height: (finalCropHeight / sourceSize.height) * 100,
     }
 
-    // 安全检查：确保百分比值有效
+    // 安全检查
     if (isNaN(croppedAreaPercentages.x) || isNaN(croppedAreaPercentages.y) || 
         isNaN(croppedAreaPercentages.width) || isNaN(croppedAreaPercentages.height) ||
         !isFinite(croppedAreaPercentages.x) || !isFinite(croppedAreaPercentages.y) ||
@@ -414,21 +424,16 @@ export default function ImageEditor({
       return
     }
 
-    // 🎯 关键：使用 initialCroppedAreaPercentages 让 react-easy-crop 自动计算 crop 和 zoom
-    // 不需要手动计算 crop 和 zoom，react-easy-crop 会根据 initialCroppedAreaPercentages 自动计算
     setInitialCroppedAreaPercentages(croppedAreaPercentages)
     
-    // 标记正在恢复，防止 onCropComplete 触发更新
     isRestoringRef.current = true
-    
-    // 等待一帧，让 react-easy-crop 完成初始化
     requestAnimationFrame(() => {
       isRestoringRef.current = false
     })
 
-    restoredRef.current = true // 标记已恢复，防止重复恢复
+    restoredRef.current = true
 
-  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio])
+  }, [photoData.cropInfo, sourceSize, mode, aspectRatio, baseAspectRatio])
   
   // 🚀 优化：当图片切换且没有 cropInfo 时，重置裁剪状态为默认值
   useEffect(() => {
@@ -455,67 +460,34 @@ export default function ImageEditor({
       safetSetCrop({ x: 0, y: 0 })
       safeSetZoom(1)
       setCroppedAreaPixels(null)
+      setCroppedAreaPercent(null)
     }
   }, [mode, safetSetCrop, safeSetZoom])
 
-  // 裁剪完成回调 - 直接基于原图尺寸计算crop meta
-  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+  // 裁剪完成回调 - 同时保存百分比和像素坐标
+  // 官方最佳实践：
+  // - croppedArea（百分比）用于恢复裁剪位置
+  // - croppedAreaPixels（像素）用于服务端裁剪
+  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
     try {
       // 如果正在恢复位置，不更新状态，避免无限循环
       if (isRestoringRef.current) return
 
-      // 安全检查：确保 croppedAreaPixels 有效
-      if (!croppedAreaPixels || 
-          typeof croppedAreaPixels.x !== 'number' || 
-          typeof croppedAreaPixels.y !== 'number' ||
-          typeof croppedAreaPixels.width !== 'number' || 
-          typeof croppedAreaPixels.height !== 'number' ||
-          isNaN(croppedAreaPixels.x) || isNaN(croppedAreaPixels.y) ||
-          isNaN(croppedAreaPixels.width) || isNaN(croppedAreaPixels.height)) {
-        console.error('无效的 croppedAreaPixels:', croppedAreaPixels)
-        return
+      console.log('📐 onCropComplete:', { croppedArea, croppedAreaPixels })
+
+      // 🎯 同时保存百分比和像素坐标
+      setCroppedAreaPercent(croppedArea)    // 百分比坐标（用于恢复）
+      setCroppedAreaPixels(croppedAreaPixels) // 像素坐标（用于服务端）
+
+      // 记录用户当前的编辑状态，用于下次进入页面时恢复
+      if (mode === 'cover' && sourceSize.width && sourceSize.height) {
+        setInitialCroppedAreaPixels(croppedAreaPixels)
       }
 
-      // 保存压缩图坐标（用于后续计算，但不做复杂转换）
-      setCroppedAreaPixels(croppedAreaPixels)
-
-    // 记录用户当前的编辑状态，用于下次进入页面时恢复
-    // 只有在 cover 模式且图片尺寸已知时才更新
-    if (mode === 'cover' && thumbImageSize.width && thumbImageSize.height) {
-      setInitialCroppedAreaPixels(croppedAreaPixels)
-    }
-
-    // 基于原图尺寸直接计算crop meta（简化版）
-    if (mode === 'cover' && sourceSize.width && sourceSize.height && thumbImageSize.width && thumbImageSize.height) {
-      // 计算缩放比例：原图尺寸 / 压缩图尺寸
-      const scaleX = sourceSize.width / thumbImageSize.width
-      const scaleY = sourceSize.height / thumbImageSize.height
-
-      // 将压缩图坐标转换为原图坐标 - 这是我们唯一需要做的转换
-      const realOffsetX = Math.round(croppedAreaPixels.x * scaleX)
-      const realOffsetY = Math.round(croppedAreaPixels.y * scaleY)
-      const realCropWidth = Math.round(croppedAreaPixels.width * scaleX)
-      const realCropHeight = Math.round(croppedAreaPixels.height * scaleY)
-
-      const cropInfo: SimpleCropInfo = {
-        offsetX: realOffsetX,
-        offsetY: realOffsetY,
-        cropWidth: realCropWidth,
-        cropHeight: realCropHeight,
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
-        styleType: 'cover',
-      }
-
-      console.log("基于原图的crop meta:", cropInfo)
-
-      // 只保存crop meta，不再生成URL（让服务端处理）
-      // URL生成逻辑移到服务端统一处理
-    }
     } catch (error) {
       console.error('onCropComplete 出错:', error)
     }
-  }, [mode, sourceSize, thumbImageSize])
+  }, [mode, sourceSize])
 
   // 模式改变
   const handleModeChange = useCallback((newMode: EditMode) => {
@@ -524,11 +496,13 @@ export default function ImageEditor({
     safetSetCrop({ x: 0, y: 0 })
     safeSetZoom(1)
     setCroppedAreaPixels(null)
+    setCroppedAreaPercent(null)
     setInitialCroppedAreaPixels(undefined)
     setInitialCroppedAreaPercentages(undefined)
   }, [safetSetCrop, safeSetZoom])
 
   // 保存 - 生成带有crop参数的outputUrl
+  // 🎯 官方最佳实践：同时保存百分比坐标（用于恢复）和像素坐标（用于服务端裁剪）
   const handleSave = useCallback(() => {
     try {
       if (!sourceSize.width || !sourceSize.height) return
@@ -536,8 +510,8 @@ export default function ImageEditor({
       let cropInfo: SimpleCropInfo | undefined
       let outputUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
 
-    // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
-    if (mode === 'full' || mode === 'lomo') {
+      // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
+      if (mode === 'full' || mode === 'lomo') {
         cropInfo = {
           offsetX: 0,
           offsetY: 0,
@@ -547,58 +521,69 @@ export default function ImageEditor({
           sourceHeight: sourceSize.height,
           styleType: mode,
         }
-      // full 和 lomo 模式直接使用原图URL，不拼接crop参数
-    } else if (mode === 'cover') {
-      // cover 模式：使用当前裁剪数据或默认居中裁剪
-      if (croppedAreaPixels && thumbImageSize.width && thumbImageSize.height) {
-        // 将压缩图坐标转换为原图坐标
-        // const scaleX = sourceSize.width / thumbImageSize.width
-        // const scaleY = sourceSize.height / thumbImageSize.height
+        // full 和 lomo 模式直接使用原图URL，不拼接crop参数
+      } else if (mode === 'cover') {
+        // cover 模式：使用当前裁剪数据或默认居中裁剪
+        if (croppedAreaPixels && croppedAreaPercent) {
+          // 🎯 关键：同时保存像素坐标和百分比坐标
+          cropInfo = {
+            offsetX: Math.round(croppedAreaPixels.x),
+            offsetY: Math.round(croppedAreaPixels.y),
+            cropWidth: Math.round(croppedAreaPixels.width),
+            cropHeight: Math.round(croppedAreaPixels.height),
+            sourceWidth: sourceSize.width,
+            sourceHeight: sourceSize.height,
+            styleType: 'cover',
+            // 🎯 保存百分比坐标（官方推荐用于恢复）
+            croppedAreaPercent: {
+              x: croppedAreaPercent.x,
+              y: croppedAreaPercent.y,
+              width: croppedAreaPercent.width,
+              height: croppedAreaPercent.height,
+            },
+          }
+        } else {
+          // 默认居中裁剪
+          const { cropWidth, cropHeight } = calculateCoverCropSize(
+            sourceSize.width,
+            sourceSize.height,
+            aspectRatio
+          )
+          const offsetX = (sourceSize.width - cropWidth) / 2
+          const offsetY = (sourceSize.height - cropHeight) / 2
 
-        cropInfo = {
-          offsetX: croppedAreaPixels.x,
-          offsetY: croppedAreaPixels.y,
-          cropWidth: croppedAreaPixels.width,
-          cropHeight: croppedAreaPixels.height,
-          sourceWidth: sourceSize.width,
-          sourceHeight: sourceSize.height,
-          styleType: 'cover',
-          // 不需要保存 cropBoxRotated，通过 Area 的宽高比可以自动判断
+          // 计算默认的百分比坐标
+          const defaultPercent = {
+            x: (offsetX / sourceSize.width) * 100,
+            y: (offsetY / sourceSize.height) * 100,
+            width: (cropWidth / sourceSize.width) * 100,
+            height: (cropHeight / sourceSize.height) * 100,
+          }
+
+          cropInfo = {
+            offsetX: Math.round(offsetX),
+            offsetY: Math.round(offsetY),
+            cropWidth: Math.round(cropWidth),
+            cropHeight: Math.round(cropHeight),
+            sourceWidth: sourceSize.width,
+            sourceHeight: sourceSize.height,
+            styleType: 'cover',
+            croppedAreaPercent: defaultPercent,
+          }
         }
-      } else {
-        // 默认居中裁剪
-        const { cropWidth, cropHeight } = calculateCoverCropSize(
-          sourceSize.width,
-          sourceSize.height,
-          aspectRatio
-        )
-        const offsetX = (sourceSize.width - cropWidth) / 2
-        const offsetY = (sourceSize.height - cropHeight) / 2
 
-        cropInfo = {
-          offsetX: Math.round(offsetX),
-          offsetY: Math.round(offsetY),
-          cropWidth: Math.round(cropWidth),
-          cropHeight: Math.round(cropHeight),
-          sourceWidth: sourceSize.width,
-          sourceHeight: sourceSize.height,
-          styleType: 'cover',
-          // 不需要保存 cropBoxRotated，通过 Area 的宽高比可以自动判断
+        // cover 模式：在原图URL基础上拼接crop参数
+        if (cropInfo) {
+          outputUrl = buildOssCropUrl(outputUrl, cropInfo)
         }
       }
 
-      // cover 模式：在原图URL基础上拼接crop参数
       if (cropInfo) {
-        outputUrl = buildOssCropUrl(outputUrl, cropInfo)
-      }
-    }
+        console.log('🎯 保存 cropInfo（包含百分比）:', cropInfo)
+        console.log('🔗 生成的 outputUrl:', outputUrl)
 
-    if (cropInfo) {
-      console.log('🎯 保存基于原图的crop meta:', cropInfo)
-      console.log('🔗 生成的outputUrl:', outputUrl)
-
-      // 传递crop meta和生成的outputUrl
-      onSave({
+        // 传递crop meta和生成的outputUrl
+        onSave({
         cropInfo,
         outputUrl,
       })
@@ -607,7 +592,7 @@ export default function ImageEditor({
       console.error('handleSave 出错:', error)
       alert('保存失败，请重试')
     }
-  }, [croppedAreaPixels, sourceSize, thumbImageSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
+  }, [croppedAreaPixels, croppedAreaPercent, sourceSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 渲染 full 或 lomo 模式（不可编辑）
   // 🎯 关键：添加 key 确保模式切换时重新渲染
@@ -669,7 +654,6 @@ export default function ImageEditor({
                 }`}
               >
                 {imageLoaded && imageUrl && aspectRatio > 0 && 
-                 thumbImageSize.width > 0 && thumbImageSize.height > 0 &&
                  sourceSize.width > 0 && sourceSize.height > 0 && (
                   mode === 'cover' ? (
                     // Cover 模式：使用 react-easy-crop 

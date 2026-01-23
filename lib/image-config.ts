@@ -275,6 +275,11 @@ export function getPreviewImageUrl(url: string, cropInfo: SimpleCropInfo, isLand
 
 /**
  * 简化的裁剪信息（用于 react-easy-crop）
+ * 
+ * 最佳实践：
+ * - 保存时：同时保存像素坐标（用于服务端裁剪）和百分比坐标（用于恢复裁剪位置）
+ * - 恢复时：使用 croppedAreaPercent（百分比）通过 initialCroppedAreaPercentages 恢复
+ * - 官方推荐使用百分比恢复，因为像素值会被四舍五入，可能导致轻微的位置漂移
  */
 export interface SimpleCropInfo {
   /** 裁剪起始 X（原图像素） */
@@ -291,6 +296,16 @@ export interface SimpleCropInfo {
   sourceHeight: number
   /** 样式类型 */
   styleType: 'cover' | 'full' | 'lomo'
+  /** 
+   * 百分比坐标（用于恢复裁剪位置，官方推荐）
+   * 格式与 react-easy-crop 的 croppedArea 一致
+   */
+  croppedAreaPercent?: {
+    x: number      // 裁剪区域左上角 X 坐标的百分比
+    y: number      // 裁剪区域左上角 Y 坐标的百分比
+    width: number  // 裁剪区域宽度的百分比
+    height: number // 裁剪区域高度的百分比
+  }
 }
 
 /**

@@ -126,7 +126,8 @@ function EditPageContent() {
             sourceWidth: response.photo.cropInfo.sourceWidth,
             sourceHeight: response.photo.cropInfo.sourceHeight,
             styleType: (response.photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
-            // 不需要恢复 cropBoxRotated，通过 Area 的宽高比可以自动判断
+            // 🎯 恢复百分比坐标（官方推荐用于恢复裁剪位置）
+            croppedAreaPercent: (response.photo.cropInfo as any).croppedAreaPercent,
           }
         }
 
@@ -242,6 +243,8 @@ function EditPageContent() {
                 sourceWidth: photo.cropInfo.sourceWidth,
                 sourceHeight: photo.cropInfo.sourceHeight,
                 styleType: (photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
+                // 🎯 恢复百分比坐标（官方推荐用于恢复裁剪位置）
+                croppedAreaPercent: (photo.cropInfo as any).croppedAreaPercent,
               }
             }
 
