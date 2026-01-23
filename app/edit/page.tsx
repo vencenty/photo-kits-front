@@ -119,6 +119,7 @@ function EditPageContent() {
           },
           cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
           outputUrl: response.photo.outputUrl || response.photo.url, // 设置默认值：如果不存在outputUrl，则使用原图url
+          isAdjusted: response.photo.isAdjusted || false, // 🎯 设置是否已调整
         }
 
         setImage(photoData)
@@ -324,6 +325,15 @@ function EditPageContent() {
         isAdjusted: true, // 标记为已调整
       })
       console.log('✅ 本地缓存已更新:', { mode, cropInfo: saveData.cropInfo, isAdjusted: true })
+
+      // 2.5️⃣ 更新本地 image 状态，以便 ImageEditor 显示"已调整"标签
+      setImage(prev => prev ? {
+        ...prev,
+        cropInfo: saveData.cropInfo,
+        cropMode: mode,
+        outputUrl: saveData.outputUrl,
+        isAdjusted: true,
+      } : null)
 
       // 3️⃣ 🚀 标记需要后台刷新验证
       forceRefetch()

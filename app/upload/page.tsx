@@ -891,6 +891,19 @@ function UploadPageContent() {
   const handleConfirmSubmit = async () => {
     if (!currentSession) return
     
+      // 🎯 检测未调整的照片
+      const unadjustedImages = images.filter(img => !img.isAdjusted)
+      if (unadjustedImages.length > 0) {
+        const firstUnadjusted = unadjustedImages[0]
+        const confirmed = window.confirm(
+          `您还有 ${unadjustedImages.length} 张照片未调整。\n为确保打印效果，请先调整所有照片。\n\n点击"确定"跳转到第一张未调整的照片。`
+        )
+        if (confirmed) {
+          // 跳转到第一张未调整的照片进行编辑
+          handleEdit(firstUnadjusted.id)
+        }
+        return
+      }
     // 简化逻辑：直接跳转到 success 页面
     // 照片已经通过 addPhotoToOrder 实时同步到数据库了
     // 在 success 页面会有"确认订单，提交制作"按钮来最终提交

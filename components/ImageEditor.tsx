@@ -722,6 +722,15 @@ export default function ImageEditor({
       </div>
       {/* 导航按钮区域 */}
       <div className="px-4 py-4 bg-gray-900 border-t border-gray-800">
+        {/* 🎯 已调整标签 - 显示在导航按钮上方 */}
+        {photoData.isAdjusted && (
+          <div className="flex justify-center mb-3">
+            <div className="bg-green-500 text-white text-xs px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5" />
+              <span>已调整</span>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-4 max-w-2xl mx-auto">
           {/* 上一张按钮 */}
           <button
