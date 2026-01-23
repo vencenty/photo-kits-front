@@ -177,6 +177,7 @@ export default function ImageEditor({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [croppedAreaPercent, setCroppedAreaPercent] = useState<Area | null>(null) // 🎯 百分比坐标（官方推荐用于恢复）
   const [initialCroppedAreaPixels, setInitialCroppedAreaPixels] = useState<Area | undefined>(undefined)
+  // 用于追踪是否需要重新应用初始值（图片切换时）
   const [initialCroppedAreaPercentages, setInitialCroppedAreaPercentages] = useState<Area | undefined>(undefined)
 
   // 🚀 优化：直接从 photoData 获取尺寸，避免异步加载
@@ -232,6 +233,55 @@ export default function ImageEditor({
 
   // 容器的高度比例（保持固定，不随裁剪框旋转而改变，这样图片大小不会变）
   const containerAspectRatio = baseAspectRatio
+
+  // 🎯 关键修复：使用 useMemo 同步计算初始值，而不是在 useEffect 中异步设置
+  // 因为 initialCroppedAreaPercentages 只在 Cropper 首次挂载时生效，必须在渲染前就计算好
+  const computedInitialCroppedAreaPercentages = useMemo((): Area | undefined => {
+    // 只有 cover 模式才需要恢复
+    if (mode !== 'cover') return undefined
+    if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return undefined
+    
+    const { styleType, croppedAreaPercent: savedPercent } = photoData.cropInfo
+    
+    // 只有 cover 模式且有有效数据时才恢复
+    if (styleType !== 'cover') return undefined
+    
+    // 🎯 优先使用保存的百分比坐标
+    if (savedPercent) {
+      const { x, y, width, height } = savedPercent
+      if (typeof x === 'number' && typeof y === 'number' && 
+          typeof width === 'number' && typeof height === 'number' &&
+          !isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) &&
+          isFinite(x) && isFinite(y) && isFinite(width) && isFinite(height)) {
+        console.log('📍 使用保存的百分比坐标恢复:', savedPercent)
+        return { x, y, width, height }
+      }
+    }
+    
+    // 🔄 兼容旧数据：从像素坐标计算百分比
+    const { offsetX, offsetY, cropWidth, cropHeight } = photoData.cropInfo
+    
+    if (typeof offsetX !== 'number' || typeof offsetY !== 'number' || 
+        isNaN(offsetX) || isNaN(offsetY) || !isFinite(offsetX) || !isFinite(offsetY)) {
+      return undefined
+    }
+    
+    let finalCropWidth = cropWidth
+    let finalCropHeight = cropHeight
+    if (!finalCropWidth || !finalCropHeight) {
+      const calculated = calculateCoverCropSize(sourceSize.width, sourceSize.height, baseAspectRatio)
+      finalCropWidth = calculated.cropWidth
+      finalCropHeight = calculated.cropHeight
+    }
+    
+    console.log('📍 从像素坐标计算百分比恢复（兼容模式）')
+    return {
+      x: (offsetX / sourceSize.width) * 100,
+      y: (offsetY / sourceSize.height) * 100,
+      width: (finalCropWidth / sourceSize.width) * 100,
+      height: (finalCropHeight / sourceSize.height) * 100,
+    }
+  }, [photoData.cropInfo, photoData.id, sourceSize, mode, baseAspectRatio])
 
   // 🚀 优化：固化图片压缩参数，避免每次render创建新对象
   const imageCompressOptions = useMemo(() => ({
@@ -333,107 +383,18 @@ export default function ImageEditor({
     }
   }, [imageUrl, imageCompressOptions])
 
-  // 🚀 优化：从保存的 cropInfo 恢复状态（使用 initialCroppedAreaPercentages）
-  // 根据 react-easy-crop 官方文档，推荐使用 initialCroppedAreaPercentages（百分比）恢复
-  // 因为 croppedAreaPixels 会被四舍五入，用于恢复时可能导致轻微的位置漂移
+  // 🚀 优化：当 computedInitialCroppedAreaPercentages 变化时，同步更新 state
+  // 这确保在图片切换时，Cropper 组件能收到正确的初始值
   useEffect(() => {
-    // 防止重复恢复
-    if (restoredRef.current) return
-    if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return
-    if (mode !== 'cover') return
-
-    const { styleType, croppedAreaPercent } = photoData.cropInfo
-
-    // 只有 cover 模式且有有效数据时才恢复
-    if (styleType !== 'cover') return
-
-    // 🎯 官方最佳实践：优先使用保存的百分比坐标（croppedAreaPercent）
-    // 这是 onCropComplete 回调中的 croppedArea 参数，官方推荐用于恢复
-    if (croppedAreaPercent) {
-      const { x, y, width, height } = croppedAreaPercent
-      
-      // 安全检查：确保百分比值有效
-      if (typeof x === 'number' && typeof y === 'number' && 
-          typeof width === 'number' && typeof height === 'number' &&
-          !isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) &&
-          isFinite(x) && isFinite(y) && isFinite(width) && isFinite(height)) {
-        
-        console.log('📍 使用保存的百分比坐标恢复:', croppedAreaPercent)
-        
-        // 直接使用保存的百分比坐标
-        setInitialCroppedAreaPercentages({
-          x,
-          y,
-          width,
-          height,
-        })
-        
-        // 标记正在恢复，防止 onCropComplete 触发更新
-        isRestoringRef.current = true
-        
-        // 等待一帧，让 react-easy-crop 完成初始化
-        requestAnimationFrame(() => {
-          isRestoringRef.current = false
-        })
-
-        restoredRef.current = true
-        return
-      }
+    if (computedInitialCroppedAreaPercentages) {
+      setInitialCroppedAreaPercentages(computedInitialCroppedAreaPercentages)
+      // 标记正在恢复，防止 onCropComplete 触发更新
+      isRestoringRef.current = true
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
     }
-
-    // 🔄 兼容旧数据：如果没有保存百分比，则从像素坐标计算
-    const { offsetX, offsetY, cropWidth, cropHeight } = photoData.cropInfo
-
-    // 安全检查：确保 offsetX 和 offsetY 是有效数值
-    if (typeof offsetX !== 'number' || typeof offsetY !== 'number' || 
-        isNaN(offsetX) || isNaN(offsetY) || !isFinite(offsetX) || !isFinite(offsetY)) {
-      console.error('cropInfo 中的偏移值无效:', { offsetX, offsetY })
-      restoredRef.current = true
-      return
-    }
-
-    // 如果 cropWidth 和 cropHeight 不存在，从裁剪框比例计算
-    let finalCropWidth = cropWidth
-    let finalCropHeight = cropHeight
-    if (!finalCropWidth || !finalCropHeight) {
-      const calculated = calculateCoverCropSize(
-        sourceSize.width,
-        sourceSize.height,
-        aspectRatio
-      )
-      finalCropWidth = calculated.cropWidth
-      finalCropHeight = calculated.cropHeight
-    }
-
-    // 从像素坐标计算百分比（兼容旧数据）
-    console.log('📍 从像素坐标计算百分比恢复（兼容模式）')
-    const croppedAreaPercentages: Area = {
-      x: (offsetX / sourceSize.width) * 100,
-      y: (offsetY / sourceSize.height) * 100,
-      width: (finalCropWidth / sourceSize.width) * 100,
-      height: (finalCropHeight / sourceSize.height) * 100,
-    }
-
-    // 安全检查
-    if (isNaN(croppedAreaPercentages.x) || isNaN(croppedAreaPercentages.y) || 
-        isNaN(croppedAreaPercentages.width) || isNaN(croppedAreaPercentages.height) ||
-        !isFinite(croppedAreaPercentages.x) || !isFinite(croppedAreaPercentages.y) ||
-        !isFinite(croppedAreaPercentages.width) || !isFinite(croppedAreaPercentages.height)) {
-      console.error('计算出的 croppedAreaPercentages 无效:', croppedAreaPercentages)
-      restoredRef.current = true
-      return
-    }
-
-    setInitialCroppedAreaPercentages(croppedAreaPercentages)
-    
-    isRestoringRef.current = true
-    requestAnimationFrame(() => {
-      isRestoringRef.current = false
-    })
-
-    restoredRef.current = true
-
-  }, [photoData.cropInfo, sourceSize, mode, aspectRatio, baseAspectRatio])
+  }, [computedInitialCroppedAreaPercentages])
   
   // 🚀 优化：当图片切换且没有 cropInfo 时，重置裁剪状态为默认值
   useEffect(() => {
@@ -666,8 +627,8 @@ export default function ImageEditor({
                       onCropChange={safetSetCrop}
                       onZoomChange={safeSetZoom}
                       onCropComplete={onCropComplete}
-                      {...(initialCroppedAreaPercentages && {
-                        initialCroppedAreaPercentages: initialCroppedAreaPercentages
+                      {...(computedInitialCroppedAreaPercentages && {
+                        initialCroppedAreaPercentages: computedInitialCroppedAreaPercentages
                       })}
                       // 禁止缩放，只允许拖拽
                       objectFit='contain'
