@@ -63,6 +63,7 @@ export default function SuccessPage() {
   const [orderStatus, setOrderStatus] = useState<number | null>(null)
   const [isLocking, setIsLocking] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false) // 确认提交弹窗
 
   // 获取订单号
   useEffect(() => {
@@ -163,8 +164,8 @@ export default function SuccessPage() {
     router.push(`/upload?sizeId=${size.id}`)
   }, [orderNumber, setCurrentSession, clearImages, router])
 
-  // 提交订单制作功能（新逻辑）
-  const handleSubmitOrder = async () => {
+  // 点击提交按钮时：先做校验，再弹出确认弹窗
+  const handleSubmitOrderClick = () => {
     if (!orderNumber || isLocked) return
 
     // 检查是否有照片
@@ -174,9 +175,12 @@ export default function SuccessPage() {
       return
     }
 
-    if (!confirm('确认提交订单吗？提交后订单将进入审核流程。')) {
-      return
-    }
+    setShowSubmitConfirm(true)
+  }
+
+  // 真正执行提交订单制作（在弹窗中点击“确认提交”时调用）
+  const handleConfirmSubmitOrder = async () => {
+    if (!orderNumber || isLocked) return
 
     setIsLocking(true)
     try {
@@ -192,6 +196,7 @@ export default function SuccessPage() {
       setIsLocked(checkOrderLocked(orderDetail.status))
       
       alert('订单提交成功！订单已进入审核流程，通过审核后将开始制作。')
+      setShowSubmitConfirm(false)
     } catch (error) {
       console.error('提交订单失败:', error)
       alert('提交失败，请重试')
@@ -366,7 +371,7 @@ export default function SuccessPage() {
               </div>
             ) : (
               <button
-                onClick={handleSubmitOrder}
+                onClick={handleSubmitOrderClick}
                 disabled={isLocking || !orderNumber}
                 className="w-full py-3 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -405,6 +410,45 @@ export default function SuccessPage() {
       {/* 全局 Loading */}
       <GlobalLoading />
     </div>
+
+      {/* 确认提交订单弹窗 */}
+      {showSubmitConfirm && !isLocked && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-center mb-4">确认订单并提交制作</h3>
+            <div className="space-y-3 text-sm text-gray-700 mb-6">
+              <p className="text-red-600 font-semibold">
+                提交后订单将进入制作流程，<span className="underline">只能查看，无法修改照片和数量</span>。
+              </p>
+              <p>
+                请仔细检查所有规格、照片数量和裁剪效果是否正确。
+              </p>
+              <p className="text-gray-500">
+                如需修改，请先返回上一页，在确认无误后再提交。
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={isLocking}
+                onClick={() => setShowSubmitConfirm(false)}
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                再检查一下
+              </button>
+              <button
+                type="button"
+                disabled={isLocking}
+                onClick={handleConfirmSubmitOrder}
+                className="flex-1 py-3 bg-pink-500 text-white rounded-full font-medium hover:bg-pink-600 shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLocking && <Loader2 className="w-5 h-5 animate-spin" />}
+                确认提交
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
