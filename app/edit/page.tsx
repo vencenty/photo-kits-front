@@ -394,8 +394,11 @@ function EditPageContent() {
           // 还有未调整的图片，自动跳转到下一张未调整的图片
           const nextUnadjusted = remainingUnadjusted[0]
           console.log(`✅ 还有 ${remainingUnadjusted.length} 张未调整，请到下一张未调整的照片进行编辑`)
-          //router.push(`/edit?imageId=${nextUnadjusted.id}&filter=unadjusted`)
-          toast.success(`保存成功！还有 ${remainingUnadjusted.length} 张照片待调整`)
+          // 更新 URL，保持 filter 参数，并同步状态中的当前图片 ID
+          const url = `/edit?imageId=${nextUnadjusted.id}&filter=unadjusted`
+          router.replace(url)
+          setCurrentImageId(nextUnadjusted.id)
+          toast.success(`保存成功！还有 ${remainingUnadjusted.length} 张照片待调整，已为您跳转到下一张未调整的照片`)
           return // 提前返回，避免显示下面的提示
         }
       }

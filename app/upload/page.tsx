@@ -73,6 +73,7 @@ function UploadPageContent() {
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const COLUMNS = 3
   const GAP = 8 // gap-2 = 8px
+  const MAX_CONCURRENT_UPLOADS = 3 // ⚙️ 最大并发上传数量
 
   // 获取相纸尺寸配置
   const photoSize = getPhotoSizeById(sizeId)
@@ -549,27 +550,35 @@ function UploadPageContent() {
       }
     }
 
-    for (let i = 0; i < validFiles.length; i++) {
-      let file = validFiles[i]
-      setUploadProgress(`处理中 ${i + 1}/${validFiles.length}`)
-      
+    // 安全校验：此时 signature 一定存在
+    if (!signature) {
+      setIsUploading(false)
+      setUploadProgress('')
+      return
+    }
+
+    // 单个文件的完整上传流程（包含：转换格式、压缩、上传 OSS、更新本地 & 同步后端）
+    const uploadSingleFile = async (file: File, index: number, total: number) => {
+      let currentFile = file
+      setUploadProgress(`处理中 ${index + 1}/${total}`)
+
       try {
         // 转换图片格式为 JPEG（如果需要）
         try {
-          file = await convertToJpeg(file)
+          currentFile = await convertToJpeg(currentFile)
         } catch (conversionError) {
           console.error('图片格式转换失败:', conversionError)
-          alert(`"${validFiles[i].name}" 格式转换失败，已跳过`)
-          continue
+          alert(`"${file.name}" 格式转换失败，已跳过`)
+          return
         }
 
-        setUploadProgress(`上传中 ${i + 1}/${validFiles.length}`)
-        
+        setUploadProgress(`上传中 ${index + 1}/${total}`)
+
         // 获取原图尺寸
-        const dimensions = await getImageDimensions(file)
-        
+        const dimensions = await getImageDimensions(currentFile)
+
         // 压缩生成缩略图（用于显示）
-        const { dataUrl } = await compressImage(file, 600, 0.85)
+        const { dataUrl } = await compressImage(currentFile, 600, 0.85)
 
         // 判断是否需要旋转
         const needsRotation = shouldRotateImage(dimensions.width, dimensions.height)
@@ -577,7 +586,7 @@ function UploadPageContent() {
         // 上传到 OSS（客户端直传）
         let ossUrl = ''
         try {
-          ossUrl = await uploadToOss(file, signature)
+          ossUrl = await uploadToOss(currentFile, signature)
           console.log('图片上传成功:', ossUrl)
         } catch (error) {
           console.error('上传到 OSS 失败:', error)
@@ -604,14 +613,14 @@ function UploadPageContent() {
           sessionId: currentSession.id,
           originalUrl: ossUrl || dataUrl, // OSS URL 或本地缩略图
           thumbnailUrl: dataUrl, // 始终使用压缩后的缩略图显示
-          filename: file.name,
+          filename: currentFile.name,
           width: dimensions.width,
           height: dimensions.height,
           printCount: 1,
           editState: defaultEditState,
           isLandscape: needsRotation,
           outputUrl: ossUrl || dataUrl, // 刚上传的图片，outputUrl等于originalUrl
-          file,
+          file: currentFile,
           cropInfo: undefined,
           uploadStatus: {
             ossUploaded: !!ossUrl,
@@ -625,13 +634,13 @@ function UploadPageContent() {
         // 同步到后端（只有成功上传到 OSS 后才同步）
         if (ossUrl) {
           try {
-            setApiLoading(true, `同步照片 ${i + 1}/${validFiles.length}...`)
+            setApiLoading(true, `同步照片 ${index + 1}/${total}...`)
             await addPhotoToOrder({
               orderSn: orderSn,
               specId: specId,
               photoId: photoId,
               url: ossUrl,
-              filename: file.name,
+              filename: currentFile.name,
               originalWidth: dimensions.width,
               originalHeight: dimensions.height,
               quantity: 1,
@@ -666,6 +675,42 @@ function UploadPageContent() {
         console.error('处理图片失败:', error)
       }
     }
+
+    // 并发控制：限制同时上传的文件数量
+    const runWithConcurrency = async (filesToUpload: File[], maxConcurrent: number) => {
+      return new Promise<void>((resolve) => {
+        const total = filesToUpload.length
+        let currentIndex = 0
+        let activeCount = 0
+
+        const next = () => {
+          // 所有任务都已经分配且没有活动任务时，结束
+          if (currentIndex >= total) {
+            if (activeCount === 0) {
+              resolve()
+            }
+            return
+          }
+
+          const index = currentIndex++
+          activeCount++
+
+          uploadSingleFile(filesToUpload[index], index, total).finally(() => {
+            activeCount--
+            // 启动下一个任务
+            next()
+          })
+        }
+
+        const initial = Math.min(maxConcurrent, total)
+        for (let i = 0; i < initial; i++) {
+          next()
+        }
+      })
+    }
+
+    // 按最大并发数执行上传任务
+    await runWithConcurrency(validFiles, MAX_CONCURRENT_UPLOADS)
 
     setIsUploading(false)
     setUploadProgress('')
