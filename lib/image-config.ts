@@ -26,6 +26,8 @@ export interface OssImageConfig {
   quality: number
   /** 输出格式（jpg/webp/png），空字符串表示不转换格式 */
   format: string
+  /** 是否渐进显示（0：标准显示，1：渐进显示），默认1。仅适用于JPG格式 */
+  interlace?: number
 }
 
 /**
@@ -44,6 +46,7 @@ export const IMAGE_COMPRESS_CONFIG = {
     height: 0,      // 0 表示按宽度等比例缩放
     quality: 65,    // 图片质量（0-100）
     format: 'webp',  // 输出格式：jpg/webp/png，空字符串表示不转换
+    interlace: 1,    // 渐进显示（仅JPG格式有效）
   } as OssImageConfig,
 
   /**
@@ -56,6 +59,7 @@ export const IMAGE_COMPRESS_CONFIG = {
     height: 0,      // 0 表示按宽度等比例缩放
     quality: 70,    // 图片质量（0-100）
     format: 'jpg',  // 输出格式：jpg/webp/png，空字符串表示不转换
+    interlace: 1,    // 渐进显示（仅JPG格式有效）
   } as OssImageConfig,
 
   /**
@@ -68,6 +72,7 @@ export const IMAGE_COMPRESS_CONFIG = {
     height: 0,      // 0 表示按宽度等比例缩放
     quality: 70,    // 图片质量（0-100）
     format: 'jpg',  // 输出格式：jpg/webp/png，空字符串表示不转换
+    interlace: 1,    // 渐进显示（仅JPG格式有效）
     useShortEdge: true, // 使用短边缩放
   } as OssImageConfig & { useShortEdge?: boolean },
 } as const
@@ -108,6 +113,15 @@ export function buildOssImageParams(config: OssImageConfig, isLandscape?: boolea
   // 添加格式转换参数
   if (config.format) {
     params.push(`format,${config.format}`)
+  }
+
+  // 添加渐进显示参数（仅JPG格式有效）
+  // 如果格式是jpg或转换为jpg，则添加渐进显示参数
+  if (config.interlace !== undefined && config.interlace !== 0) {
+    // 如果已经设置了format为jpg，或者原图是jpg格式，则添加渐进显示
+    if (config.format === 'jpg' || config.format === '') {
+      params.push('interlace,1')
+    }
   }
 
   // 如果 isLandscape 为 true，添加旋转参数（旋转应该在所有操作之后）
@@ -180,6 +194,7 @@ export function getEditImageUrl(url: string, isLandscape?: boolean): string {
  * @param options.quality 图片质量（0-100），默认70
  * @param options.format 输出格式（jpg/webp/png），默认jpg
  * @param options.isLandscape 是否自动旋转（横图转竖图，旋转90度）
+ * @param options.interlace 是否渐进显示（0：标准显示，1：渐进显示），默认1。仅JPG格式有效
  * @returns 缩略图 URL
  */
 export function getShortEdgeThumbnailUrl(
@@ -189,15 +204,17 @@ export function getShortEdgeThumbnailUrl(
     quality?: number
     format?: string
     isLandscape?: boolean
+    interlace?: number
   }
 ): string {
-  const { shortEdge = 600, quality = 70, format = 'jpg', isLandscape } = options || {}
+  const { shortEdge = 600, quality = 70, format = 'jpg', isLandscape, interlace = 1 } = options || {}
   
   const config: OssImageConfig & { useShortEdge?: boolean } = {
     width: shortEdge,
     height: 0,
     quality,
     format,
+    interlace,
     useShortEdge: true,
   }
   
@@ -285,6 +302,7 @@ export interface SimpleCropInfo {
  * @param options.targetWidth 目标宽度（用于压缩）- 用于列表页展示
  * @param options.quality 图片质量（0-100）- 用于列表页展示
  * @param options.format 输出格式（jpg/webp/png）- 用于列表页展示
+ * @param options.interlace 是否渐进显示（0：标准显示，1：渐进显示）- 仅JPG格式有效
  * @returns 带裁剪参数的 URL
  */
 export function buildOssCropUrl(
@@ -295,6 +313,7 @@ export function buildOssCropUrl(
     shortWidth?: number
     quality?: number
     format?: string
+    interlace?: number
   }
 ): string {
   if (!originalUrl) return originalUrl
@@ -313,7 +332,7 @@ export function buildOssCropUrl(
     return originalUrl
   }
 
-  const { isLandscape, shortWidth, quality, format } = options || {}
+  const { isLandscape, shortWidth, quality, format, interlace } = options || {}
   const params: string[] = []
 
   // 如果有cropInfo，处理裁剪参数
@@ -342,6 +361,15 @@ export function buildOssCropUrl(
 
   if (format) {
     params.push(`format,${format}`)
+  }
+
+  // 添加渐进显示参数（仅JPG格式有效）
+  // 如果格式是jpg或转换为jpg，则添加渐进显示参数
+  if (interlace !== undefined && interlace !== 0) {
+    // 如果已经设置了format为jpg，或者没有设置format（可能是原图就是jpg），则添加渐进显示
+    if (format === 'jpg' || format === '') {
+      params.push('interlace,1')
+    }
   }
 
   // 如果 isLandscape 为 true，添加旋转参数（旋转应该在所有操作之后）

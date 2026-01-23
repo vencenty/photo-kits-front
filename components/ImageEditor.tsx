@@ -228,7 +228,8 @@ export default function ImageEditor({
   // 🚀 优化：固化图片压缩参数，避免每次render创建新对象
   const imageCompressOptions = useMemo(() => ({
     quality: 70,
-    format: 'jpg'
+    format: 'jpg',
+    interlace: 1 // 渐进显示，提升加载体验
   }), [])
 
   // 🚀 优化：固化样式对象，避免每次render创建新对象
