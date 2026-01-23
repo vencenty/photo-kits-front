@@ -633,13 +633,20 @@ export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promis
 }
 
 /**
- * 删除照片
+ * 删除照片（支持单个或批量删除）
  * 后端路由: DELETE /api/order/photo
  */
-export async function deletePhotoFromOrder(photoId: string): Promise<{ code: number; message: string }> {
+export async function deletePhotoFromOrder(
+  photoIdOrIds: string | string[]
+): Promise<{ code: number; message: string }> {
+  // 兼容单个和批量删除
+  const body = Array.isArray(photoIdOrIds)
+    ? { photoIds: photoIdOrIds }
+    : { photoId: photoIdOrIds }
+  
   return request<{ code: number; message: string }>('/api/order/photo', {
     method: 'DELETE',
-    body: JSON.stringify({ photoId }),
+    body: JSON.stringify(body),
   })
 }
 

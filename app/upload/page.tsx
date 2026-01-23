@@ -522,6 +522,10 @@ function UploadPageContent() {
       return
     }
 
+    // 🎯 全局上传中弹层：从这里开始到所有图片上传完毕才关闭
+    const totalCount = validFiles.length
+    let completedCount = 0
+    setApiLoading(true, `正在上传照片（0/${totalCount}），请稍候...`)
     setIsUploading(true)
     const orderSn = getOrderSn()
     const specId = currentSession.sizeId
@@ -531,7 +535,6 @@ function UploadPageContent() {
     if (!signature) {
       try {
         console.log('开始获取 OSS 签名...')
-        setApiLoading(true, '获取上传签名...')
         signature = await getOssSignature()
         console.log('OSS 签名获取成功:', {
           host: signature.host,
@@ -544,9 +547,8 @@ function UploadPageContent() {
         console.error('获取 OSS 签名失败:', error)
         setIsUploading(false)
         alert('获取上传签名失败，请重试')
-        return
-      } finally {
         setApiLoading(false, '')
+        return
       }
     }
 
@@ -554,6 +556,7 @@ function UploadPageContent() {
     if (!signature) {
       setIsUploading(false)
       setUploadProgress('')
+      setApiLoading(false, '')
       return
     }
 
@@ -586,7 +589,8 @@ function UploadPageContent() {
         // 上传到 OSS（客户端直传）
         let ossUrl = ''
         try {
-          ossUrl = await uploadToOss(currentFile, signature)
+          // signature 在上层已校验非空，使用非空断言
+          ossUrl = await uploadToOss(currentFile, signature!)
           console.log('图片上传成功:', ossUrl)
         } catch (error) {
           console.error('上传到 OSS 失败:', error)
@@ -634,7 +638,6 @@ function UploadPageContent() {
         // 同步到后端（只有成功上传到 OSS 后才同步）
         if (ossUrl) {
           try {
-            setApiLoading(true, `同步照片 ${index + 1}/${total}...`)
             await addPhotoToOrder({
               orderSn: orderSn,
               specId: specId,
@@ -666,13 +669,17 @@ function UploadPageContent() {
               },
             })
           } finally {
-            setApiLoading(false, '')
+            // 不在这里关闭全局 loading，由外层在全部上传完成后统一关闭
           }
         } else {
           console.warn('图片未上传到 OSS，仅本地显示:', photoId)
         }
       } catch (error) {
         console.error('处理图片失败:', error)
+      } finally {
+        // 更新已完成数量，并刷新全局提示文案
+        completedCount += 1
+        setApiLoading(true, `正在上传照片（${completedCount}/${totalCount}），请稍候...`)
       }
     }
 
@@ -714,6 +721,7 @@ function UploadPageContent() {
 
     setIsUploading(false)
     setUploadProgress('')
+    setApiLoading(false, '')
 
     // 重置 input
     if (fileInputRef.current) {
@@ -833,16 +841,19 @@ function UploadPageContent() {
     if (confirm(`确定要删除选中的 ${selectedIds.length} 张图片吗？`)) {
       try {
         setApiLoading(true, `删除 ${selectedIds.length} 张照片...`)
+        // 🚀 优化：使用批量删除接口，一条 SQL 删除所有照片
+        await deletePhotoFromOrder(selectedIds)
+        
+        // 批量从本地 store 删除
         for (const id of selectedIds) {
-          try {
-            await deletePhotoFromOrder(id)
-          } catch (error) {
-            console.error('删除照片失败:', error)
-          }
           deleteImage(id)
         }
+        
         clearSelection()
         setIsBatchMode(false)
+      } catch (error) {
+        console.error('批量删除照片失败:', error)
+        alert('批量删除失败，请重试')
       } finally {
         setApiLoading(false, '')
       }
@@ -1411,6 +1422,8 @@ function UploadPageContent() {
                 您还有 <span className="font-semibold text-orange-600">{unadjustedImages.length}</span> 张照片未调整。
                 <br />
                 为确保打印效果，请先调整所有照片。
+                <br />
+                可以通过<span className="font-semibold text-orange-600">左下角批量编辑</span>来调整所有照片。
               </p>
             </div>
             
