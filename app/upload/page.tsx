@@ -73,7 +73,7 @@ function UploadPageContent() {
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const COLUMNS = 3
   const GAP = 8 // gap-2 = 8px
-  const MAX_CONCURRENT_UPLOADS = 3 // ⚙️ 最大并发上传数量
+  const MAX_CONCURRENT_UPLOADS = 5 // ⚙️ 最大并发上传数量
 
   // 获取相纸尺寸配置
   const photoSize = getPhotoSizeById(sizeId)

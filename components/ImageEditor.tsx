@@ -120,8 +120,11 @@ export default function ImageEditor({
       setInitialCroppedAreaPercentages(undefined)
     }
   }, [photoData.id, photoData.cropMode, getInitialMode])
-  // 🚀 优化：直接使用传入的 URL，不需要状态
-  const imageUrl = photoData.thumbnailUrl || photoData.originalUrl
+  // 🎯 关键修复：优先使用 originalUrl（OSS URL），而不是 thumbnailUrl（可能是 600px 的压缩 data URL）
+  // 原因：react-easy-crop 的 croppedAreaPixels 是相对于实际加载图片的坐标
+  // 如果加载的是 600px 缩略图，坐标就是 600px 图的坐标，无法直接用于原图裁剪
+  // 使用 originalUrl 后，通过 buildOssCropUrl 会添加 q_70 质量压缩，不影响尺寸
+  const imageUrl = photoData.originalUrl || photoData.thumbnailUrl
   const [imageLoaded, setImageLoaded] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   
