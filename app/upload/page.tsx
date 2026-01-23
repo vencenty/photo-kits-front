@@ -386,6 +386,7 @@ function UploadPageContent() {
                 printCount: photo.quantity || existingImage.printCount || 1,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
                 cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
+                isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
@@ -418,6 +419,7 @@ function UploadPageContent() {
                 cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
                 cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
                 isLandscape: photo.isLandscape,
+                isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {

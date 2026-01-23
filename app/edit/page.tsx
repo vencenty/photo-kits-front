@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
 import { GlobalLoading } from '@/components/GlobalLoading'
-import { updatePhoto, getPhotoDetail } from '@/lib/api'
+import { updatePhoto, getPhotoDetail, listPhotos } from '@/lib/api'
 import { mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import { buildOssCropUrl } from '@/lib/image-config'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
@@ -22,12 +22,16 @@ function EditPageContent() {
   // 🚀 乐观更新：获取 store 方法
   const updateImage = useStore((state) => state.updateImage)
   const forceRefetch = useStore((state) => state.forceRefetch)
+  const hasHydrated = useStore((state) => state._hasHydrated)
   // 获取所有图片列表（用于上一张/下一张导航）
   const images = useStore((state) => state.images)
+  const addImages = useStore((state) => state.addImages)
+  const updateImages = useStore((state) => state.updateImages)
 
   const [image, setImage] = useState<Image | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isOrderLocked, setIsOrderLocked] = useState(false)
+  const [imagesLoaded, setImagesLoaded] = useState(false) // 标记是否已加载图片列表
 
   // 计算当前图片的位置
   const currentIndex = images.findIndex(img => img.id === imageId)
@@ -141,6 +145,137 @@ function EditPageContent() {
     loadPhotoData()
   }, [imageId, currentSession, router])
 
+  // 🚀 如果 images 为空（刷新后），从后端加载图片列表
+  useEffect(() => {
+    if (!hasHydrated || !currentSession || imagesLoaded) return
+    if (images.length > 0) {
+      // 如果已有图片，不需要加载
+      setImagesLoaded(true)
+      return
+    }
+
+    const loadImagesList = async () => {
+      try {
+        const orderSn = currentSession.orderNo || currentSession.id.split('-')[0]
+        const specId = currentSession.sizeId
+        
+        if (!orderSn) return
+
+        console.log('🔄 编辑页刷新后，从后端加载图片列表...')
+        const result = await listPhotos(orderSn, specId)
+        
+        if (result.photos && result.photos.length > 0) {
+          // 获取当前已有的图片（避免重复）
+          const existingImagesMap = new Map(
+            images
+              .filter(img => img.sessionId === currentSession.id)
+              .map(img => [img.id, img])
+          )
+
+          // 转换服务端数据为前端格式
+          const newImages: Image[] = []
+          const imagesToUpdate: { id: string; updates: Partial<Image> }[] = []
+
+          result.photos.forEach(photo => {
+            const finalStyleType = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover'
+            
+            let simpleCropInfo: SimpleCropInfo | undefined
+            if (photo.cropInfo) {
+              let cropWidth = photo.cropInfo.cropWidth || photo.cropInfo.sourceWidth
+              let cropHeight = photo.cropInfo.cropHeight || photo.cropInfo.sourceHeight
+
+              if (!photo.cropInfo.cropWidth || !photo.cropInfo.cropHeight) {
+                if (photo.cropInfo.styleType === 'cover' && currentSession) {
+                  const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+                  const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
+
+                  if (imageAspectRatio > canvasAspectRatio) {
+                    cropWidth = photo.cropInfo.sourceHeight * canvasAspectRatio
+                    cropHeight = photo.cropInfo.sourceHeight
+                  } else {
+                    cropWidth = photo.cropInfo.sourceWidth
+                    cropHeight = photo.cropInfo.sourceWidth / canvasAspectRatio
+                  }
+                }
+              }
+
+              simpleCropInfo = {
+                offsetX: photo.cropInfo.offsetX,
+                offsetY: photo.cropInfo.offsetY,
+                cropWidth: cropWidth,
+                cropHeight: cropHeight,
+                sourceWidth: photo.cropInfo.sourceWidth,
+                sourceHeight: photo.cropInfo.sourceHeight,
+                styleType: (photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
+              }
+            }
+
+            const imageData: Image = {
+              id: photo.photoId,
+              sessionId: currentSession.id,
+              originalUrl: photo.url,
+              thumbnailUrl: photo.url,
+              filename: `photo-${photo.photoId}`,
+              width: photo.originalWidth,
+              height: photo.originalHeight,
+              printCount: photo.quantity,
+              isLandscape: photo.isLandscape,
+              cropMode: finalStyleType,
+              editState: null,
+              cropInfo: simpleCropInfo,
+              isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
+              outputUrl: photo.outputUrl || photo.url,
+              uploadStatus: {
+                ossUploaded: true,
+                backendSynced: true,
+              },
+            }
+
+            const existingImage = existingImagesMap.get(photo.photoId)
+            if (existingImage) {
+              // 已存在的图片，更新数据
+              imagesToUpdate.push({
+                id: photo.photoId,
+                updates: {
+                  originalUrl: photo.url,
+                  thumbnailUrl: existingImage.thumbnailUrl || photo.url,
+                  printCount: photo.quantity,
+                  cropMode: finalStyleType,
+                  cropInfo: simpleCropInfo,
+                  isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
+                  outputUrl: photo.outputUrl || photo.url,
+                  width: photo.originalWidth,
+                  height: photo.originalHeight,
+                  isLandscape: photo.isLandscape,
+                },
+              })
+            } else {
+              // 新图片，添加到列表
+              newImages.push(imageData)
+            }
+          })
+
+          // 批量更新和添加
+          if (imagesToUpdate.length > 0) {
+            updateImages(imagesToUpdate)
+          }
+          if (newImages.length > 0) {
+            addImages(newImages)
+          }
+          
+          setImagesLoaded(true)
+          console.log('✅ 图片列表加载完成:', { 新增: newImages.length, 更新: imagesToUpdate.length })
+        }
+      } catch (error) {
+        console.error('加载图片列表失败:', error)
+        // 即使失败也标记为已加载，避免重复请求
+        setImagesLoaded(true)
+      }
+    }
+
+    loadImagesList()
+  }, [hasHydrated, currentSession, images.length, imagesLoaded, addImages])
+
   const handleSave = async (saveData: { cropInfo: SimpleCropInfo | undefined, outputUrl: string }) => {
     // 检查订单是否已锁单
     if (isOrderLocked) {
@@ -195,7 +330,7 @@ function EditPageContent() {
       console.log('✅ 已标记需要后台刷新')
 
       // 4️⃣ 保存成功提示，不跳转，继续停留在编辑页
-      toast.success('保存成功')
+      toast.success('保存成功，请继续编辑其他照片')
       console.log('✅ 保存成功，继续停留在编辑页')
 
     } catch (error) {
