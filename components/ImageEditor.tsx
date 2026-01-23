@@ -343,7 +343,16 @@ export default function ImageEditor({
 
     const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
 
-    console.log("photoData.cropInfo",photoData.cropInfo, "fuck")
+    // 🚀 通过比较保存的 Area 宽高比和当前 baseAspectRatio 来判断是否需要旋转裁剪框
+    // 如果保存的宽高比和 baseAspectRatio 不一致，说明保存时旋转了裁剪框
+    const savedAreaAspectRatio = cropWidth / cropHeight
+    const aspectRatioDiff = Math.abs(savedAreaAspectRatio - baseAspectRatio)
+    const invertedAspectRatioDiff = Math.abs(savedAreaAspectRatio - (1 / baseAspectRatio))
+    
+    // 如果保存的宽高比更接近 baseAspectRatio 的倒数，说明保存时旋转了裁剪框
+    if (invertedAspectRatioDiff < aspectRatioDiff && invertedAspectRatioDiff < 0.1) {
+      setIsCropBoxRotated(true)
+    }
 
     // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return
@@ -449,7 +458,7 @@ export default function ImageEditor({
 
     restoredRef.current = true // 标记已恢复，防止重复恢复
 
-  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, safetSetCrop, safeSetZoom])
+  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio, safetSetCrop, safeSetZoom, isCropBoxRotated])
 
   // 模式改变时重置恢复标记
   useEffect(() => {
@@ -536,15 +545,15 @@ export default function ImageEditor({
 
     // full 和 lomo 模式不需要裁剪参数，直接使用原图URL
     if (mode === 'full' || mode === 'lomo') {
-      cropInfo = {
-        offsetX: 0,
-        offsetY: 0,
-        cropWidth: sourceSize.width,
-        cropHeight: sourceSize.height,
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
-        styleType: mode,
-      }
+        cropInfo = {
+          offsetX: 0,
+          offsetY: 0,
+          cropWidth: sourceSize.width,
+          cropHeight: sourceSize.height,
+          sourceWidth: sourceSize.width,
+          sourceHeight: sourceSize.height,
+          styleType: mode,
+        }
       // full 和 lomo 模式直接使用原图URL，不拼接crop参数
     } else if (mode === 'cover') {
       // cover 模式：使用当前裁剪数据或默认居中裁剪
@@ -561,6 +570,7 @@ export default function ImageEditor({
           sourceWidth: sourceSize.width,
           sourceHeight: sourceSize.height,
           styleType: 'cover',
+          // 不需要保存 cropBoxRotated，通过 Area 的宽高比可以自动判断
         }
       } else {
         // 默认居中裁剪
@@ -580,6 +590,7 @@ export default function ImageEditor({
           sourceWidth: sourceSize.width,
           sourceHeight: sourceSize.height,
           styleType: 'cover',
+          // 不需要保存 cropBoxRotated，通过 Area 的宽高比可以自动判断
         }
       }
 

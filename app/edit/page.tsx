@@ -87,7 +87,8 @@ function EditPageContent() {
             cropHeight: cropHeight,
             sourceWidth: response.photo.cropInfo.sourceWidth,
             sourceHeight: response.photo.cropInfo.sourceHeight,
-            styleType: (response.photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo'
+            styleType: (response.photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
+            // 不需要恢复 cropBoxRotated，通过 Area 的宽高比可以自动判断
           }
         }
 
