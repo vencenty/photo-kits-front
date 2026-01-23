@@ -167,6 +167,7 @@ export default function ImageEditor({
   }, [])
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [initialCroppedAreaPixels, setInitialCroppedAreaPixels] = useState<Area | undefined>(undefined)
+  const [initialCroppedAreaPercentages, setInitialCroppedAreaPercentages] = useState<Area | undefined>(undefined)
 
   // 🚀 优化：直接从 photoData 获取尺寸，避免异步加载
   const sourceSize = useMemo(() => ({
@@ -282,6 +283,7 @@ export default function ImageEditor({
       safeSetZoom(1)
       setCroppedAreaPixels(null)
       setInitialCroppedAreaPixels(undefined)
+      setInitialCroppedAreaPercentages(undefined)
     }
 
     // 🚀 直接使用 photoData 的尺寸计算压缩图尺寸，避免重复加载图片
@@ -331,7 +333,9 @@ export default function ImageEditor({
     }
   }, [imageUrl, imageCompressOptions])
 
-  // 🚀 优化：从保存的 cropInfo 恢复状态（简化版）
+  // 🚀 优化：从保存的 cropInfo 恢复状态（使用 initialCroppedAreaPercentages）
+  // 根据 react-easy-crop 文档，应该使用 initialCroppedAreaPercentages 而不是 initialCroppedAreaPixels
+  // 因为像素值会被四舍五入，可能导致轻微的位置偏移
   useEffect(() => {
     // 防止重复恢复
     if (restoredRef.current) return
@@ -365,92 +369,63 @@ export default function ImageEditor({
       finalCropHeight = calculated.cropHeight
     }
 
-    // 【步骤1】计算缩放比例：压缩图尺寸 / 原图尺寸
-    // 例如：压缩图600×800，原图3000×4000 → scaleX = 600/3000 = 0.2, scaleY = 800/4000 = 0.2
+    // 🎯 关键修复：将原图的像素坐标转换为压缩图的百分比格式
+    // react-easy-crop 的 initialCroppedAreaPercentages 需要的是相对于实际加载的图片（压缩图）尺寸的百分比
+    // 
+    // 步骤：
+    // 1. 将原图坐标转换为压缩图坐标
+    // 2. 将压缩图坐标转换为百分比（相对于压缩图尺寸）
+    
+    // 计算缩放比例：压缩图尺寸 / 原图尺寸
     const scaleX = thumbImageSize.width / sourceSize.width
     const scaleY = thumbImageSize.height / sourceSize.height
-
-    // 【步骤2】将原图坐标转换为压缩图坐标
-    // 例如：原图 offsetX=100 → 压缩图 offsetX = 100 × 0.2 = 20
+    
+    // 将原图坐标转换为压缩图坐标
     const displayOffsetX = offsetX * scaleX
     const displayOffsetY = offsetY * scaleY
     const displayCropWidth = finalCropWidth * scaleX
     const displayCropHeight = finalCropHeight * scaleY
+    
+    // 将压缩图坐标转换为百分比（相对于压缩图尺寸）
+    const croppedAreaPercentages: Area = {
+      x: (displayOffsetX / thumbImageSize.width) * 100,           // 裁剪区域左上角X坐标的百分比（相对于压缩图）
+      y: (displayOffsetY / thumbImageSize.height) * 100,            // 裁剪区域左上角Y坐标的百分比（相对于压缩图）
+      width: (displayCropWidth / thumbImageSize.width) * 100,  // 裁剪区域宽度的百分比（相对于压缩图）
+      height: (displayCropHeight / thumbImageSize.height) * 100, // 裁剪区域高度的百分比（相对于压缩图）
+    }
 
-    // 【步骤3】计算 react-easy-crop 的 crop Point
-    // 
-    // react-easy-crop 的 crop Point 表示：图片中心相对于裁剪框中心的偏移（像素单位）
-    // 
-    // 理解要点：
-    // 1. 保存的 offsetX/offsetY 是裁剪区域左上角在原图中的位置
-    // 2. 裁剪区域中心在原图上的位置 = offsetX + cropWidth/2, offsetY + cropHeight/2
-    // 3. 裁剪区域中心在压缩图上的位置 = (offsetX + cropWidth/2) × scaleX, (offsetY + cropHeight/2) × scaleY
-    // 4. 在 react-easy-crop 中，裁剪框是居中的，所以裁剪框中心 = 压缩图中心 = displayImageSize.width/2
-    // 5. crop.x = 图片中心 - 裁剪框中心 = 裁剪区域中心 - 压缩图中心
-    //
-    // 示例计算：
-    // - 原图：3000×4000，offsetX=100, cropWidth=2000
-    // - 压缩图：600×800，scaleX=0.2
-    // - 裁剪区域中心在原图：100 + 2000/2 = 1100
-    // - 裁剪区域中心在压缩图：1100 × 0.2 = 220
-    // - 压缩图中心：600/2 = 300
-    // - crop.x = 220 - 300 = -80（图片中心在裁剪框中心左侧80px）
-
-    // 计算裁剪区域中心在压缩图上的位置
-    const cropAreaCenterX = (offsetX + finalCropWidth / 2) * scaleX
-    const cropAreaCenterY = (offsetY + finalCropHeight / 2) * scaleY
-
-    // 计算压缩图中心（也是裁剪框中心）
-    const containerCenterX = thumbImageSize.width / 2
-    const containerCenterY = thumbImageSize.height / 2
-
-    // 计算图片中心相对于裁剪框中心的偏移（这就是 react-easy-crop 需要的 crop Point）
-    const cropX = cropAreaCenterX - containerCenterX
-    const cropY = cropAreaCenterY - containerCenterY
-
-    // 安全检查：确保 crop 值有效
-    if (isNaN(cropX) || isNaN(cropY) || !isFinite(cropX) || !isFinite(cropY)) {
-      console.error('计算出的 crop 值无效:', { cropX, cropY })
+    // 安全检查：确保百分比值有效
+    if (isNaN(croppedAreaPercentages.x) || isNaN(croppedAreaPercentages.y) || 
+        isNaN(croppedAreaPercentages.width) || isNaN(croppedAreaPercentages.height) ||
+        !isFinite(croppedAreaPercentages.x) || !isFinite(croppedAreaPercentages.y) ||
+        !isFinite(croppedAreaPercentages.width) || !isFinite(croppedAreaPercentages.height)) {
+      console.error('计算出的 croppedAreaPercentages 无效:', croppedAreaPercentages)
       restoredRef.current = true
       return
     }
 
-    // 【步骤4】设置恢复的位置和区域
-    // 
-    // setCrop：设置图片中心相对于裁剪框中心的偏移，react-easy-crop 会根据这个值定位图片
-    safetSetCrop({ x: cropX, y: cropY })
-    safeSetZoom(1) // 缩放设为1（不缩放）
-
-    // setCroppedAreaPixels：保存压缩图上的裁剪区域坐标
-    // 这个值会在用户保存时使用，避免重新计算（因为 react-easy-crop 的 onCropComplete 会更新它）
-    const initialArea: Area = {
-      x: displayOffsetX,      // 裁剪区域左上角在压缩图上的X坐标
-      y: displayOffsetY,      // 裁剪区域左上角在压缩图上的Y坐标
-      width: displayCropWidth, // 裁剪区域在压缩图上的宽度
-      height: displayCropHeight, // 裁剪区域在压缩图上的高度
-    }
-
-    // 安全检查：确保 initialArea 中的值都是有效的
-    if (isNaN(initialArea.x) || isNaN(initialArea.y) || 
-        isNaN(initialArea.width) || isNaN(initialArea.height) ||
-        !isFinite(initialArea.x) || !isFinite(initialArea.y) ||
-        !isFinite(initialArea.width) || !isFinite(initialArea.height)) {
-      console.error('计算出的 initialArea 无效:', initialArea)
-      restoredRef.current = true
-      return
-    }
-
-    setCroppedAreaPixels(initialArea)
-    setInitialCroppedAreaPixels(initialArea) // 设置初始值，只设置一次
+    // 🎯 关键：使用 initialCroppedAreaPercentages 让 react-easy-crop 自动计算 crop 和 zoom
+    // 不需要手动计算 crop 和 zoom，react-easy-crop 会根据 initialCroppedAreaPercentages 自动计算
+    setInitialCroppedAreaPercentages(croppedAreaPercentages)
+    
+    // 标记正在恢复，防止 onCropComplete 触发更新
+    isRestoringRef.current = true
+    
+    // 等待一帧，让 react-easy-crop 完成初始化
+    requestAnimationFrame(() => {
+      isRestoringRef.current = false
+    })
 
     restoredRef.current = true // 标记已恢复，防止重复恢复
 
-  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio, safetSetCrop, safeSetZoom])
+  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio])
 
   // 模式改变时重置恢复标记
   useEffect(() => {
     restoredRef.current = false
     isRestoringRef.current = false
+    setInitialCroppedAreaPercentages(undefined)
+    setInitialCroppedAreaPixels(undefined)
   }, [mode])
 
   // 裁剪完成回调 - 直接基于原图尺寸计算crop meta
@@ -520,6 +495,7 @@ export default function ImageEditor({
     safeSetZoom(1)
     setCroppedAreaPixels(null)
     setInitialCroppedAreaPixels(undefined)
+    setInitialCroppedAreaPercentages(undefined)
   }, [safetSetCrop, safeSetZoom])
 
   // 保存 - 生成带有crop参数的outputUrl
@@ -672,8 +648,8 @@ export default function ImageEditor({
                       onCropChange={safetSetCrop}
                       onZoomChange={safeSetZoom}
                       onCropComplete={onCropComplete}
-                      {...(initialCroppedAreaPixels && {
-                        initialCroppedAreaPixels: initialCroppedAreaPixels
+                      {...(initialCroppedAreaPercentages && {
+                        initialCroppedAreaPercentages: initialCroppedAreaPercentages
                       })}
                       // 禁止缩放，只允许拖拽
                       objectFit='contain'
