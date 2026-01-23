@@ -33,6 +33,7 @@ function EditPageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [isOrderLocked, setIsOrderLocked] = useState(false)
   const [imagesLoaded, setImagesLoaded] = useState(false) // 标记是否已加载图片列表
+  const [currentImageId, setCurrentImageId] = useState<string | null>(imageId) // 🚀 优化：使用状态管理当前图片ID，避免路由跳转
 
   // 🎯 根据 filter 参数过滤图片列表（用于导航）
   const images = useMemo(() => {
@@ -50,20 +51,36 @@ function EditPageContent() {
     return sessionImages
   }, [allImages, currentSession?.id, filter])
 
-  // 计算当前图片在过滤后的列表中的位置
-  const currentIndex = images.findIndex(img => img.id === imageId)
+  // 🚀 优化：使用 currentImageId 而不是 imageId 来计算位置
+  const currentIndex = images.findIndex(img => img.id === (currentImageId || imageId))
   const hasPrevious = currentIndex > 0
   const hasNext = currentIndex >= 0 && currentIndex < images.length - 1
+  
+  // 🚀 优化：从 store 中获取当前图片数据，避免每次都从服务端加载
+  const currentImage = useMemo(() => {
+    const targetId = currentImageId || imageId
+    return images.find(img => img.id === targetId) || null
+  }, [images, currentImageId, imageId])
 
 
+  // 🚀 优化：当 currentImageId 变化时，优先从 store 获取，如果没有再从服务端加载
   useEffect(() => {
-    // 直接从服务端获取图片数据
-    const loadPhotoData = async () => {
-      if (!currentSession) return
+    const targetImageId = currentImageId || imageId
+    if (!targetImageId || !currentSession) return
 
+    // 如果 store 中已有该图片的完整数据，直接使用
+    if (currentImage && currentImage.originalUrl && currentImage.width && currentImage.height) {
+      console.log('✅ 从 store 获取图片数据，跳过服务端请求:', targetImageId)
+      setImage(currentImage)
+      setIsLoading(false)
+      return
+    }
+
+    // 否则从服务端加载
+    const loadPhotoData = async () => {
       try {
         setIsLoading(true)
-        const response = await getPhotoDetail(imageId)
+        const response = await getPhotoDetail(targetImageId)
 
         // 根据cropMode设置初始编辑状态
         const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
@@ -161,7 +178,7 @@ function EditPageContent() {
     }
 
     loadPhotoData()
-  }, [imageId, currentSession, router])
+  }, [currentImageId, imageId, currentSession, router, currentImage])
 
   // 🚀 如果 images 为空（刷新后），从后端加载图片列表
   useEffect(() => {
@@ -395,28 +412,41 @@ function EditPageContent() {
     }
   }
 
-  // 上一张/下一张导航
+  // 🚀 优化：上一张/下一张导航 - 只更新状态，不触发路由跳转
   const handlePrevious = () => {
     if (hasPrevious) {
       const prevImage = images[currentIndex - 1]
-      // 🎯 保持 filter 参数（如果存在）
+      // 只更新 URL 参数（用于浏览器历史记录），但不触发页面重新加载
       const url = filter 
         ? `/edit?imageId=${prevImage.id}&filter=${filter}`
         : `/edit?imageId=${prevImage.id}`
-      router.push(url)
+      // 使用 replace 而不是 push，避免产生过多历史记录
+      router.replace(url)
+      // 更新当前图片ID，触发图片切换
+      setCurrentImageId(prevImage.id)
     }
   }
 
   const handleNext = () => {
     if (hasNext) {
       const nextImage = images[currentIndex + 1]
-      // 🎯 保持 filter 参数（如果存在）
+      // 只更新 URL 参数（用于浏览器历史记录），但不触发页面重新加载
       const url = filter 
         ? `/edit?imageId=${nextImage.id}&filter=${filter}`
         : `/edit?imageId=${nextImage.id}`
-      router.push(url)
+      // 使用 replace 而不是 push，避免产生过多历史记录
+      router.replace(url)
+      // 更新当前图片ID，触发图片切换
+      setCurrentImageId(nextImage.id)
     }
   }
+  
+  // 🚀 优化：当 URL 中的 imageId 变化时（比如直接访问或刷新），同步更新 currentImageId
+  useEffect(() => {
+    if (imageId && imageId !== currentImageId) {
+      setCurrentImageId(imageId)
+    }
+  }, [imageId])
 
   if (isLoading || !image || !currentSession) {
     return (

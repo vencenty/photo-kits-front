@@ -102,16 +102,24 @@ export default function ImageEditor({
 
   const [mode, setMode] = useState<'cover' | 'full' | 'lomo'>(getInitialMode())
   
-  // 当图片切换时，更新模式（只在图片ID变化时更新，避免覆盖用户手动切换）
-  const prevPhotoIdRef = useRef<string | undefined>(photoData.id)
+  // 🚀 优化：当图片切换时，立即更新模式（确保模式切换和图片切换同步）
+  const prevPhotoIdForModeRef = useRef<string | undefined>(photoData.id)
   useEffect(() => {
     // 只有当图片ID真正变化时才更新模式
-    if (prevPhotoIdRef.current !== photoData.id) {
+    if (prevPhotoIdForModeRef.current !== photoData.id) {
       const newMode = getInitialMode()
+      // 🎯 关键：立即更新模式，确保切换图片时模式也同步切换
       setMode(newMode)
-      prevPhotoIdRef.current = photoData.id
+      prevPhotoIdForModeRef.current = photoData.id
+      
+      // 🚀 优化：模式切换时，重置相关状态，确保新图片使用正确的模式
+      restoredRef.current = false
+      isRestoringRef.current = false
+      setCroppedAreaPixels(null)
+      setInitialCroppedAreaPixels(undefined)
+      setInitialCroppedAreaPercentages(undefined)
     }
-  }, [photoData.id, getInitialMode])
+  }, [photoData.id, photoData.cropMode, getInitialMode])
   // 🚀 优化：直接使用传入的 URL，不需要状态
   const imageUrl = photoData.thumbnailUrl || photoData.originalUrl
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -121,6 +129,7 @@ export default function ImageEditor({
   const prevImageRef = useRef<ImageType | null>(null)
   const prevImageUrlRef = useRef<string | undefined>(undefined)
   const prevImageLoadedRef = useRef<boolean>(false)
+  const prevPhotoIdForTransitionRef = useRef<string | undefined>(photoData.id) // 🚀 优化：用于检测图片切换
 
   // react-easy-crop 状态
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
@@ -257,34 +266,31 @@ export default function ImageEditor({
   useEffect(() => {
     if (!imageUrl) return
 
-    // 检测图片是否切换
-    const imageChanged = prevImageUrlRef.current !== imageUrl
+    // 🚀 优化：检测图片是否切换（通过 ID 而不是 URL，更准确）
+    const imageChanged = prevPhotoIdForTransitionRef.current !== photoData.id
     if (imageChanged) {
-      // 保存上一个图片的状态
-      if (prevImageUrlRef.current) {
+      // 保存上一个图片的状态（用于过渡动画）
+      if (prevImageUrlRef.current && prevPhotoIdForTransitionRef.current) {
         prevImageRef.current = {
           ...photoData,
+          id: prevPhotoIdForTransitionRef.current,
           thumbnailUrl: prevImageUrlRef.current,
           originalUrl: prevImageUrlRef.current,
         }
         prevImageLoadedRef.current = imageLoaded
       }
       
-      // 开始过渡
-      setIsTransitioning(true)
+      // 🚀 优化：只有在图片真正切换时才开始过渡，避免不必要的重置
+      // 如果上一个图片已经加载完成，可以立即开始过渡
+      if (prevImageLoadedRef.current) {
+        setIsTransitioning(true)
+      }
       setImageLoaded(false)
       prevImageUrlRef.current = imageUrl
+      prevPhotoIdForTransitionRef.current = photoData.id
       
-      // 重置恢复标记，让新图片可以恢复位置
-      restoredRef.current = false
-      isRestoringRef.current = false
-      
-      // 重置裁剪状态
-      safetSetCrop({ x: 0, y: 0 })
-      safeSetZoom(1)
-      setCroppedAreaPixels(null)
-      setInitialCroppedAreaPixels(undefined)
-      setInitialCroppedAreaPercentages(undefined)
+      // 🎯 关键：图片切换时，状态重置已经在模式切换的 useEffect 中处理了
+      // 这里只需要确保过渡状态正确
     }
 
     // 🚀 直接使用 photoData 的尺寸计算压缩图尺寸，避免重复加载图片
@@ -315,9 +321,12 @@ export default function ImageEditor({
     
     img.onload = () => {
       setImageLoaded(true)
+      // 🚀 优化：减少过渡时间，让切换更快速
       setTimeout(() => {
         setIsTransitioning(false)
-      }, 100)
+        // 清除上一个图片的引用，释放内存
+        prevImageRef.current = null
+      }, 50)
     }
     
     img.onerror = () => {
@@ -420,14 +429,34 @@ export default function ImageEditor({
     restoredRef.current = true // 标记已恢复，防止重复恢复
 
   }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio])
+  
+  // 🚀 优化：当图片切换且没有 cropInfo 时，重置裁剪状态为默认值
+  useEffect(() => {
+    if (!photoData.cropInfo && prevPhotoIdForTransitionRef.current !== photoData.id) {
+      // 新图片且没有保存的裁剪信息，重置为默认居中位置
+      // 但只在 cover 模式下重置，full 和 lomo 模式不需要裁剪
+      if (mode === 'cover') {
+        safetSetCrop({ x: 0, y: 0 })
+        safeSetZoom(1)
+      }
+    }
+  }, [photoData.id, photoData.cropInfo, mode, safetSetCrop, safeSetZoom])
 
-  // 模式改变时重置恢复标记
+  // 🚀 优化：模式改变时重置恢复标记和相关状态
   useEffect(() => {
     restoredRef.current = false
     isRestoringRef.current = false
     setInitialCroppedAreaPercentages(undefined)
     setInitialCroppedAreaPixels(undefined)
-  }, [mode])
+    
+    // 🎯 关键：当模式切换到 full 或 lomo 时，不需要裁剪状态
+    // 当模式切换到 cover 时，重置裁剪状态为默认值
+    if (mode === 'cover') {
+      safetSetCrop({ x: 0, y: 0 })
+      safeSetZoom(1)
+      setCroppedAreaPixels(null)
+    }
+  }, [mode, safetSetCrop, safeSetZoom])
 
   // 裁剪完成回调 - 直接基于原图尺寸计算crop meta
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
@@ -581,17 +610,20 @@ export default function ImageEditor({
   }, [croppedAreaPixels, sourceSize, thumbImageSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 渲染 full 或 lomo 模式（不可编辑）
+  // 🎯 关键：添加 key 确保模式切换时重新渲染
   const renderStaticMode = () => {
     const isLomo = mode === 'lomo'
     const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
     return (
       <div
+        key={`static-${photoData.id}-${mode}`}
         className="relative w-full h-full bg-white flex items-center justify-center"
         style={{
           padding: isLomo ? `${margin}%` : 0,
         }}
       >
         <img
+          key={`static-img-${photoData.id}-${mode}-${imageUrl}`}
           src={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
           alt="预览"
           className="w-full h-full object-contain"
@@ -628,10 +660,11 @@ export default function ImageEditor({
             style={{ paddingTop: `${(1 / containerAspectRatio) * 100}%` }}
           >
             <div className="absolute inset-0">
-              {/* 当前图片 - 淡入淡出效果 */}
+              {/* 🚀 优化：当前图片 - 使用更平滑的淡入淡出效果，避免黑屏 */}
+              {/* 🎯 关键：添加 mode 到 key 中，确保模式切换时组件重新渲染 */}
               <div 
-                key={`current-${photoData.id}`}
-                className={`absolute inset-0 transition-opacity duration-300 ease-in-out ${
+                key={`current-${photoData.id}-${mode}`}
+                className={`absolute inset-0 transition-opacity duration-200 ease-in-out ${
                   imageLoaded && !isTransitioning ? 'opacity-100 z-20' : 'opacity-0 z-10'
                 }`}
               >
@@ -641,7 +674,7 @@ export default function ImageEditor({
                   mode === 'cover' ? (
                     // Cover 模式：使用 react-easy-crop 
                     <Cropper
-                      key={`cropper-${photoData.id}`}
+                      key={`cropper-${photoData.id}-${mode}-${imageUrl}`}
                       image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
                       crop={crop}
                       zoom={zoom}
@@ -667,10 +700,23 @@ export default function ImageEditor({
                   )
                 )}
               </div>
+              
+              {/* 🚀 优化：显示上一个图片作为背景，避免黑屏 */}
+              {prevImageRef.current && isTransitioning && (
+                <div 
+                  className="absolute inset-0 opacity-100 z-0 transition-opacity duration-200"
+                  style={{ 
+                    backgroundImage: `url(${buildOssCropUrl(prevImageRef.current.thumbnailUrl || prevImageRef.current.originalUrl || '', undefined, imageCompressOptions)})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    filter: 'blur(2px)',
+                  }}
+                />
+              )}
 
               {/* 加载中指示器 - 只在真正加载时显示，且不遮挡已加载的图片 */}
               {!imageLoaded && isTransitioning && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-30">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-30 backdrop-blur-sm">
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-8 h-8 border-4 border-gray-600 border-t-white rounded-full animate-spin" />
                     <span className="text-gray-400 text-sm">加载中...</span>
@@ -699,15 +745,6 @@ export default function ImageEditor({
       </div>
       {/* 导航按钮区域 */}
       <div className="px-4 py-4 bg-gray-900 border-t border-gray-800">
-        {/* 🎯 已调整标签 - 显示在导航按钮上方 */}
-        {photoData.isAdjusted && (
-          <div className="flex justify-center mb-3">
-            <div className="bg-green-500 text-white text-xs px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5" />
-              <span>已调整</span>
-            </div>
-          </div>
-        )}
         <div className="flex items-center justify-between gap-4 max-w-2xl mx-auto">
           {/* 上一张按钮 */}
           <button
@@ -813,7 +850,13 @@ export default function ImageEditor({
             className="flex-1 py-3 gradient-primary text-white rounded-full font-medium shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
           >
             <Check className="w-5 h-5" />
-            保存
+            <span>保存</span>
+            {photoData.isAdjusted && (
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-green-500/90 text-xs flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-white" />
+                <span>已调整</span>
+              </span>
+            )}
           </button>
         </div>
       </div>
