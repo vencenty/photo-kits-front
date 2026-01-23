@@ -63,13 +63,16 @@ export function useImagePreload(
   useEffect(() => {
     if (!currentImageUrl || currentIndex < 0 || allImages.length === 0) return
     
-    // 计算需要预加载的图片范围
+    // 计算需要预加载的图片范围（不包括当前图片，避免重复加载）
     const startIndex = Math.max(0, currentIndex - preloadCount)
     const endIndex = Math.min(allImages.length - 1, currentIndex + preloadCount)
     
-    // 收集需要预加载的图片 URL（包括当前图片的前后各 preloadCount 张）
+    // 收集需要预加载的图片 URL（不包括当前图片，只预加载前后各 preloadCount 张）
     const urlsToPreload: string[] = []
     for (let i = startIndex; i <= endIndex; i++) {
+      // 跳过当前图片，避免重复加载
+      if (i === currentIndex) continue
+      
       const image = allImages[i]
       const url = image.thumbnailUrl || image.originalUrl
       if (url && !preloadedRef.current.has(url)) {

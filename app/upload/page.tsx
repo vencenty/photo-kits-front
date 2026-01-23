@@ -386,7 +386,6 @@ function UploadPageContent() {
                 printCount: photo.quantity || existingImage.printCount || 1,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
                 cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
-                isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
                   ossUploaded: true,
@@ -419,7 +418,6 @@ function UploadPageContent() {
                 cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
                 cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
                 isLandscape: photo.isLandscape,
-                isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
@@ -884,20 +882,6 @@ function UploadPageContent() {
       return
     }
     
-    // 🎯 检测未调整的照片
-    const unadjustedImages = images.filter(img => !img.isAdjusted)
-    if (unadjustedImages.length > 0) {
-      const firstUnadjusted = unadjustedImages[0]
-      const confirmed = window.confirm(
-        `您还有 ${unadjustedImages.length} 张照片未调整。\n为确保打印效果，请先调整所有照片。\n\n点击"确定"跳转到第一张未调整的照片。`
-      )
-      if (confirmed) {
-        // 跳转到第一张未调整的照片进行编辑
-        handleEdit(firstUnadjusted.id)
-      }
-      return
-    }
-    
     // 直接跳转到 success 页面，不再显示弹框
     handleConfirmSubmit()
   }
@@ -961,7 +945,7 @@ function UploadPageContent() {
       <div className="bg-[#fff8f5] px-4 py-3 flex items-start gap-2">
         <span className="text-xl">🔥</span>
         <p className="text-sm text-[#ff6b35] leading-relaxed flex-1">
-          列表预览图已压缩，制作时会使用原图。列表页所见即冲印最终效果参考。
+          列表预览图已压缩，冲印时会使用原图。列表页所见即冲印最终效果参考。
         </p>
       </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Check, Lightbulb, RotateCw, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
+import { Check, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
 import Cropper from 'react-easy-crop'
 import type { Area, Point } from 'react-easy-crop'
 import {
@@ -125,9 +125,6 @@ export default function ImageEditor({
   // react-easy-crop 状态
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
-  
-  // 裁剪框旋转状态：是否旋转90度（交换宽高）
-  const [isCropBoxRotated, setIsCropBoxRotated] = useState(false)
 
   // 安全的 setCrop 包装函数，防止设置无效值
   const safetSetCrop = useCallback((newCrop: Point | ((prev: Point) => Point)) => {
@@ -222,10 +219,7 @@ export default function ImageEditor({
   }, [sourceSize.width, sourceSize.height, paperAspectRatio])
 
   // 裁剪框的 aspectRatio（用于 Cropper 组件）
-  const aspectRatio = useMemo(() => {
-    // 如果用户点击了"旋转裁剪框"按钮，反转比例
-    return isCropBoxRotated && baseAspectRatio > 0 ? 1 / baseAspectRatio : baseAspectRatio
-  }, [baseAspectRatio, isCropBoxRotated])
+  const aspectRatio = baseAspectRatio
 
   // 容器的高度比例（保持固定，不随裁剪框旋转而改变，这样图片大小不会变）
   const containerAspectRatio = baseAspectRatio
@@ -253,11 +247,11 @@ export default function ImageEditor({
     containerClassName: 'rounded-none',
   }), [])
 
-  // 🚀 预加载前后各5张图片
+  // 🚀 预加载前后各5张图片（不包括当前图片，避免重复加载）
   useImagePreload(imageUrl, allImages, currentIndex, 5)
 
-  // 🚀 优化：简化图片加载，只在图片实际渲染时获取尺寸
-  // 使用压缩图URL，避免加载原图浪费带宽
+  // 🚀 优化：直接使用 photoData 的尺寸计算压缩图尺寸，避免重复加载图片
+  // 压缩图尺寸可以通过原图尺寸和压缩比例计算得出
   useEffect(() => {
     if (!imageUrl) return
 
@@ -274,7 +268,7 @@ export default function ImageEditor({
         prevImageLoadedRef.current = imageLoaded
       }
       
-      // 开始过渡，但先不隐藏（等新图片加载完成）
+      // 开始过渡
       setIsTransitioning(true)
       setImageLoaded(false)
       prevImageUrlRef.current = imageUrl
@@ -290,48 +284,52 @@ export default function ImageEditor({
       setInitialCroppedAreaPixels(undefined)
     }
 
-    // 使用压缩图URL（和Cropper组件一致），避免重复加载
-    const compressedUrl = buildOssCropUrl(imageUrl, undefined, imageCompressOptions)
+    // 🚀 直接使用 photoData 的尺寸计算压缩图尺寸，避免重复加载图片
+    // 压缩图使用短边600px，所以压缩比例 = 600 / min(width, height)
+    if (sourceSize.width > 0 && sourceSize.height > 0) {
+      const minDimension = Math.min(sourceSize.width, sourceSize.height)
+      const scale = minDimension > 0 ? Math.min(600 / minDimension, 1) : 1
+      
+      setDisplayImageSize({
+        width: Math.round(sourceSize.width * scale),
+        height: Math.round(sourceSize.height * scale),
+      })
+    }
+  }, [imageUrl, sourceSize, photoData, imageLoaded, safetSetCrop, safeSetZoom])
 
-    // 加载图片并获取尺寸（如果图片已预加载到缓存，onload 会立即触发）
-    const img = document.createElement('img')
+  // 🚀 监听图片加载完成（使用与 Cropper 相同的 URL，但只加载一次用于检测）
+  // 由于浏览器缓存，这个加载会很快，不会浪费带宽
+  useEffect(() => {
+    if (!imageUrl) return
+
+    // 使用与 Cropper 相同的压缩 URL
+    const compressedUrl = buildOssCropUrl(imageUrl, undefined, imageCompressOptions)
+    
+    // 创建一个隐藏的 img 元素来检测图片是否加载完成
+    // 如果图片已经在缓存中（预加载过），onload 会立即触发
+    const img = new Image()
     img.crossOrigin = 'anonymous'
     
-    // 记录开始加载时间，用于判断是否从缓存加载
-    const loadStartTime = Date.now()
-    
     img.onload = () => {
-      const loadTime = Date.now() - loadStartTime
-      const isFromCache = loadTime < 50 // 如果加载时间小于50ms，认为是从缓存加载
-      
       setImageLoaded(true)
-      
-      // 设置压缩图尺寸（用于坐标转换）
-      setDisplayImageSize({
-        width: img.naturalWidth,
-        height: img.naturalHeight,
-      })
-      
-      // 图片加载完成后，延迟一点再结束过渡动画，让动画更流畅
-      // 如果图片从缓存加载（预加载过），延迟时间更短，切换更流畅
-      const delay = isFromCache ? 50 : 150
       setTimeout(() => {
         setIsTransitioning(false)
-      }, delay)
+      }, 100)
     }
+    
     img.onerror = () => {
-      console.error('加载图片失败:', compressedUrl)
-      // 失败时也标记为已加载，避免卡住
+      // 即使加载失败，也标记为已加载，避免卡住
       setImageLoaded(true)
       setIsTransitioning(false)
     }
+    
     img.src = compressedUrl
 
     return () => {
       img.onload = null
       img.onerror = null
     }
-  }, [imageUrl, imageCompressOptions, photoData])
+  }, [imageUrl, imageCompressOptions])
 
   // 🚀 优化：从保存的 cropInfo 恢复状态（简化版）
   useEffect(() => {
@@ -342,17 +340,6 @@ export default function ImageEditor({
     if (mode !== 'cover') return
 
     const { offsetX, offsetY, cropWidth, cropHeight, styleType } = photoData.cropInfo
-
-    // 🚀 通过比较保存的 Area 宽高比和当前 baseAspectRatio 来判断是否需要旋转裁剪框
-    // 如果保存的宽高比和 baseAspectRatio 不一致，说明保存时旋转了裁剪框
-    const savedAreaAspectRatio = cropWidth / cropHeight
-    const aspectRatioDiff = Math.abs(savedAreaAspectRatio - baseAspectRatio)
-    const invertedAspectRatioDiff = Math.abs(savedAreaAspectRatio - (1 / baseAspectRatio))
-    
-    // 如果保存的宽高比更接近 baseAspectRatio 的倒数，说明保存时旋转了裁剪框
-    if (invertedAspectRatioDiff < aspectRatioDiff && invertedAspectRatioDiff < 0.1) {
-      setIsCropBoxRotated(true)
-    }
 
     // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return
@@ -458,7 +445,7 @@ export default function ImageEditor({
 
     restoredRef.current = true // 标记已恢复，防止重复恢复
 
-  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio, safetSetCrop, safeSetZoom, isCropBoxRotated])
+  }, [photoData.cropInfo, sourceSize, thumbImageSize, mode, aspectRatio, baseAspectRatio, safetSetCrop, safeSetZoom])
 
   // 模式改变时重置恢复标记
   useEffect(() => {
@@ -826,26 +813,6 @@ export default function ImageEditor({
             </button>
           )}
         </div>
-
-        {/* 居中裁剪模式下的旋转裁剪框按钮 */}
-        {mode === 'cover' && (
-          <div className="flex justify-center mb-4">
-            <button
-              onClick={() => setIsCropBoxRotated(!isCropBoxRotated)}
-              className={`
-                px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 text-sm
-                ${isCropBoxRotated
-                  ? 'bg-blue-500 text-white hover:bg-blue-600'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }
-              `}
-              title={isCropBoxRotated ? '恢复裁剪框方向' : '旋转裁剪框90度'}
-            >
-              <RotateCw className="w-4 h-4" />
-              <span>{isCropBoxRotated ? '恢复方向' : '旋转裁剪框'}</span>
-            </button>
-          </div>
-        )}
 
         {/* 操作按钮 */}
         <div className="flex gap-3">

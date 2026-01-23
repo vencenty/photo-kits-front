@@ -223,6 +223,7 @@ export interface PhotoDetail {
   takenAt: string
   cropInfo?: CropInfo // 从服务端获取的裁剪信息
   outputUrl?: string  // 处理后的下载URL
+  isAdjusted: boolean
 }
 
 export interface OssSignature {
