@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Check, Lightbulb, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, Lightbulb, RotateCw, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import Cropper from 'react-easy-crop'
 import type { Area, Point } from 'react-easy-crop'
 import {
@@ -198,12 +198,9 @@ export default function ImageEditor({
   // 🚀 优化：根据图片方向动态调整裁剪框比例，让图片可保留的区域最大化
   // 如果图片是横图，裁剪框也应该是横的；如果图片是竖图，裁剪框也应该是竖的
   // 使用 useMemo 确保稳定性，避免无限循环
-  const aspectRatio = useMemo(() => {
+  const baseAspectRatio = useMemo(() => {
     if (!sourceSize.width || !sourceSize.height || sourceSize.width <= 0 || sourceSize.height <= 0) {
-      // 如果裁剪框旋转了，反转相纸比例
-      return isCropBoxRotated && paperAspectRatio > 0 
-        ? 1 / paperAspectRatio 
-        : paperAspectRatio
+      return paperAspectRatio
     }
 
     const imageRatio = sourceSize.width / sourceSize.height
@@ -221,9 +218,17 @@ export default function ImageEditor({
       baseRatio = paperAspectRatio > 0 ? 1 / paperAspectRatio : 1
     }
 
-    // 如果用户点击了"旋转裁剪框"按钮，再次反转比例
-    return isCropBoxRotated && baseRatio > 0 ? 1 / baseRatio : baseRatio
-  }, [sourceSize.width, sourceSize.height, paperAspectRatio, isCropBoxRotated])
+    return baseRatio
+  }, [sourceSize.width, sourceSize.height, paperAspectRatio])
+
+  // 裁剪框的 aspectRatio（用于 Cropper 组件）
+  const aspectRatio = useMemo(() => {
+    // 如果用户点击了"旋转裁剪框"按钮，反转比例
+    return isCropBoxRotated && baseAspectRatio > 0 ? 1 / baseAspectRatio : baseAspectRatio
+  }, [baseAspectRatio, isCropBoxRotated])
+
+  // 容器的高度比例（保持固定，不随裁剪框旋转而改变，这样图片大小不会变）
+  const containerAspectRatio = baseAspectRatio
 
   // 🚀 优化：固化图片压缩参数，避免每次render创建新对象
   const imageCompressOptions = useMemo(() => ({
@@ -645,7 +650,7 @@ export default function ImageEditor({
           <div
             ref={containerRef}
             className="relative w-full bg-white shadow-2xl overflow-hidden"
-            style={{ paddingTop: `${(1 / aspectRatio) * 100}%` }}
+            style={{ paddingTop: `${(1 / containerAspectRatio) * 100}%` }}
           >
             <div className="absolute inset-0">
               {/* 当前图片 - 淡入淡出效果 */}
@@ -661,7 +666,7 @@ export default function ImageEditor({
                   mode === 'cover' ? (
                     // Cover 模式：使用 react-easy-crop 
                     <Cropper
-                      key={`cropper-${photoData.id}-${isCropBoxRotated ? 'rotated' : 'normal'}`}
+                      key={`cropper-${photoData.id}`}
                       image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
                       crop={crop}
                       zoom={zoom}
@@ -810,6 +815,26 @@ export default function ImageEditor({
             </button>
           )}
         </div>
+
+        {/* 居中裁剪模式下的旋转裁剪框按钮 */}
+        {mode === 'cover' && (
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={() => setIsCropBoxRotated(!isCropBoxRotated)}
+              className={`
+                px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 text-sm
+                ${isCropBoxRotated
+                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }
+              `}
+              title={isCropBoxRotated ? '恢复裁剪框方向' : '旋转裁剪框90度'}
+            >
+              <RotateCw className="w-4 h-4" />
+              <span>{isCropBoxRotated ? '恢复方向' : '旋转裁剪框'}</span>
+            </button>
+          </div>
+        )}
 
         {/* 操作按钮 */}
         <div className="flex gap-3">
