@@ -15,7 +15,7 @@ export const PAPER_TYPES: PaperType[] = [
     id: 'fuji-glossy',
     name: '富士光面',
     description: '光泽亮丽，色彩鲜艳',
-    supportedSizes: ['3inch', '4inch', '5inch', 'large5inch', '6inch', 'large6inch', '7inch', '8inch', '10inch', 'A4']
+    supportedSizes: ['3inch', '4inch', '5inch','square', 'large5inch', '6inch', 'large6inch', '7inch', '8inch', '10inch', 'A4']
   },
   {
     id: 'fuji-matte',
@@ -75,6 +75,18 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 76, 
     "height": 102, 
     "ratio": 76/102,
+    // 4寸默认四周留白，只能选择留白和居中裁剪
+    "cropConfig": {
+      "defaultMode": "lomo",
+      "availableModes": ["lomo", "cover"]
+    }
+  },
+  { 
+    "id": "square", 
+    "name": "4寸正方形", 
+    "width": 102, 
+    "height": 102, 
+    "ratio": 102/102,
     // 4寸默认四周留白，只能选择留白和居中裁剪
     "cropConfig": {
       "defaultMode": "lomo",

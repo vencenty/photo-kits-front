@@ -359,8 +359,8 @@ export function getOssSignatureCacheInfo(): { cached: boolean, age: number, expi
 }
 
 // 固定代理域名，用于图片回显
-const OSS_PROXY_DOMAIN = 'https://oss-proxy.vencenty.cc'
-// const OSS_PROXY_DOMAIN = 'https://oss.vencenty.cc'
+// const OSS_PROXY_DOMAIN = 'https://oss-proxy.vencenty.cc'
+const OSS_PROXY_DOMAIN = 'https://bucket.vencenty.cc'
 // const OSS_PROXY_DOMAIN = 'https://photo-kits-storage-hangzhou.oss-cn-hangzhou.aliyuncs.com'
 
 /**

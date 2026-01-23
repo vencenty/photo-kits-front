@@ -30,6 +30,8 @@ export default function SelectSizePage() {
   const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁定
   const [addedSizes, setAddedSizes] = useState<AddedSize[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [pendingDeleteSize, setPendingDeleteSize] = useState<AddedSize | null>(null)
   const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [showToast, setShowToast] = useState<string | null>(null)
@@ -222,14 +224,17 @@ export default function SelectSizePage() {
       return
     }
 
-    // 始终弹出确认对话框
-    const confirmMessage = size.imageCount > 0
-      ? `确定要删除「${size.paperName} ${size.sizeName}」吗？\n该规格已上传 ${size.imageCount} 张照片，删除后数据将丢失。`
-      : `确定要删除「${size.paperName} ${size.sizeName}」规格吗？`
+    // 使用自定义弹出层确认（不使用 alert/confirm）
+    setPendingDeleteSize(size)
+    setShowDeleteConfirm(true)
+  }
 
-    if (!confirm(confirmMessage)) {
-      return
-    }
+  // 确认删除
+  const confirmDeleteSize = async () => {
+    if (!orderNumber) return
+    if (!pendingDeleteSize) return
+
+    const size = pendingDeleteSize
 
     setIsDeleting(size.id)
     try {
@@ -240,6 +245,8 @@ export default function SelectSizePage() {
       // 更新列表
       setAddedSizes(addedSizes.filter(s => s.id !== size.id))
       showToastMessage('已删除规格')
+      setShowDeleteConfirm(false)
+      setPendingDeleteSize(null)
     } catch (error) {
       console.error('删除规格失败:', error)
       showToastMessage('删除失败，请重试')
@@ -407,6 +414,64 @@ export default function SelectSizePage() {
           <div className="px-6 py-3 bg-black/75 text-white text-sm rounded-lg shadow-lg flex items-center gap-2">
             <Check className="w-4 h-4" />
             {showToast}
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认弹窗 */}
+      {showDeleteConfirm && pendingDeleteSize && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-5"
+          onClick={() => {
+            if (isDeleting) return
+            setShowDeleteConfirm(false)
+            setPendingDeleteSize(null)
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-4">
+              <h3 className="text-base font-semibold text-gray-900">确认删除</h3>
+              <div className="mt-2 text-sm text-gray-600 leading-relaxed">
+                <p>
+                  确定要删除「{pendingDeleteSize.paperName} {pendingDeleteSize.sizeName}」吗？
+                </p>
+                {pendingDeleteSize.imageCount > 0 ? (
+                  <p className="mt-2 text-red-500">
+                    该规格已上传 {pendingDeleteSize.imageCount} 张照片，删除后数据将丢失且无法恢复。
+                  </p>
+                ) : (
+                  <p className="mt-2 text-gray-400">
+                    删除后该规格将从列表移除。
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 pb-5 flex items-center gap-3">
+              <button
+                type="button"
+                disabled={!!isDeleting}
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setPendingDeleteSize(null)
+                }}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-700 font-medium active:scale-[0.99] disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting === pendingDeleteSize.id}
+                onClick={confirmDeleteSize}
+                className="flex-1 h-11 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting === pendingDeleteSize.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                确认删除
+              </button>
+            </div>
           </div>
         </div>
       )}
