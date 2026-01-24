@@ -61,6 +61,7 @@ function UploadPageContent() {
   // 缓存管理
   const shouldRefetch = useStore((state) => state.shouldRefetch)
   const setLastFetchTime = useStore((state) => state.setLastFetchTime)
+  const lastFetchTime = useStore((state) => state.lastFetchTime) // 🎯 监听 lastFetchTime 变化
 
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
@@ -267,9 +268,20 @@ function UploadPageContent() {
   }, [currentSession, sizeId, router, hasHydrated])
 
   // 从后端加载已上传的照片 - 智能缓存版本
+  // 🎯 关键：添加 lastFetchTime 到依赖，当 forceRefetch() 被调用时触发重新加载
   useEffect(() => {
     const loadPhotosFromServer = async () => {
-      if (!currentSession || loadedRef.current) return
+      if (!currentSession) return
+      
+      // 🎯 关键修复：当 lastFetchTime 为 null（被 forceRefetch 清空）时，强制重新加载
+      const needForceRefetch = lastFetchTime === null
+      if (needForceRefetch && loadedRef.current) {
+        console.log('🔄 检测到 forceRefetch 调用，重置加载状态并重新加载数据')
+        loadedRef.current = false
+      }
+      
+      // 如果已加载过，直接返回
+      if (loadedRef.current) return
       
       const orderSn = getOrderSn()
       const specId = currentSession.sizeId
@@ -454,19 +466,18 @@ function UploadPageContent() {
     }
 
     loadPhotosFromServer()
-  }, [currentSession, hasHydrated]) // 🚀 优化：只在 session 或 hydration 变化时触发
+  }, [currentSession, hasHydrated, lastFetchTime]) // 🎯 添加 lastFetchTime，当 forceRefetch() 被调用时触发重新加载
 
-  // 初始化获取 OSS 签名（带缓存）
+  // 初始化获取 OSS 签名（静默预获取，不显示 loading）
+  // 🎯 优化：静默获取，不影响用户体验。如果失败或还没完成，上传时会重新获取
   useEffect(() => {
     const fetchSignature = async () => {
       try {
-        setApiLoading(true, '获取上传签名...')
         const signature = await getOssSignature()
         setOssSignature(signature)
+        console.log('✅ OSS 签名预获取成功')
       } catch (error) {
-        console.error('获取 OSS 签名失败:', error)
-      } finally {
-        setApiLoading(false, '')
+        console.error('OSS 签名预获取失败（上传时会重试）:', error)
       }
     }
     fetchSignature()

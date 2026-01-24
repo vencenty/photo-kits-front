@@ -389,10 +389,15 @@ function EditPageContent() {
         )
         
         if (remainingUnadjusted.length === 0) {
-          // 所有图片都已调整，移除 filter 参数，恢复正常导航
-          console.log('✅ 所有图片已调整，移除 filter 参数')
-          router.replace(`/edit?imageId=${imageId}`)
-          toast.success('恭喜！所有照片已调整完成')
+          // 🎯 所有图片都已调整，2秒后自动跳转到列表页
+          console.log('✅ 所有图片已调整完成，2秒后跳转到列表页')
+          toast.success('恭喜！所有照片已调整完成，即将返回列表页...', {
+            duration: 2000,
+          })
+          setTimeout(() => {
+            router.push(`/upload?sizeId=${currentSession?.sizeId}`)
+          }, 2000)
+          return // 提前返回，避免显示下面的提示
         } else {
           // 还有未调整的图片，自动跳转到下一张未调整的图片
           const nextUnadjusted = remainingUnadjusted[0]
