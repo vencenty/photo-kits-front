@@ -364,13 +364,32 @@ const OSS_PROXY_DOMAIN = 'https://bucket.vencenty.cc'
 // const OSS_PROXY_DOMAIN = 'https://photo-kits-storage-hangzhou.oss-cn-hangzhou.aliyuncs.com'
 
 /**
+ * 上传选项
+ */
+export interface UploadOptions {
+  /** 订单号 */
+  orderSn?: string
+  /** 规格名称（如：富士相纸5寸） */
+  specName?: string
+}
+
+/**
  * 上传文件到 OSS（客户端直传）
  * 流程：
  * 1. 从后端获取 STS 签名（已缓存）
  * 2. 前端直传 OSS（最大化上传性能）
  * 3. 使用代理域名回显图片（稳定访问）
+ * 
+ * 文件路径规则：
+ * - 有订单号和规格名称时：uploads/订单号/规格名称/文件名
+ * - 只有订单号时：uploads/订单号/文件名
+ * - 都没有时：uploads/文件名
  */
-export async function uploadToOss(file: File, signature: OssSignature): Promise<string> {
+export async function uploadToOss(
+  file: File, 
+  signature: OssSignature,
+  options?: UploadOptions
+): Promise<string> {
   // 验证签名数据
   if (!signature.host || !signature.policy || !signature.signature) {
     console.error('OSS签名数据不完整:', signature)
@@ -383,15 +402,31 @@ export async function uploadToOss(file: File, signature: OssSignature): Promise<
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
   const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${ext}`
   
-  // 上传目录，如果 dir 为空则使用默认目录
-  const uploadDir = signature.dir || 'uploads'
-  const key = `${uploadDir}/${filename}`
+  // 构建上传路径：uploads/订单号/规格名称/文件名
+  const baseDir = signature.dir || 'uploads'
+  let key = baseDir
+  
+  if (options?.orderSn) {
+    // 清理订单号中的特殊字符（保留字母、数字、中文、下划线、横杠）
+    const safeOrderSn = options.orderSn.replace(/[^\w\u4e00-\u9fa5-]/g, '_')
+    key = `${key}/${safeOrderSn}`
+    
+    if (options?.specName) {
+      // 清理规格名称中的特殊字符
+      const safeSpecName = options.specName.replace(/[^\w\u4e00-\u9fa5-]/g, '_')
+      key = `${key}/${safeSpecName}`
+    }
+  }
+  
+  key = `${key}/${filename}`
 
   console.log('OSS直传开始:', { 
     host: signature.host, 
     key, 
     fileSize: file.size,
-    fileName: file.name 
+    fileName: file.name,
+    orderSn: options?.orderSn,
+    specName: options?.specName
   })
 
   // OSS V4 签名必需的字段（注意顺序和字段名）
