@@ -359,8 +359,8 @@ export default function ImageEditor({
     
     // 创建一个隐藏的 img 元素来检测图片是否加载完成
     // 如果图片已经在缓存中（预加载过），onload 会立即触发
+    // 注意：不设置 crossOrigin，避免与浏览器缓存冲突导致 CORS 错误
     const img = new Image()
-    img.crossOrigin = 'anonymous'
     
     img.onload = () => {
       setImageLoaded(true)

@@ -62,6 +62,7 @@ function UploadPageContent() {
   const shouldRefetch = useStore((state) => state.shouldRefetch)
   const setLastFetchTime = useStore((state) => state.setLastFetchTime)
   const lastFetchTime = useStore((state) => state.lastFetchTime) // 🎯 监听 lastFetchTime 变化
+  const forceRefetch = useStore((state) => state.forceRefetch)
 
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [batchCropMode, setBatchCropMode] = useState<CropMode | null>(null)
@@ -936,6 +937,9 @@ function UploadPageContent() {
       setIsBatchMode(false)
       clearSelection()
       setBatchCropMode(null)
+
+      // 🎯 强制刷新数据，确保 isAdjusted 等字段与后端同步
+      forceRefetch()
     } catch (error) {
       console.error('批量更新照片裁剪模式失败:', error)
     } finally {

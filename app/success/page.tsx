@@ -195,7 +195,7 @@ export default function SuccessPage() {
       setOrderStatus(orderDetail.status)
       setIsLocked(checkOrderLocked(orderDetail.status))
       
-      alert('订单提交成功！订单已进入审核流程，通过审核后将开始制作。')
+      //alert('订单提交成功！订单已进入审核流程，通过审核后将开始制作。')
       setShowSubmitConfirm(false)
     } catch (error) {
       console.error('提交订单失败:', error)
@@ -203,6 +203,7 @@ export default function SuccessPage() {
     } finally {
       setIsLocking(false)
       setApiLoading(false, '')
+      
     }
   }
 
