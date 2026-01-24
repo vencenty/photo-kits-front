@@ -6,6 +6,8 @@ import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'l
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
 import { getPhotoSizeById, getCropConfigForSize } from '@/lib/photo-sizes'
+import { buildOssCropUrl } from '@/lib/image-config'
+import { CropInfo } from '@/lib/api'
 import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
@@ -25,6 +27,37 @@ import {
 
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
+
+/**
+ * 计算 cover 模式下的居中裁切尺寸
+ * 图片需要完全覆盖相纸区域，居中裁切
+ */
+function calculateCoverCropSize(
+  sourceWidth: number,
+  sourceHeight: number,
+  paperRatio: number
+): { cropWidth: number; cropHeight: number; offsetX: number; offsetY: number } {
+  const imageRatio = sourceWidth / sourceHeight
+
+  let cropWidth: number
+  let cropHeight: number
+
+  if (imageRatio > paperRatio) {
+    // 图片更宽，裁剪左右
+    cropHeight = sourceHeight
+    cropWidth = sourceHeight * paperRatio
+  } else {
+    // 图片更高，裁剪上下
+    cropWidth = sourceWidth
+    cropHeight = sourceWidth / paperRatio
+  }
+
+  // 居中裁切：计算偏移量
+  const offsetX = (sourceWidth - cropWidth) / 2
+  const offsetY = (sourceHeight - cropHeight) / 2
+
+  return { cropWidth, cropHeight, offsetX, offsetY }
+}
 
 function UploadPageContent() {
   const router = useRouter()
@@ -897,6 +930,13 @@ function UploadPageContent() {
     const targetIds = selectedIds
     const mode = batchCropMode
 
+    // 计算相纸比例
+    const canvasW = currentSession?.canvasWidth || 127
+    const canvasH = currentSession?.canvasHeight || 89
+
+    // 为每张图片计算 cropInfo 和 outputUrl
+    const photosWithCropInfo: { photoId: string; cropInfo?: CropInfo; outputUrl?: string }[] = []
+
     const updates = targetIds.map((id) => {
       const img = images.find(i => i.id === id)
       if (!img) return null
@@ -907,29 +947,125 @@ function UploadPageContent() {
         x: 0,
         y: 0,
         rotation: img.isLandscape ? 90 : 0,
-        canvasWidth: currentSession?.canvasWidth || 127,
-        canvasHeight: currentSession?.canvasHeight || 89,
+        canvasWidth: canvasW,
+        canvasHeight: canvasH,
+      }
+
+      // 获取原图尺寸（考虑横图旋转后的尺寸）
+      const sourceWidth = img.width || 0
+      const sourceHeight = img.height || 0
+      const originalUrl = img.originalUrl || ''
+
+      // 计算相纸比例（根据图片方向调整）
+      let targetPaperRatio = canvasW / canvasH
+      if (sourceWidth && sourceHeight) {
+        const imageRatio = sourceWidth / sourceHeight
+        const isImageLandscape = imageRatio > 1
+        const isPaperLandscape = targetPaperRatio > 1
+        // 如果图片和相纸方向不一致，反转相纸比例
+        if ((isImageLandscape && !isPaperLandscape) || (!isImageLandscape && isPaperLandscape)) {
+          targetPaperRatio = 1 / targetPaperRatio
+        }
+      }
+
+      let simpleCropInfo: SimpleCropInfo | undefined
+      let outputUrl = originalUrl
+
+      if (mode === 'cover' && sourceWidth && sourceHeight) {
+        // cover 模式：计算居中裁切坐标
+        const { cropWidth, cropHeight, offsetX, offsetY } = calculateCoverCropSize(
+          sourceWidth,
+          sourceHeight,
+          targetPaperRatio
+        )
+
+        // 计算百分比坐标（用于恢复裁剪位置）
+        const croppedAreaPercent = {
+          x: (offsetX / sourceWidth) * 100,
+          y: (offsetY / sourceHeight) * 100,
+          width: (cropWidth / sourceWidth) * 100,
+          height: (cropHeight / sourceHeight) * 100,
+        }
+
+        simpleCropInfo = {
+          offsetX: Math.round(offsetX),
+          offsetY: Math.round(offsetY),
+          cropWidth: Math.round(cropWidth),
+          cropHeight: Math.round(cropHeight),
+          sourceWidth,
+          sourceHeight,
+          styleType: 'cover',
+          croppedAreaPercent,
+        }
+
+        // 生成带裁切参数的 outputUrl（包含旋转参数，确保与前端显示一致）
+        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {
+          isLandscape: img.isLandscape, // 横图需要旋转90度
+        })
+
+        // 准备传给后端的数据
+        const cropInfoForServer: CropInfo = {
+          canvasWidth: canvasW,
+          canvasHeight: canvasH,
+          sourceWidth,
+          sourceHeight,
+          offsetX: Math.round(offsetX),
+          offsetY: Math.round(offsetY),
+          cropWidth: Math.round(cropWidth),
+          cropHeight: Math.round(cropHeight),
+          rotateAngle: img.isLandscape ? 90 : 0,
+          originalUrl,
+          styleType: 'cover',
+        }
+
+        photosWithCropInfo.push({
+          photoId: id,
+          cropInfo: cropInfoForServer,
+          outputUrl,
+        })
+      } else if (mode === 'full' || mode === 'lomo') {
+        // full/lomo 模式：不裁切，使用原图
+        simpleCropInfo = sourceWidth && sourceHeight ? {
+          offsetX: 0,
+          offsetY: 0,
+          cropWidth: sourceWidth,
+          cropHeight: sourceHeight,
+          sourceWidth,
+          sourceHeight,
+          styleType: mode,
+        } : undefined
+
+        // 生成 outputUrl（横图需要旋转90度，确保与前端显示一致）
+        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {
+          isLandscape: img.isLandscape,
+        })
+
+        photosWithCropInfo.push({
+          photoId: id,
+          outputUrl,
+        })
       }
 
       return {
         id,
         updates: {
           editState: newEditState,
-          cropMode: mapCropModeToServer(mode), // 更新cropMode，让PhotoPreviewCard能正确显示样式
-          // 注意：批量操作不设置 cropInfo，只有真正编辑过（有精确裁剪坐标）时才设置
-          // cropInfo: undefined, // 清除现有的 cropInfo
+          cropMode: mode,
+          cropInfo: simpleCropInfo,
+          outputUrl,
         },
       }
     }).filter(Boolean) as { id: string; updates: Partial<ImageType> }[]
 
     updateImages(updates)
 
-    // 使用批量 API 同步到后端（一次性更新所有照片，而不是循环调用）
+    // 使用批量 API 同步到后端（传递计算好的 cropInfo 和 outputUrl）
     try {
       setApiLoading(true, `批量更新 ${targetIds.length} 张照片...`)
       const result = await batchUpdatePhotos({
         photoIds: targetIds,
         cropMode: mapCropModeToServer(mode),
+        photos: photosWithCropInfo, // 🎯 关键：传递前端计算好的裁切数据
       })
       console.log(`批量更新成功: ${result.updatedCount} 张照片`)
 

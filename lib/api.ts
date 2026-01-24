@@ -619,11 +619,21 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
 export interface BatchUpdatePhotosParams {
   photoIds: string[]
   cropMode?: string
+  /** 每张图片的详细更新数据（包含 cropInfo 和 outputUrl） */
+  photos?: {
+    photoId: string
+    cropInfo?: CropInfo
+    outputUrl?: string
+  }[]
 }
 
 /**
  * 批量更新照片
  * 后端路由: PUT /api/order/photos/batch
+ * 
+ * 支持两种模式：
+ * 1. 简单模式：只传 photoIds 和 cropMode，服务端计算裁切坐标
+ * 2. 精确模式：传 photos 数组，前端已计算好 cropInfo 和 outputUrl，服务端直接使用
  */
 export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promise<{ updatedCount: number; message: string }> {
   return request<{ updatedCount: number; message: string }>('/api/order/photos/batch', {
