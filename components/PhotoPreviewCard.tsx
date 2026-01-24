@@ -69,19 +69,26 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
         </div>
       )
     } else {
-      // Lomo 模式：使用 object-contain + padding 实现留白
+      // Lomo 模式：模拟真实相纸，白边是显式结构
+      // 相纸层（白色背景）+ 图片区域（绝对定位创建固定白边）
       return (
-        <div
-          className="relative w-full h-full bg-white flex items-center justify-center"
-          style={{
-            padding: `${WHITE_MARGIN_PERCENT}%`,
-          }}
-        >
-          <img
-            src={previewUrl}
-            alt={image.filename || '照片'}
-            className="w-full h-full object-contain"
-          />
+        <div className="absolute inset-0 bg-white">
+          {/* 图片区域：top/bottom 基于高度，left/right 基于宽度 */}
+          <div
+            className="absolute"
+            style={{
+              top: `${WHITE_MARGIN_PERCENT}%`,
+              right: `${WHITE_MARGIN_PERCENT}%`,
+              bottom: `${WHITE_MARGIN_PERCENT}%`,
+              left: `${WHITE_MARGIN_PERCENT}%`,
+            }}
+          >
+            <img
+              src={previewUrl}
+              alt={image.filename || '照片'}
+              className="w-full h-full object-contain"
+            />
+          </div>
         </div>
       )
     }

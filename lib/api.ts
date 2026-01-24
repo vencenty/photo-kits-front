@@ -241,121 +241,15 @@ export interface OssSignature {
 
 // ==================== OSS 相关 ====================
 
-// OSS 签名缓存配置
-const OSS_SIGNATURE_CACHE_KEY = 'oss-signature-cache'
-const OSS_SIGNATURE_CACHE_DURATION = 30 * 60 * 1000 // 30分钟
-
-interface OssSignatureCache {
-  signature: OssSignature
-  timestamp: number
-}
-
 /**
- * 获取 OSS 上传签名（带缓存）
+ * 获取 OSS 上传签名（每次都从服务端获取，不使用缓存）
+ * 避免使用过期或无效的签名导致上传失败
  */
 export async function getOssSignature(): Promise<OssSignature> {
-  // 检查缓存
-  const cached = getCachedSignature()
-  if (cached) {
-    console.log('✅ 使用缓存的 OSS 签名')
-    return cached
-  }
-
-  console.log('🔄 从服务器获取新的 OSS 签名...')
-  // 从服务器获取新签名
+  console.log('🔄 从服务器获取 OSS 签名...')
   const signature = await request<OssSignature>('/api/oss/signature')
-
-  // 缓存签名
-  setCachedSignature(signature)
-  console.log('💾 OSS 签名已缓存（30分钟内有效）')
-
+  console.log('✅ OSS 签名获取成功')
   return signature
-}
-
-/**
- * 获取缓存的 OSS 签名
- */
-function getCachedSignature(): OssSignature | null {
-  // 只在客户端使用缓存
-  if (typeof window === 'undefined') return null
-
-  try {
-    const cached = localStorage.getItem(OSS_SIGNATURE_CACHE_KEY)
-    if (!cached) return null
-
-    const cache: OssSignatureCache = JSON.parse(cached)
-    const now = Date.now()
-
-    // 检查是否过期
-    if (now - cache.timestamp > OSS_SIGNATURE_CACHE_DURATION) {
-      localStorage.removeItem(OSS_SIGNATURE_CACHE_KEY)
-      return null
-    }
-
-    return cache.signature
-  } catch (error) {
-    console.warn('读取 OSS 签名缓存失败:', error)
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(OSS_SIGNATURE_CACHE_KEY)
-    }
-    return null
-  }
-}
-
-/**
- * 缓存 OSS 签名
- */
-function setCachedSignature(signature: OssSignature): void {
-  // 只在客户端缓存
-  if (typeof window === 'undefined') return
-
-  try {
-    const cache: OssSignatureCache = {
-      signature,
-      timestamp: Date.now()
-    }
-    localStorage.setItem(OSS_SIGNATURE_CACHE_KEY, JSON.stringify(cache))
-  } catch (error) {
-    console.warn('缓存 OSS 签名失败:', error)
-  }
-}
-
-/**
- * 清除 OSS 签名缓存
- */
-export function clearOssSignatureCache(): void {
-  if (typeof window === 'undefined') return
-
-  try {
-    localStorage.removeItem(OSS_SIGNATURE_CACHE_KEY)
-  } catch (error) {
-    console.warn('清除 OSS 签名缓存失败:', error)
-  }
-}
-
-/**
- * 获取 OSS 签名缓存信息（调试用）
- */
-export function getOssSignatureCacheInfo(): { cached: boolean, age: number, expiresIn: number } | null {
-  if (typeof window === 'undefined') return null
-
-  try {
-    const cached = localStorage.getItem(OSS_SIGNATURE_CACHE_KEY)
-    if (!cached) return null
-
-    const cache: OssSignatureCache = JSON.parse(cached)
-    const now = Date.now()
-    const age = now - cache.timestamp
-    const expiresIn = OSS_SIGNATURE_CACHE_DURATION - age
-
-    return {
-      cached: true,
-      age,
-      expiresIn
-    }
-  } catch (error) {
-    return null
-  }
 }
 
 // 固定代理域名，用于图片回显
@@ -369,8 +263,8 @@ const OSS_PROXY_DOMAIN = 'https://bucket.vencenty.cc'
 export interface UploadOptions {
   /** 订单号 */
   orderSn?: string
-  /** 规格名称（如：富士相纸5寸） */
-  specName?: string
+  /** 规格ID（使用纯英文/数字，避免中文路径在 Safari 等浏览器中的兼容问题） */
+  specId?: string
 }
 
 /**
@@ -402,19 +296,20 @@ export async function uploadToOss(
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
   const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${ext}`
   
-  // 构建上传路径：uploads/订单号/规格名称/文件名
+  // 构建上传路径：uploads/订单号/规格ID/文件名
+  // 🎯 禁止使用中文，避免 Safari 等浏览器的兼容问题
   const baseDir = signature.dir || 'uploads'
   let key = baseDir
   
   if (options?.orderSn) {
-    // 清理订单号中的特殊字符（保留字母、数字、中文、下划线、横杠）
-    const safeOrderSn = options.orderSn.replace(/[^\w\u4e00-\u9fa5-]/g, '_')
+    // 清理订单号中的特殊字符（只保留字母、数字、下划线、横杠）
+    const safeOrderSn = options.orderSn.replace(/[^\w-]/g, '_')
     key = `${key}/${safeOrderSn}`
     
-    if (options?.specName) {
-      // 清理规格名称中的特殊字符
-      const safeSpecName = options.specName.replace(/[^\w\u4e00-\u9fa5-]/g, '_')
-      key = `${key}/${safeSpecName}`
+    if (options?.specId) {
+      // 清理规格ID中的特殊字符（只保留字母、数字、下划线、横杠）
+      const safeSpecId = options.specId.replace(/[^\w-]/g, '_')
+      key = `${key}/${safeSpecId}`
     }
   }
   
@@ -426,7 +321,7 @@ export async function uploadToOss(
     fileSize: file.size,
     fileName: file.name,
     orderSn: options?.orderSn,
-    specName: options?.specName
+    specId: options?.specId
   })
 
   // OSS V4 签名必需的字段（注意顺序和字段名）

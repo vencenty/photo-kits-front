@@ -89,8 +89,8 @@ export default function ImageEditor({
   }
 
   // 获取当前尺寸的裁剪样式配置
-  const cropConfig = sizeId 
-    ? getCropConfigForSize(sizeId) 
+  const cropConfig = sizeId
+    ? getCropConfigForSize(sizeId)
     : { defaultMode: 'cover' as EditMode, availableModes: ['cover', 'full', 'lomo'] as EditMode[] }
 
   // 获取初始模式
@@ -101,7 +101,7 @@ export default function ImageEditor({
   }, [photoData.cropMode, cropConfig])
 
   const [mode, setMode] = useState<'cover' | 'full' | 'lomo'>(getInitialMode())
-  
+
   // 🚀 优化：当图片切换时，立即更新模式（确保模式切换和图片切换同步）
   const prevPhotoIdForModeRef = useRef<string | undefined>(photoData.id)
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function ImageEditor({
       // 🎯 关键：立即更新模式，确保切换图片时模式也同步切换
       setMode(newMode)
       prevPhotoIdForModeRef.current = photoData.id
-      
+
       // 🚀 优化：模式切换时，重置相关状态，确保新图片使用正确的模式
       restoredRef.current = false
       isRestoringRef.current = false
@@ -127,7 +127,7 @@ export default function ImageEditor({
   const imageUrl = photoData.originalUrl || photoData.thumbnailUrl
   const [imageLoaded, setImageLoaded] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
-  
+
   // 保存上一个图片的引用，用于过渡动画
   const prevImageRef = useRef<ImageType | null>(null)
   const prevImageUrlRef = useRef<string | undefined>(undefined)
@@ -243,32 +243,32 @@ export default function ImageEditor({
     // 只有 cover 模式才需要恢复
     if (mode !== 'cover') return undefined
     if (!photoData.cropInfo || !sourceSize.width || !sourceSize.height) return undefined
-    
+
     const { styleType, croppedAreaPercent: savedPercent } = photoData.cropInfo
-    
+
     // 只有 cover 模式且有有效数据时才恢复
     if (styleType !== 'cover') return undefined
-    
+
     // 🎯 优先使用保存的百分比坐标
     if (savedPercent) {
       const { x, y, width, height } = savedPercent
-      if (typeof x === 'number' && typeof y === 'number' && 
-          typeof width === 'number' && typeof height === 'number' &&
-          !isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) &&
-          isFinite(x) && isFinite(y) && isFinite(width) && isFinite(height)) {
+      if (typeof x === 'number' && typeof y === 'number' &&
+        typeof width === 'number' && typeof height === 'number' &&
+        !isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) &&
+        isFinite(x) && isFinite(y) && isFinite(width) && isFinite(height)) {
         console.log('📍 使用保存的百分比坐标恢复:', savedPercent)
         return { x, y, width, height }
       }
     }
-    
+
     // 🔄 兼容旧数据：从像素坐标计算百分比
     const { offsetX, offsetY, cropWidth, cropHeight } = photoData.cropInfo
-    
-    if (typeof offsetX !== 'number' || typeof offsetY !== 'number' || 
-        isNaN(offsetX) || isNaN(offsetY) || !isFinite(offsetX) || !isFinite(offsetY)) {
+
+    if (typeof offsetX !== 'number' || typeof offsetY !== 'number' ||
+      isNaN(offsetX) || isNaN(offsetY) || !isFinite(offsetX) || !isFinite(offsetY)) {
       return undefined
     }
-    
+
     let finalCropWidth = cropWidth
     let finalCropHeight = cropHeight
     if (!finalCropWidth || !finalCropHeight) {
@@ -276,7 +276,7 @@ export default function ImageEditor({
       finalCropWidth = calculated.cropWidth
       finalCropHeight = calculated.cropHeight
     }
-    
+
     console.log('📍 从像素坐标计算百分比恢复（兼容模式）')
     return {
       x: (offsetX / sourceSize.width) * 100,
@@ -331,7 +331,7 @@ export default function ImageEditor({
         }
         prevImageLoadedRef.current = imageLoaded
       }
-      
+
       // 🚀 优化：只有在图片真正切换时才开始过渡，避免不必要的重置
       // 如果上一个图片已经加载完成，可以立即开始过渡
       if (prevImageLoadedRef.current) {
@@ -340,7 +340,7 @@ export default function ImageEditor({
       setImageLoaded(false)
       prevImageUrlRef.current = imageUrl
       prevPhotoIdForTransitionRef.current = photoData.id
-      
+
       // 🎯 关键：图片切换时，状态重置已经在模式切换的 useEffect 中处理了
       // 这里只需要确保过渡状态正确
     }
@@ -356,12 +356,12 @@ export default function ImageEditor({
 
     // 使用与 Cropper 相同的压缩 URL
     const compressedUrl = buildOssCropUrl(imageUrl, undefined, imageCompressOptions)
-    
+
     // 创建一个隐藏的 img 元素来检测图片是否加载完成
     // 如果图片已经在缓存中（预加载过），onload 会立即触发
     // 注意：不设置 crossOrigin，避免与浏览器缓存冲突导致 CORS 错误
     const img = new Image()
-    
+
     img.onload = () => {
       setImageLoaded(true)
       // 🚀 优化：减少过渡时间，让切换更快速
@@ -371,13 +371,13 @@ export default function ImageEditor({
         prevImageRef.current = null
       }, 50)
     }
-    
+
     img.onerror = () => {
       // 即使加载失败，也标记为已加载，避免卡住
       setImageLoaded(true)
       setIsTransitioning(false)
     }
-    
+
     img.src = compressedUrl
 
     return () => {
@@ -398,7 +398,7 @@ export default function ImageEditor({
       })
     }
   }, [computedInitialCroppedAreaPercentages])
-  
+
   // 🚀 优化：当图片切换且没有 cropInfo 时，重置裁剪状态为默认值
   useEffect(() => {
     if (!photoData.cropInfo && prevPhotoIdForTransitionRef.current !== photoData.id) {
@@ -417,7 +417,7 @@ export default function ImageEditor({
     isRestoringRef.current = false
     setInitialCroppedAreaPercentages(undefined)
     setInitialCroppedAreaPixels(undefined)
-    
+
     // 🎯 关键：当模式切换到 full 或 lomo 时，不需要裁剪状态
     // 当模式切换到 cover 时，重置裁剪状态为默认值
     if (mode === 'cover') {
@@ -548,10 +548,10 @@ export default function ImageEditor({
 
         // 传递crop meta和生成的outputUrl
         onSave({
-        cropInfo,
-        outputUrl,
-      })
-    }
+          cropInfo,
+          outputUrl,
+        })
+      }
     } catch (error) {
       console.error('handleSave 出错:', error)
       alert('保存失败，请重试')
@@ -559,24 +559,33 @@ export default function ImageEditor({
   }, [croppedAreaPixels, croppedAreaPercent, sourceSize, mode, aspectRatio, photoData.originalUrl, photoData.thumbnailUrl, onSave])
 
   // 渲染 full 或 lomo 模式（不可编辑）
-  // 🎯 关键：添加 key 确保模式切换时重新渲染
+  // 🎯 模拟真实相纸：白边是显式结构，不依赖 flex 居中或剩余空间
   const renderStaticMode = () => {
     const isLomo = mode === 'lomo'
-    const margin = isLomo ? WHITE_MARGIN_PERCENT : 0
+    const marginPercent = isLomo ? WHITE_MARGIN_PERCENT : 0
+
     return (
-      <div
-        key={`static-${photoData.id}-${mode}`}
-        className="relative w-full h-full bg-white flex items-center justify-center"
-        style={{
-          padding: isLomo ? `${margin}%` : 0,
-        }}
-      >
-        <img
-          key={`static-img-${photoData.id}-${mode}-${imageUrl}`}
-          src={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
-          alt="预览"
-          className="w-full h-full object-contain"
-        />
+      // 相纸层：白色背景，填满整个容器
+      <div className="absolute inset-0 bg-white">
+        {/* 图片区域：使用绝对定位 + inset 创建固定白边 */}
+        {/* top/bottom 百分比基于高度，left/right 百分比基于宽度 */}
+        {/* 这确保四周都有固定比例的白边，不会因容器变化而消失 */}
+        <div
+          className="absolute"
+          style={{
+            top: `${marginPercent}%`,
+            right: `${marginPercent}%`,
+            bottom: `${marginPercent}%`,
+            left: `${marginPercent}%`,
+          }}
+        >
+          <img
+            key={`static-img-${photoData.id}-${mode}-${imageUrl}`}
+            src={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
+            alt="预览"
+            className="w-full h-full object-contain"
+          />
+        </div>
       </div>
     )
   }
@@ -584,7 +593,7 @@ export default function ImageEditor({
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
       {/* 顶部导航栏 */}
-     
+
       {/* 提示信息 */}
       <div className="px-4 py-3">
         <div className="flex items-center justify-center gap-2 text-sm">
@@ -603,57 +612,59 @@ export default function ImageEditor({
       {/* 编辑区域 */}
       <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="relative w-full max-w-lg">
+          {/* 使用 paddingBottom 保持比例，和 upload/page.tsx 一致 */}
           <div
             ref={containerRef}
             className="relative w-full bg-white shadow-2xl overflow-hidden"
-            style={{ paddingTop: `${(1 / containerAspectRatio) * 100}%` }}
+            style={{
+              paddingBottom: `${(1 / containerAspectRatio) * 100}%`,
+            }}
           >
             <div className="absolute inset-0">
               {/* 🚀 优化：当前图片 - 使用更平滑的淡入淡出效果，避免黑屏 */}
               {/* 🎯 关键：添加 mode 到 key 中，确保模式切换时组件重新渲染 */}
-              <div 
+              <div
                 key={`current-${photoData.id}-${mode}`}
-                className={`absolute inset-0 transition-opacity duration-200 ease-in-out ${
-                  imageLoaded && !isTransitioning ? 'opacity-100 z-20' : 'opacity-0 z-10'
-                }`}
+                className={`absolute inset-0 transition-opacity duration-200 ease-in-out ${imageLoaded && !isTransitioning ? 'opacity-100 z-20' : 'opacity-0 z-10'
+                  }`}
               >
-                {imageLoaded && imageUrl && aspectRatio > 0 && 
-                 sourceSize.width > 0 && sourceSize.height > 0 && (
-                  mode === 'cover' ? (
-                    // Cover 模式：使用 react-easy-crop 
-                    <Cropper
-                      key={`cropper-${photoData.id}-${mode}-${imageUrl}`}
-                      image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
-                      crop={crop}
-                      zoom={zoom}
-                      aspect={aspectRatio}
-                      onCropChange={safetSetCrop}
-                      onZoomChange={safeSetZoom}
-                      onCropComplete={onCropComplete}
-                      {...(computedInitialCroppedAreaPercentages && {
-                        initialCroppedAreaPercentages: computedInitialCroppedAreaPercentages
-                      })}
-                      // 禁止缩放，只允许拖拽
-                      objectFit='contain'
-                      minZoom={1}
-                      maxZoom={1}
-                      restrictPosition={true}
-                      showGrid={true}
-                      style={cropperStyle}
-                      classes={cropperClasses}
-                    />
-                  ) : (
-                    // Full 和 Lomo 模式：静态显示
-                    renderStaticMode()
-                  )
-                )}
+                {imageLoaded && imageUrl && aspectRatio > 0 &&
+                  sourceSize.width > 0 && sourceSize.height > 0 && (
+                    mode === 'cover' ? (
+                      // Cover 模式：使用 react-easy-crop 
+                      <Cropper
+                        key={`cropper-${photoData.id}-${mode}-${imageUrl}`}
+                        image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
+                        crop={crop}
+                        zoom={zoom}
+                        aspect={aspectRatio}
+                        onCropChange={safetSetCrop}
+                        onZoomChange={safeSetZoom}
+                        onCropComplete={onCropComplete}
+                        {...(computedInitialCroppedAreaPercentages && {
+                          initialCroppedAreaPercentages: computedInitialCroppedAreaPercentages
+                        })}
+                        // 禁止缩放，只允许拖拽
+                        objectFit='contain'
+                        minZoom={1}
+                        maxZoom={1}
+                        restrictPosition={true}
+                        showGrid={true}
+                        style={cropperStyle}
+                        classes={cropperClasses}
+                      />
+                    ) : (
+                      // Full 和 Lomo 模式：静态显示
+                      renderStaticMode()
+                    )
+                  )}
               </div>
-              
+
               {/* 🚀 优化：显示上一个图片作为背景，避免黑屏 */}
               {prevImageRef.current && isTransitioning && (
-                <div 
+                <div
                   className="absolute inset-0 opacity-100 z-0 transition-opacity duration-200"
-                  style={{ 
+                  style={{
                     backgroundImage: `url(${buildOssCropUrl(prevImageRef.current.thumbnailUrl || prevImageRef.current.originalUrl || '', undefined, imageCompressOptions)})`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
@@ -701,25 +712,23 @@ export default function ImageEditor({
             className={`
               group flex items-center gap-2 px-4 py-3 rounded-xl font-medium
               transition-all duration-200 ease-in-out
-              ${
-                hasPrevious
-                  ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
-                  : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
+              ${hasPrevious
+                ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
+                : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
               }
             `}
             aria-label="上一张"
           >
-            <ChevronLeft 
-              className={`w-5 h-5 transition-transform duration-200 ${
-                hasPrevious ? 'group-hover:-translate-x-0.5' : ''
-              }`} 
+            <ChevronLeft
+              className={`w-5 h-5 transition-transform duration-200 ${hasPrevious ? 'group-hover:-translate-x-0.5' : ''
+                }`}
             />
             <span className="text-sm">上一张</span>
           </button>
-          
+
           {/* 中间占位（可以放图片计数器等） */}
           <div className="flex-1" />
-          
+
           {/* 下一张按钮 */}
           <button
             onClick={onNext}
@@ -727,19 +736,17 @@ export default function ImageEditor({
             className={`
               group flex items-center gap-2 px-4 py-3 rounded-xl font-medium
               transition-all duration-200 ease-in-out
-              ${
-                hasNext
-                  ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
-                  : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
+              ${hasNext
+                ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
+                : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
               }
             `}
             aria-label="下一张"
           >
             <span className="text-sm">下一张</span>
-            <ChevronRight 
-              className={`w-5 h-5 transition-transform duration-200 ${
-                hasNext ? 'group-hover:translate-x-0.5' : ''
-              }`} 
+            <ChevronRight
+              className={`w-5 h-5 transition-transform duration-200 ${hasNext ? 'group-hover:translate-x-0.5' : ''
+                }`}
             />
           </button>
         </div>
@@ -754,8 +761,8 @@ export default function ImageEditor({
             <button
               onClick={() => handleModeChange('cover')}
               className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'cover'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'bg-pink-500 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
             >
               居中裁剪
@@ -765,8 +772,8 @@ export default function ImageEditor({
             <button
               onClick={() => handleModeChange('full')}
               className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'full'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'bg-pink-500 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
             >
               打印整图
@@ -776,8 +783,8 @@ export default function ImageEditor({
             <button
               onClick={() => handleModeChange('lomo')}
               className={`px-3 py-3 rounded-lg font-medium transition-all flex items-center gap-1.5 text-sm ${mode === 'lomo'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'bg-pink-500 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
             >
               四周留白

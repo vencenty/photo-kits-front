@@ -634,13 +634,14 @@ function UploadPageContent() {
         const needsRotation = shouldRotateImage(dimensions.width, dimensions.height)
 
         // 上传到 OSS（客户端直传）
-        // 🎯 按照 订单号/规格名称/文件名 的结构上传，方便在 OSS 上查找
+        // 🎯 按照 订单号/规格ID/文件名 的结构上传，方便在 OSS 上查找
+        // 禁止使用中文路径，避免 Safari 等浏览器的兼容问题
         let ossUrl = ''
         try {
           // signature 在上层已校验非空，使用非空断言
           ossUrl = await uploadToOss(currentFile, signature!, {
             orderSn: orderSn,
-            specName: currentSession.sizeName, // 使用尺寸名称作为规格名称
+            specId: specId, // 使用规格ID（纯英文/数字）
           })
           console.log('图片上传成功:', ossUrl)
         } catch (error) {
