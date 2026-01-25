@@ -1,3 +1,3 @@
-export { CoverModeEditor, calculateCoverCropSize, getCropAspectRatio } from './CoverModeEditor'
-export { FullModePreview } from './FullModePreview'
-export { LomoModePreview } from './LomoModePreview'
+export { CoverModeEditor, calculateCoverCropSize } from './CoverModeEditor'
+export { FullModeEditor } from './FullModeEditor'
+export { LomoModeEditor } from './LomoModeEditor'

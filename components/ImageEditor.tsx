@@ -2,17 +2,15 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { Check, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { Area } from 'react-easy-crop'
 import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
 import { getCropConfigForSize } from '@/lib/photo-sizes'
 import { useImagePreload } from '@/lib/use-image-preload'
 import {
   CoverModeEditor,
-  FullModePreview,
-  LomoModePreview,
+  FullModeEditor,
+  LomoModeEditor,
   calculateCoverCropSize,
-  getCropAspectRatio,
 } from './editor'
 
 interface ImageEditorProps {
@@ -75,7 +73,7 @@ export default function ImageEditor({
       : cropConfig.defaultMode
   )
 
-  const imageUrl = photoData.originalUrl || photoData.thumbnailUrl
+  const imageUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
   const sourceSize = useMemo(
     () => ({
       width: photoData.width || 0,
@@ -90,24 +88,44 @@ export default function ImageEditor({
     return canvasWidth / canvasHeight
   }, [canvasWidth, canvasHeight])
 
-  // Cover 模式的裁剪数据
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
-  const [croppedAreaPercent, setCroppedAreaPercent] = useState<Area | null>(null)
+  // 根据图片方向动态调整裁剪框比例
+  const cropAspectRatio = useMemo(() => {
+    if (!sourceSize.width || !sourceSize.height) return paperAspectRatio
+    const imageRatio = sourceSize.width / sourceSize.height
+    const isImageLandscape = imageRatio > 1
+    const isPaperLandscape = paperAspectRatio > 1
+    if ((isImageLandscape && !isPaperLandscape) || (!isImageLandscape && isPaperLandscape)) {
+      return 1 / paperAspectRatio
+    }
+    return paperAspectRatio
+  }, [sourceSize, paperAspectRatio])
+
+  // Cover 模式的裁剪信息
+  const [coverCropInfo, setCoverCropInfo] = useState<SimpleCropInfo | null>(null)
+  const [coverOutputUrl, setCoverOutputUrl] = useState<string>('')
+
+  const imageCompressOptions = useMemo(
+    () => ({ quality: 70, format: 'jpg', interlace: 1 }),
+    []
+  )
 
   // 预加载前后图片
   useImagePreload(imageUrl, allImages, currentIndex, 5)
 
-  // Cover 模式裁剪回调
-  const handleCropChange = useCallback((areaPercent: Area, areaPixels: Area) => {
-    setCroppedAreaPercent(areaPercent)
-    setCroppedAreaPixels(areaPixels)
+  // Cover 模式裁剪变化回调
+  const handleCoverCropChange = useCallback((cropInfo: SimpleCropInfo | null, outputUrl: string) => {
+    setCoverCropInfo(cropInfo)
+    setCoverOutputUrl(outputUrl)
   }, [])
 
   // 模式切换
   const handleModeChange = useCallback((newMode: EditMode) => {
     setMode(newMode)
-    setCroppedAreaPixels(null)
-    setCroppedAreaPercent(null)
+    // 切换模式时重置 cover 的裁剪信息
+    if (newMode !== 'cover') {
+      setCoverCropInfo(null)
+      setCoverOutputUrl('')
+    }
   }, [])
 
   // 保存
@@ -115,24 +133,14 @@ export default function ImageEditor({
     if (!sourceSize.width || !sourceSize.height) return
 
     let cropInfo: SimpleCropInfo | undefined
-    let outputUrl = imageUrl || ''
+    let outputUrl = imageUrl
 
     if (mode === 'cover') {
-      if (croppedAreaPixels && croppedAreaPercent) {
-        // 用户已调整裁剪位置
-        cropInfo = {
-          offsetX: Math.round(croppedAreaPixels.x),
-          offsetY: Math.round(croppedAreaPixels.y),
-          cropWidth: Math.round(croppedAreaPixels.width),
-          cropHeight: Math.round(croppedAreaPixels.height),
-          sourceWidth: sourceSize.width,
-          sourceHeight: sourceSize.height,
-          styleType: 'cover',
-          croppedAreaPercent,
-        }
+      if (coverCropInfo) {
+        cropInfo = coverCropInfo
+        outputUrl = coverOutputUrl
       } else {
         // 默认居中裁剪
-        const cropAspectRatio = getCropAspectRatio(sourceSize.width, sourceSize.height, paperAspectRatio)
         const { cropWidth, cropHeight } = calculateCoverCropSize(
           sourceSize.width,
           sourceSize.height,
@@ -149,8 +157,8 @@ export default function ImageEditor({
           sourceHeight: sourceSize.height,
           styleType: 'cover',
         }
+        outputUrl = buildOssCropUrl(imageUrl, cropInfo)
       }
-      outputUrl = buildOssCropUrl(outputUrl, cropInfo)
     } else {
       // full 或 lomo 模式
       cropInfo = {
@@ -165,12 +173,10 @@ export default function ImageEditor({
     }
 
     onSave({ cropInfo, outputUrl })
-  }, [mode, croppedAreaPixels, croppedAreaPercent, sourceSize, imageUrl, paperAspectRatio, onSave])
+  }, [mode, coverCropInfo, coverOutputUrl, sourceSize, imageUrl, cropAspectRatio, onSave])
 
-  // 渲染编辑区域内容
-  const renderEditorContent = () => {
-    if (!imageUrl) return null
-
+  // 渲染当前模式的编辑器
+  const renderEditor = () => {
     switch (mode) {
       case 'cover':
         return (
@@ -180,29 +186,30 @@ export default function ImageEditor({
             sourceWidth={sourceSize.width}
             sourceHeight={sourceSize.height}
             paperAspectRatio={paperAspectRatio}
-            onCropChange={handleCropChange}
+            imageCompressOptions={imageCompressOptions}
+            onCropChange={handleCoverCropChange}
           />
         )
       case 'full':
         return (
-          <FullModePreview
+          <FullModeEditor
             imageUrl={imageUrl}
             imageId={photoData.id}
+            imageCompressOptions={imageCompressOptions}
           />
         )
       case 'lomo':
         return (
-          <LomoModePreview
+          <LomoModeEditor
             imageUrl={imageUrl}
             imageId={photoData.id}
+            imageCompressOptions={imageCompressOptions}
           />
         )
-      default:
-        return null
     }
   }
 
-  // 获取模式提示文本
+  // 获取当前模式的提示信息
   const getModeHint = () => {
     switch (mode) {
       case 'cover':
@@ -211,8 +218,6 @@ export default function ImageEditor({
         return '打印整图模式：图片完整显示'
       case 'lomo':
         return '四周留白模式：图片完整显示，四周有等比例白边'
-      default:
-        return ''
     }
   }
 
@@ -240,7 +245,7 @@ export default function ImageEditor({
             maxHeight: '100%',
           }}
         >
-          {renderEditorContent()}
+          {renderEditor()}
         </div>
       </div>
 
