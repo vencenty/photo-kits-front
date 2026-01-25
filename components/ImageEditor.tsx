@@ -267,7 +267,7 @@ export default function ImageEditor({
           <span className="text-blue-400">{getModeHint()}</span>
         </div>
         {mode === 'cover' && (
-          <p className="text-center text-red-400 text-sm mt-1">超出红色边框部分将被裁剪</p>
+          <p className="text-center text-red-400 text-sm mt-1">超出红色边框部分将被裁剪，内侧红色区域为2mm安全边距</p>
         )}
       </div>
 

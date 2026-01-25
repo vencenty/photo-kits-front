@@ -136,7 +136,17 @@ export function CoverModeEditor({
   const cropperStyle = useMemo(() => ({
     containerStyle: { backgroundColor: 'black' },
     mediaStyle: { backgroundColor: '#ffffff' },
-    cropAreaStyle: { border: '3px dashed #ef4444' },
+    cropAreaStyle: { 
+      // 斜线条纹警示边框（斑马线效果）
+      border: '8px solid transparent',
+      borderImage: `repeating-linear-gradient(
+        -45deg,
+        #ef4444,
+        #ef4444 2px,
+        rgba(239, 68, 68, 0.2) 2px,
+        rgba(239, 68, 68, 0.2) 4px
+      ) 8`,
+    },
   }), [])
 
   // 获取默认裁剪信息（用于首次保存时还没有拖动的情况）
