@@ -198,8 +198,7 @@ export interface SpecInfo {
   sizeName: string
   canvasWidth: number
   canvasHeight: number
-  photoCount: number
-  printCount: number
+  photoCount: number  // 实时统计的照片数量
   photos?: PhotoInfo[]
 }
 
@@ -210,7 +209,6 @@ export interface PhotoInfo {
   filename: string
   width: number
   height: number
-  printCount: number
   styleType: string
   isLandscape: boolean
   sortOrder: number

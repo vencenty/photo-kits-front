@@ -117,7 +117,7 @@ export default function SuccessPage() {
           sizeId: spec.sizeId,
           paperName: spec.paperName,
           sizeName: spec.sizeName,
-          totalPrintCount: spec.printCount || 0,
+          totalPrintCount: spec.photoCount || 0,  // 照片数量
           imageCount: spec.photoCount || 0,
           width: spec.canvasWidth,
           height: spec.canvasHeight,

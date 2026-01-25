@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
-import { Check, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
 import { getCropConfigForSize } from '@/lib/photo-sizes'
@@ -104,10 +104,29 @@ export default function ImageEditor({
   const [coverCropInfo, setCoverCropInfo] = useState<SimpleCropInfo | null>(null)
   const [coverOutputUrl, setCoverOutputUrl] = useState<string>('')
 
+  // 图片加载状态
+  const [isImageLoading, setIsImageLoading] = useState(true)
+
   const imageCompressOptions = useMemo(
     () => ({ quality: 70, format: 'jpg', interlace: 1 }),
     []
   )
+
+  // 监听图片加载
+  useEffect(() => {
+    if (!imageUrl) return
+    
+    setIsImageLoading(true)
+    const img = new window.Image()
+    img.onload = () => setIsImageLoading(false)
+    img.onerror = () => setIsImageLoading(false)
+    img.src = buildOssCropUrl(imageUrl, undefined, imageCompressOptions)
+    
+    return () => {
+      img.onload = null
+      img.onerror = null
+    }
+  }, [imageUrl, imageCompressOptions])
 
   // 预加载前后图片
   useImagePreload(imageUrl, allImages, currentIndex, 5)
@@ -256,6 +275,13 @@ export default function ImageEditor({
             maxHeight: '100%',
           }}
         >
+          {/* 加载状态 */}
+          {isImageLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 z-10">
+              <Loader2 className="w-10 h-10 text-pink-500 animate-spin" />
+              <p className="mt-3 text-gray-500 text-sm">图片加载中...</p>
+            </div>
+          )}
           {renderEditor()}
         </div>
       </div>

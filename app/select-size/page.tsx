@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } from 'lucide-react'
 import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
-import { addSpec, deleteSpec, createOrder, listSpecs, getOrderDetail, SpecInfo } from '@/lib/api'
+import { addSpec, deleteSpec, getOrderDetail, SpecInfo } from '@/lib/api'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
@@ -65,17 +65,14 @@ export default function SelectSizePage() {
     setIsLoading(true)
     try {
       setApiLoading(true, '加载规格列表...')
-      // 先尝试创建/获取订单
-      await createOrder(orderNumber)
       
-      // 获取订单详情（包含收货人信息和锁定状态）
+      // 只请求 orderDetail 接口（后端会自动创建订单 + 返回 specs 列表）
       const orderDetail = await getOrderDetail(orderNumber, false)
       setReceiverName(orderDetail.receiverName || '')
-      setIsOrderLocked(checkOrderLocked(orderDetail.status)) // 使用常量检查订单是否已锁定
+      setIsOrderLocked(checkOrderLocked(orderDetail.status))
       
-      // 从后端获取规格列表
-      const response = await listSpecs(orderNumber)
-      const specs = response.specs || []
+      // specs 已包含在 orderDetail 返回中，包括实时统计的 photoCount
+      const specs = orderDetail.specs || []
       
       // 从后端数据构建 AddedSize 列表
       const sizes: AddedSize[] = specs.map((spec: SpecInfo) => ({
@@ -88,7 +85,7 @@ export default function SelectSizePage() {
         width: spec.canvasWidth,
         height: spec.canvasHeight,
         imageCount: spec.photoCount || 0,
-        totalPrintCount: spec.printCount || 0,
+        totalPrintCount: spec.photoCount || 0, // 使用 photoCount 显示
       }))
       setAddedSizes(sizes)
     } catch (error) {
