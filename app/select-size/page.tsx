@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } from 'lucide-react'
-import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById } from '@/lib/photo-sizes'
+import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById, isValidPaperSizeCombination } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
 import { addSpec, deleteSpec, getOrderDetail, SpecInfo } from '@/lib/api'
 import { GlobalLoading } from '@/components/GlobalLoading'
@@ -41,6 +41,38 @@ export default function SelectSizePage() {
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
   const setApiLoading = useStore((state) => state.setApiLoading)
+
+  // 计算当前哪些尺寸应该被禁用（基于已选择的相纸）
+  const disabledSizes = useMemo(() => {
+    if (!selectedPaper) return new Set<string>()
+    const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
+    if (!paper) return new Set<string>()
+    // 返回不在 supportedSizes 中的尺寸ID
+    return new Set(SIZE_OPTIONS.filter(s => !paper.supportedSizes.includes(s.id)).map(s => s.id))
+  }, [selectedPaper])
+
+  // 计算当前哪些相纸应该被禁用（基于已选择的尺寸）
+  const disabledPapers = useMemo(() => {
+    if (!selectedSize) return new Set<string>()
+    // 返回不支持该尺寸的相纸ID
+    return new Set(PAPER_TYPES.filter(p => !p.supportedSizes.includes(selectedSize)).map(p => p.id))
+  }, [selectedSize])
+
+  // 选择相纸时，如果当前尺寸不兼容，自动清除
+  const handleSelectPaper = useCallback((paperId: string) => {
+    setSelectedPaper(paperId)
+    if (selectedSize && !isValidPaperSizeCombination(paperId, selectedSize)) {
+      setSelectedSize(null)
+    }
+  }, [selectedSize])
+
+  // 选择尺寸选项时，如果当前相纸不兼容，自动清除
+  const handleSizeOptionClick = useCallback((sizeId: string) => {
+    setSelectedSize(sizeId)
+    if (selectedPaper && !isValidPaperSizeCombination(selectedPaper, sizeId)) {
+      setSelectedPaper(null)
+    }
+  }, [selectedPaper])
 
   // 获取从查询页传来的订单号（优先从 sessionStorage，其次从 localStorage）
   useEffect(() => {
@@ -512,19 +544,25 @@ export default function SelectSizePage() {
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-gray-700 mb-3">选择相纸</h4>
                 <div className="flex flex-wrap gap-2">
-                  {PAPER_TYPES.map((paper) => (
-                    <button
-                      key={paper.id}
-                      onClick={() => setSelectedPaper(paper.id)}
-                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                        selectedPaper === paper.id
-                          ? 'bg-[#ff4d6d] text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {paper.name}
-                    </button>
-                  ))}
+                  {PAPER_TYPES.map((paper) => {
+                    const isDisabled = disabledPapers.has(paper.id)
+                    return (
+                      <button
+                        key={paper.id}
+                        onClick={() => !isDisabled && handleSelectPaper(paper.id)}
+                        disabled={isDisabled}
+                        className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                          selectedPaper === paper.id
+                            ? 'bg-[#ff4d6d] text-white shadow-sm'
+                            : isDisabled
+                              ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {paper.name}
+                      </button>
+                    )
+                  })}
                 </div>
                 {selectedPaper && (
                   <p className="mt-2 text-xs text-gray-500">
@@ -537,19 +575,25 @@ export default function SelectSizePage() {
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">选择尺寸</h4>
                 <div className="grid grid-cols-4 gap-2">
-                  {SIZE_OPTIONS.map((size) => (
-                    <button
-                      key={size.id}
-                      onClick={() => setSelectedSize(size.id)}
-                      className={`py-3 rounded-lg text-sm font-medium transition-all ${
-                        selectedSize === size.id
-                          ? 'bg-[#ff4d6d] text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {size.name}
-                    </button>
-                  ))}
+                  {SIZE_OPTIONS.map((size) => {
+                    const isDisabled = disabledSizes.has(size.id)
+                    return (
+                      <button
+                        key={size.id}
+                        onClick={() => !isDisabled && handleSizeOptionClick(size.id)}
+                        disabled={isDisabled}
+                        className={`py-3 rounded-lg text-sm font-medium transition-all ${
+                          selectedSize === size.id
+                            ? 'bg-[#ff4d6d] text-white shadow-sm'
+                            : isDisabled
+                              ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {size.name}
+                      </button>
+                    )
+                  })}
                 </div>
                 {selectedSize && (
                   <p className="mt-2 text-xs text-gray-500">
