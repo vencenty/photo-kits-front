@@ -7,6 +7,8 @@
     box-sizing: border-box;
     padding: 0;
     margin: 0;
+    /* 禁止双击缩放 */
+    touch-action: manipulation;
   }
   
   html {
@@ -18,6 +20,8 @@
     /* 防止移动端自动调整字体大小 */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* 禁止缩放 */
+    touch-action: manipulation;
   }
   
   body {

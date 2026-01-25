@@ -11,7 +11,7 @@ export default function RootLayout({
       <head>
         <title>测试 - 传图</title>
         <meta name="description" content="" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
       </head>
       <body>
         {children}
