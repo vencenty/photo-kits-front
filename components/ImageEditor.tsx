@@ -203,6 +203,9 @@ export default function ImageEditor({
           <LomoModeEditor
             imageUrl={imageUrl}
             imageId={photoData.id}
+            sourceWidth={sourceSize.width}
+            sourceHeight={sourceSize.height}
+            paperAspectRatio={paperAspectRatio}
             imageCompressOptions={imageCompressOptions}
           />
         )
