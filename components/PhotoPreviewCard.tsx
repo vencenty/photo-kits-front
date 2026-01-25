@@ -69,24 +69,21 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
         </div>
       )
     } else {
-      // Lomo 模式：模拟真实相纸，白边是显式结构
-      // 相纸层（白色背景）+ 图片区域（绝对定位创建固定白边）
+      // Lomo 模式：使用 transform: scale() 实现等比例缩放，四周白边自然形成
+      const scale = (100 - WHITE_MARGIN_PERCENT * 2) / 100 // 如果白边是 5%，scale = 0.9
       return (
-        <div className="absolute inset-0 bg-white">
-          {/* 图片区域：top/bottom 基于高度，left/right 基于宽度 */}
+        <div className="absolute inset-0 bg-white flex items-center justify-center">
           <div
-            className="absolute"
+            className="w-full h-full flex items-center justify-center"
             style={{
-              top: `${WHITE_MARGIN_PERCENT}%`,
-              right: `${WHITE_MARGIN_PERCENT}%`,
-              bottom: `${WHITE_MARGIN_PERCENT}%`,
-              left: `${WHITE_MARGIN_PERCENT}%`,
+              transform: `scale(${scale})`,
+              transformOrigin: 'center',
             }}
           >
             <img
               src={previewUrl}
               alt={image.filename || '照片'}
-              className="w-full h-full object-contain"
+              className="max-w-full max-h-full object-contain"
             />
           </div>
         </div>
