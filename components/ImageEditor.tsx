@@ -188,7 +188,6 @@ export default function ImageEditor({
           <FullModePreview
             imageUrl={imageUrl}
             imageId={photoData.id}
-            paperAspectRatio={paperAspectRatio}
           />
         )
       case 'lomo':
@@ -196,7 +195,6 @@ export default function ImageEditor({
           <LomoModePreview
             imageUrl={imageUrl}
             imageId={photoData.id}
-            paperAspectRatio={paperAspectRatio}
           />
         )
       default:
