@@ -156,11 +156,18 @@ export default function ImageEditor({
           sourceWidth: sourceSize.width,
           sourceHeight: sourceSize.height,
           styleType: 'cover',
+          // 计算百分比坐标
+          croppedAreaPercent: {
+            x: (offsetX / sourceSize.width) * 100,
+            y: (offsetY / sourceSize.height) * 100,
+            width: (cropWidth / sourceSize.width) * 100,
+            height: (cropHeight / sourceSize.height) * 100,
+          },
         }
         outputUrl = buildOssCropUrl(imageUrl, cropInfo)
       }
     } else {
-      // full 或 lomo 模式
+      // full 或 lomo 模式（使用整张图片，不需要 croppedAreaPercent）
       cropInfo = {
         offsetX: 0,
         offsetY: 0,
@@ -188,6 +195,7 @@ export default function ImageEditor({
             paperAspectRatio={paperAspectRatio}
             imageCompressOptions={imageCompressOptions}
             onCropChange={handleCoverCropChange}
+            initialCropInfo={photoData.cropInfo}
           />
         )
       case 'full':

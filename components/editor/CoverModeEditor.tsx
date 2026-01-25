@@ -13,6 +13,8 @@ interface CoverModeEditorProps {
   paperAspectRatio: number
   imageCompressOptions: { quality: number; format: string; interlace: number }
   onCropChange: (cropInfo: SimpleCropInfo | null, outputUrl: string) => void
+  /** 初始裁剪信息（用于恢复之前的裁剪位置） */
+  initialCropInfo?: SimpleCropInfo | null
 }
 
 /**
@@ -48,13 +50,14 @@ export function CoverModeEditor({
   paperAspectRatio,
   imageCompressOptions,
   onCropChange,
+  initialCropInfo,
 }: CoverModeEditorProps) {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [croppedAreaPercent, setCroppedAreaPercent] = useState<Area | null>(null)
 
-  // 根据图片方向动态调整裁剪框比例
+  // 根据图片方向动态调整裁剪框比例（提前计算，供后面使用）
   const cropAspectRatio = useMemo(() => {
     if (!sourceWidth || !sourceHeight) return paperAspectRatio
     const imageRatio = sourceWidth / sourceHeight
@@ -66,6 +69,40 @@ export function CoverModeEditor({
     }
     return paperAspectRatio
   }, [sourceWidth, sourceHeight, paperAspectRatio])
+
+  // 用于恢复之前的裁剪位置（官方推荐使用百分比坐标）
+  // 如果没有保存的位置，计算默认居中的百分比坐标
+  const initialCroppedAreaPercentages = useMemo(() => {
+    // 优先使用保存的百分比坐标
+    if (initialCropInfo?.croppedAreaPercent) {
+      return initialCropInfo.croppedAreaPercent
+    }
+    
+    // 没有保存的位置时，计算默认居中的百分比坐标
+    if (sourceWidth && sourceHeight) {
+      const { cropWidth, cropHeight } = calculateCoverCropSize(sourceWidth, sourceHeight, cropAspectRatio)
+      const offsetX = (sourceWidth - cropWidth) / 2
+      const offsetY = (sourceHeight - cropHeight) / 2
+      return {
+        x: (offsetX / sourceWidth) * 100,
+        y: (offsetY / sourceHeight) * 100,
+        width: (cropWidth / sourceWidth) * 100,
+        height: (cropHeight / sourceHeight) * 100,
+      }
+    }
+    
+    return undefined
+  }, [initialCropInfo, sourceWidth, sourceHeight, cropAspectRatio])
+
+  // 生成唯一 key，确保在 imageId 或 initialCropInfo 变化时组件重新挂载
+  const cropperKey = useMemo(() => {
+    if (initialCropInfo?.croppedAreaPercent) {
+      const { x, y } = initialCropInfo.croppedAreaPercent
+      return `cropper-${imageId}-${x.toFixed(2)}-${y.toFixed(2)}`
+    }
+    // 没有保存的位置时，使用 imageId 作为 key，确保切换图片时重新渲染
+    return `cropper-${imageId}-center`
+  }, [imageId, initialCropInfo])
 
   const onCropComplete = useCallback((area: Area, areaPixels: Area) => {
     setCroppedAreaPercent(area)
@@ -123,7 +160,7 @@ export function CoverModeEditor({
 
   return (
     <Cropper
-      key={`cropper-${imageId}`}
+      key={cropperKey}
       image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
       crop={crop}
       zoom={zoom}
@@ -137,6 +174,7 @@ export function CoverModeEditor({
       onZoomChange={setZoom}
       onCropComplete={onCropComplete}
       style={cropperStyle}
+      initialCroppedAreaPercentages={initialCroppedAreaPercentages}
     />
   )
 }

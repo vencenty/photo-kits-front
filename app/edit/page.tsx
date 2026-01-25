@@ -118,6 +118,15 @@ function EditPageContent() {
             // full和lomo模式使用原图尺寸（已经是默认值了）
           }
 
+          // 🎯 恢复百分比坐标：优先使用后端保存的，否则从像素坐标反向计算
+          const backendCroppedAreaPercent = (response.photo.cropInfo as any).croppedAreaPercent
+          const calculatedCroppedAreaPercent = response.photo.cropInfo.sourceWidth && response.photo.cropInfo.sourceHeight ? {
+            x: (response.photo.cropInfo.offsetX / response.photo.cropInfo.sourceWidth) * 100,
+            y: (response.photo.cropInfo.offsetY / response.photo.cropInfo.sourceHeight) * 100,
+            width: (cropWidth / response.photo.cropInfo.sourceWidth) * 100,
+            height: (cropHeight / response.photo.cropInfo.sourceHeight) * 100,
+          } : undefined
+
           simpleCropInfo = {
             offsetX: response.photo.cropInfo.offsetX,
             offsetY: response.photo.cropInfo.offsetY,
@@ -127,7 +136,7 @@ function EditPageContent() {
             sourceHeight: response.photo.cropInfo.sourceHeight,
             styleType: (response.photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
             // 🎯 恢复百分比坐标（官方推荐用于恢复裁剪位置）
-            croppedAreaPercent: (response.photo.cropInfo as any).croppedAreaPercent,
+            croppedAreaPercent: backendCroppedAreaPercent || calculatedCroppedAreaPercent,
           }
         }
 
@@ -348,6 +357,8 @@ function EditPageContent() {
           rotateAngle: 0, // 不需要旋转，固定为 0
           originalUrl: image?.originalUrl || '',
           styleType: saveData.cropInfo.styleType,
+          // 🎯 保存百分比坐标，用于恢复裁剪位置（官方推荐）
+          croppedAreaPercent: saveData.cropInfo.croppedAreaPercent,
         } : undefined,
         outputUrl: saveData.outputUrl,
       })

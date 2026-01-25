@@ -180,6 +180,13 @@ export interface CropInfo {
   rotateAngle: number // 旋转角度（仅0/90/180/270°）
   originalUrl: string // 原图地址（服务端能访问的路径）
   styleType?: string // 样式类型（可选）
+  // 🎯 百分比坐标（用于恢复裁剪位置，官方推荐）
+  croppedAreaPercent?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
 }
 
 export interface SpecInfo {

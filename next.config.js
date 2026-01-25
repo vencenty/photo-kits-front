@@ -13,6 +13,13 @@ const nextConfig = {
   // basePath: '/your-sub-path',
   // assetPrefix: '/your-sub-path',
   
+  // 🎯 生产构建时去除 console 和 debugger
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'], // 保留 console.error 和 console.warn
+    } : false,
+  },
+  
   // 处理 konva 在服务器端的导入问题
   webpack: (config) => {
     // 在所有环境中将 canvas 设为外部模块
