@@ -8,13 +8,15 @@ import { buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
 interface CoverModeEditorProps {
   imageUrl: string
   imageId: string
-  sourceWidth: number
-  sourceHeight: number
+  sourceWidth: number   // 原图宽度（用于计算真实裁剪坐标）
+  sourceHeight: number  // 原图高度（用于计算真实裁剪坐标）
   paperAspectRatio: number
   imageCompressOptions: { quality: number; format: string; interlace: number }
   onCropChange: (cropInfo: SimpleCropInfo | null, outputUrl: string) => void
   /** 初始裁剪信息（用于恢复之前的裁剪位置） */
   initialCropInfo?: SimpleCropInfo | null
+  /** 编辑用缩略图短边尺寸（默认 800px，加载更快） */
+  thumbnailShortEdge?: number
 }
 
 /**
@@ -51,6 +53,7 @@ export function CoverModeEditor({
   imageCompressOptions,
   onCropChange,
   initialCropInfo,
+  thumbnailShortEdge = 800,  // 默认短边 800px，平衡清晰度和加载速度
 }: CoverModeEditorProps) {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
@@ -108,12 +111,19 @@ export function CoverModeEditor({
     setCroppedAreaPercent(area)
     setCroppedAreaPixels(areaPixels)
 
-    // 生成裁剪信息
+    // 🎯 关键：使用百分比坐标计算原图的像素坐标
+    // 这样无论在缩略图还是原图上操作，得到的原图裁剪坐标都是准确的
+    const offsetX = Math.round((area.x / 100) * sourceWidth)
+    const offsetY = Math.round((area.y / 100) * sourceHeight)
+    const cropWidth = Math.round((area.width / 100) * sourceWidth)
+    const cropHeight = Math.round((area.height / 100) * sourceHeight)
+
+    // 生成裁剪信息（基于原图尺寸）
     const cropInfo: SimpleCropInfo = {
-      offsetX: Math.round(areaPixels.x),
-      offsetY: Math.round(areaPixels.y),
-      cropWidth: Math.round(areaPixels.width),
-      cropHeight: Math.round(areaPixels.height),
+      offsetX,
+      offsetY,
+      cropWidth,
+      cropHeight,
       sourceWidth,
       sourceHeight,
       styleType: 'cover',
@@ -158,10 +168,18 @@ export function CoverModeEditor({
     }
   }, [croppedAreaPixels, croppedAreaPercent, sourceWidth, sourceHeight, cropAspectRatio])
 
+  // 构建编辑用缩略图 URL（短边缩放 + 质量压缩）
+  const thumbnailUrl = useMemo(() => {
+    return buildOssCropUrl(imageUrl, undefined, {
+      shortWidth: thumbnailShortEdge,
+      ...imageCompressOptions,
+    })
+  }, [imageUrl, thumbnailShortEdge, imageCompressOptions])
+
   return (
     <Cropper
       key={cropperKey}
-      image={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
+      image={thumbnailUrl}
       crop={crop}
       zoom={zoom}
       aspect={cropAspectRatio}

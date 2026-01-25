@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
-import { buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
+import { buildOssCropUrl, SimpleCropInfo, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
 import { getCropConfigForSize } from '@/lib/photo-sizes'
 import { useImagePreload } from '@/lib/use-image-preload'
 import {
@@ -112,7 +112,7 @@ export default function ImageEditor({
     []
   )
 
-  // 监听图片加载
+  // 监听图片加载（使用缩略图）
   useEffect(() => {
     if (!imageUrl) return
     
@@ -120,7 +120,11 @@ export default function ImageEditor({
     const img = new window.Image()
     img.onload = () => setIsImageLoading(false)
     img.onerror = () => setIsImageLoading(false)
-    img.src = buildOssCropUrl(imageUrl, undefined, imageCompressOptions)
+    // 使用短边缩略图加载，大幅提升加载速度
+    img.src = buildOssCropUrl(imageUrl, undefined, {
+      shortWidth: EDITOR_THUMBNAIL_SHORT_EDGE,
+      ...imageCompressOptions,
+    })
     
     return () => {
       img.onload = null
@@ -215,6 +219,7 @@ export default function ImageEditor({
             imageCompressOptions={imageCompressOptions}
             onCropChange={handleCoverCropChange}
             initialCropInfo={photoData.cropInfo}
+            thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
           />
         )
       case 'full':
@@ -223,6 +228,7 @@ export default function ImageEditor({
             imageUrl={imageUrl}
             imageId={photoData.id}
             imageCompressOptions={imageCompressOptions}
+            thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
           />
         )
       case 'lomo':
@@ -234,6 +240,7 @@ export default function ImageEditor({
             sourceHeight={sourceSize.height}
             paperAspectRatio={paperAspectRatio}
             imageCompressOptions={imageCompressOptions}
+            thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
           />
         )
     }

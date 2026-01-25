@@ -17,6 +17,8 @@ interface LomoModeEditorProps {
     format: string
     interlace: number
   }
+  /** 编辑用缩略图短边尺寸（默认 800px） */
+  thumbnailShortEdge?: number
 }
 
 export function LomoModeEditor({
@@ -26,6 +28,7 @@ export function LomoModeEditor({
   sourceHeight,
   paperAspectRatio,
   imageCompressOptions,
+  thumbnailShortEdge = 800,
 }: LomoModeEditorProps) {
   // 计算自适应画布比例：根据照片方向自动调整画布方向，最小化留白
   const adaptiveCanvasRatio = useMemo(() => {
@@ -43,6 +46,14 @@ export function LomoModeEditor({
     return paperAspectRatio
   }, [sourceWidth, sourceHeight, paperAspectRatio])
 
+  // 构建编辑用缩略图 URL
+  const thumbnailUrl = useMemo(() => {
+    return buildOssCropUrl(imageUrl, undefined, {
+      shortWidth: thumbnailShortEdge,
+      ...imageCompressOptions,
+    })
+  }, [imageUrl, thumbnailShortEdge, imageCompressOptions])
+
   return (
     <div className="absolute inset-0 bg-neutral-200 flex items-center justify-center">
       {/* 画布外层：限制最大显示区域 */}
@@ -59,7 +70,7 @@ export function LomoModeEditor({
         >
           <img
             key={`lomo-img-${imageId}`}
-            src={buildOssCropUrl(imageUrl, undefined, imageCompressOptions)}
+            src={thumbnailUrl}
             className="w-full h-full object-contain"
             alt="preview"
           />
