@@ -63,11 +63,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 63.5, 
     "height": 89, 
     "ratio": 63.5/89,
-    // 3寸默认四周留白，只能选择留白和居中裁剪
-    "cropConfig": {
-      "defaultMode": "lomo",
-      "availableModes": ["lomo", "cover"]
-    }
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "4inch", 
@@ -75,11 +71,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 76, 
     "height": 102, 
     "ratio": 76/102,
-    // 4寸默认四周留白，只能选择留白和居中裁剪
-    "cropConfig": {
-      "defaultMode": "lomo",
-      "availableModes": ["lomo", "cover"]
-    }
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "square", 
@@ -87,71 +79,71 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 102, 
     "height": 102, 
     "ratio": 102/102,
-    // 4寸默认四周留白，只能选择留白和居中裁剪
-    "cropConfig": {
-      "defaultMode": "lomo",
-      "availableModes": ["lomo", "cover"]
-    }
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "5inch", 
     "name": "5寸", 
     "width": 89, 
     "height": 127, 
-    "ratio": 89/127 
-    // 5寸使用默认配置：所有模式可选，默认cover
+    "ratio": 89/127,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "large5inch", 
     "name": "大5寸", 
     "width": 95, 
     "height": 127, 
-    "ratio": 95/127 
-    // 大5寸使用默认配置：所有模式可选，默认cover
+    "ratio": 95/127,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "6inch", 
     "name": "6寸", 
     "width": 102, 
     "height": 152, 
-    "ratio": 102/152 
-    // 6寸使用默认配置：所有模式可选，默认cover
+    "ratio": 102/152,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "large6inch", 
     "name": "大6寸", 
     "width": 114, 
     "height": 152, 
-    "ratio": 114/152 
-    // 大6寸使用默认配置：所有模式可选，默认cover
+    "ratio": 114/152,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "7inch", 
     "name": "7寸", 
     "width": 127, 
     "height": 178, 
-    "ratio": 127/178 
+    "ratio": 127/178,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "8inch", 
     "name": "8寸", 
     "width": 152, 
     "height": 203, 
-    "ratio": 152/203 
+    "ratio": 152/203,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "10inch", 
     "name": "10寸", 
     "width": 203, 
     "height": 254, 
-    "ratio": 203/254 
+    "ratio": 203/254,
+    // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
     "id": "A4", 
     "name": "A4", 
     "width": 210, 
     "height": 297, 
-    "ratio": 210/297 
+    "ratio": 210/297,
+    // 使用默认配置：四周留白 + 居中裁剪
   }
 ]
 
@@ -260,6 +252,17 @@ export function getPhotoSizeById(id: string): PhotoSize | undefined {
 }
 
 /**
+ * 默认裁剪配置
+ * - 默认模式：四周留白（lomo）
+ * - 可用模式：四周留白 + 居中裁剪（暂不开放打印整图）
+ * - 如需为某尺寸开放"打印整图"模式，在该尺寸的 cropConfig 中单独配置 availableModes 包含 'full'
+ */
+const DEFAULT_CROP_CONFIG: CropStyleConfig = {
+  defaultMode: 'lomo',
+  availableModes: ['lomo', 'cover']
+}
+
+/**
  * 获取尺寸的裁剪配置
  * @param fullSizeId 完整的尺寸ID（如：fuji-glossy-5inch）
  * @returns 裁剪配置，如果没有配置则返回默认值
@@ -267,20 +270,13 @@ export function getPhotoSizeById(id: string): PhotoSize | undefined {
 export function getCropConfigForSize(fullSizeId: string): CropStyleConfig {
   const parsed = parseSizeId(fullSizeId)
   if (!parsed) {
-    // 默认配置：所有模式可选，默认cover
-    return {
-      defaultMode: 'cover',
-      availableModes: ['cover', 'full', 'lomo']
-    }
+    return DEFAULT_CROP_CONFIG
   }
 
   const sizeOption = SIZE_OPTIONS.find(s => s.id === parsed.sizeId)
   
   // 如果尺寸配置了裁剪样式，使用配置的值，否则使用默认值
-  return sizeOption?.cropConfig || {
-    defaultMode: 'cover',
-    availableModes: ['cover', 'full', 'lomo']
-  }
+  return sizeOption?.cropConfig || DEFAULT_CROP_CONFIG
 }
 
 /**
