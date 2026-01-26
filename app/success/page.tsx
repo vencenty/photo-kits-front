@@ -268,7 +268,7 @@ export default function SuccessPage() {
               animation: 'blink 1.5s ease-in-out infinite, pulse-glow 2s ease-in-out infinite',
             }}
           >
-           确认无问题请点击锁单，店铺进入制作流程。未锁单之前可以继续修改照片。
+           确认无问题请点击锁单，店铺进入制作流程。锁单后无法修改照片。
           </p>
 
           {/* 订单信息 */}
@@ -368,7 +368,7 @@ export default function SuccessPage() {
             {isLocked ? (
               <div className="w-full py-3 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
                 <CheckCircle2 className="w-5 h-5" />
-                订单已提交，等待审核
+                订单已锁定，正在制作中
               </div>
             ) : (
               <button

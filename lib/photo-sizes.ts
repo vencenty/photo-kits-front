@@ -27,7 +27,7 @@ export const PAPER_TYPES: PaperType[] = [
     id: 'pantone-glossy',
     name: '泛太克光面',
     description: '专业级色彩还原',
-    supportedSizes: ['3inch', '4inch', '5inch', '6inch',  '10inch', ] // 不支持3寸和4寸
+    supportedSizes: ['3inch', '4inch', '5inch', '6inch', '8inch', '10inch', ] // 不支持3寸和4寸
   },
 ]
 
