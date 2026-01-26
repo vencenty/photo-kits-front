@@ -384,7 +384,7 @@ export default function SuccessPage() {
                 ) : (
                   <>
                     <Image className="w-5 h-5" />
-                    确认订单，提交制作
+                    锁定订单，确认制作
                   </>
                 )}
               </button>
