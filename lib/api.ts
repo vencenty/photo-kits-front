@@ -682,3 +682,84 @@ export async function lockOrder(orderNo: string): Promise<{ code: number; messag
     method: 'PUT',
   })
 }
+
+// ==================== Admin API ====================
+
+export interface AdminOrderListItem {
+  id: number
+  orderSn: string
+  receiver: string
+  totalQuantity: number
+  status: number
+  syncStatus: number
+  submitTime: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdminOrderListRequest {
+  page?: number
+  pageSize?: number
+  status?: number
+  orderSn?: string
+}
+
+export interface AdminOrderListResponse {
+  list: AdminOrderListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AdminOrderDetailResponse {
+  id: number
+  orderSn: string
+  receiver: string
+  totalQuantity: number
+  status: number
+  syncStatus: number
+  submitTime: string
+  remark: string
+  createdAt: string
+  updatedAt: string
+  photos?: PhotoDetail[]
+  specs?: SpecInfo[]
+}
+
+export interface AdminOrderDeleteResponse {
+  success: boolean
+  message: string
+}
+
+/**
+ * Admin 订单列表
+ */
+export async function getAdminOrderList(params: AdminOrderListRequest = {}): Promise<AdminOrderListResponse> {
+  return request<AdminOrderListResponse>('/api/admin/order/list', {
+    method: 'GET',
+    params: {
+      page: String(params.page || 1),
+      pageSize: String(params.pageSize || 20),
+      ...(params.status !== undefined && { status: String(params.status) }),
+      ...(params.orderSn && { orderSn: params.orderSn }),
+    },
+  })
+}
+
+/**
+ * Admin 订单详情
+ */
+export async function getAdminOrderDetail(orderSn: string): Promise<AdminOrderDetailResponse> {
+  return request<AdminOrderDetailResponse>(`/api/admin/order/detail/${orderSn}`, {
+    method: 'GET',
+  })
+}
+
+/**
+ * Admin 删除订单
+ */
+export async function deleteAdminOrder(orderSn: string): Promise<AdminOrderDeleteResponse> {
+  return request<AdminOrderDeleteResponse>(`/api/admin/order/delete/${orderSn}`, {
+    method: 'DELETE',
+  })
+}

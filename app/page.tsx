@@ -115,10 +115,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 提示文字 */}
-        <p className="text-center text-sm text-gray-500 px-4">
-          tips：请在订单支付成功1分钟后查询制作
-        </p>
       </div>
 
       {/* 全局 Loading */}
