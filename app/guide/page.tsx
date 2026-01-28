@@ -122,14 +122,14 @@ function GuidePageContent() {
           <textarea
             value={receiverName}
             onChange={(e) => setReceiverName(e.target.value)}
-            placeholder="请输入收货人姓名或粘贴完整收货地址"
+            placeholder="请输入收货人姓名"
             className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-[#ff4d6d] focus:outline-none resize-none disabled:bg-gray-100 disabled:text-gray-500"
             rows={4}
             disabled={isOrderLocked}
           />
           
           <p className="mt-2 text-xs text-gray-400">
-            💡 提示：可以直接粘贴完整的收货地址
+            💡 提示：要和淘宝收货人姓名一致哦～
           </p>
         </div>
 
