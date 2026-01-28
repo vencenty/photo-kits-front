@@ -541,8 +541,8 @@ function UploadPageContent() {
       return
     }
 
-    // 文件大小限制：20MB
-    const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+    // 文件大小限制：50MB
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
     const validFiles: File[] = []
     const oversizedFiles: string[] = []
     
@@ -558,7 +558,7 @@ function UploadPageContent() {
     if (oversizedFiles.length > 0) {
       const fileList = oversizedFiles.slice(0, 5).join('\n')
       const moreText = oversizedFiles.length > 5 ? `\n...等${oversizedFiles.length}个文件` : ''
-      alert(`以下文件超过20MB限制，已跳过：\n${fileList}${moreText}`)
+      alert(`以下文件超过50MB限制，已跳过：\n${fileList}${moreText}`)
     }
     
     if (validFiles.length === 0) {
