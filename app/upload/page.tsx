@@ -1003,10 +1003,8 @@ function UploadPageContent() {
           croppedAreaPercent,
         }
 
-        // 生成带裁切参数的 outputUrl（包含旋转参数，确保与前端显示一致）
-        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {
-          isLandscape: img.isLandscape, // 横图需要旋转90度
-        })
+        // 生成提交给服务端的 outputUrl（不带 rotate，旋转由服务端/sync 按 cropInfo.rotateAngle 处理）
+        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {})
 
         // 准备传给后端的数据
         const cropInfoForServer: CropInfo = {
@@ -1040,10 +1038,8 @@ function UploadPageContent() {
           styleType: mode,
         } : undefined
 
-        // 生成 outputUrl（横图需要旋转90度，确保与前端显示一致）
-        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {
-          isLandscape: img.isLandscape,
-        })
+        // 生成提交给服务端的 outputUrl（不带 rotate）
+        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {})
 
         photosWithCropInfo.push({
           photoId: id,

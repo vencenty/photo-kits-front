@@ -37,11 +37,11 @@ export default function Home() {
         // 未查看引导页，跳转到 guide 页面
         router.push(`/guide?orderNo=${trimmedOrder}`)
       }
-    } catch (error) {
-      console.error('查询订单失败:', error)
-      // 查询失败时，默认跳转到 guide 页面（可能是新订单）
-      sessionStorage.setItem('pending-order-number', trimmedOrder)
-      router.push(`/guide?orderNo=${trimmedOrder}`)
+    } catch (err) {
+      console.error('查询订单失败:', err)
+      // 查询失败时停留在当前页，展示错误信息
+      const message = err instanceof Error ? err.message : '查询订单失败，请检查订单编号后重试'
+      setError(message)
     } finally {
       setIsLoading(false)
     }
@@ -80,7 +80,7 @@ export default function Home() {
                   setError('')
                 }}
                 onKeyPress={handleKeyPress}
-                placeholder="请输入订单编号或手机号"
+                placeholder="请输入订单编号"
                 className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent transition-all"
                 disabled={isLoading}
               />

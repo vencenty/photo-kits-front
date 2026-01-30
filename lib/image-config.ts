@@ -14,6 +14,8 @@
  * - 格式转换（format）会消耗额外的处理时间
  */
 
+import { toCdnUrl } from '@/lib/api'
+
 /**
  * OSS 图片处理配置
  */
@@ -155,6 +157,9 @@ export function applyOssImageCompress(url: string, config: OssImageConfig, isLan
   if (url.startsWith('data:') || url.startsWith('blob:')) {
     return url
   }
+
+  // 展示走 CDN 加速
+  url = toCdnUrl(url)
 
   // 判断是否为 OSS URL
   const isOssUrl = url.includes('aliyuncs.com') || 
@@ -346,6 +351,9 @@ export function buildOssCropUrl(
   if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
     return originalUrl
   }
+
+  // 展示走 CDN 加速
+  originalUrl = toCdnUrl(originalUrl)
 
   // 判断是否为 OSS URL
   const isOssUrl = originalUrl.includes('aliyuncs.com') ||

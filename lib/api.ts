@@ -257,10 +257,54 @@ export async function getOssSignature(): Promise<OssSignature> {
   return signature
 }
 
-// 固定代理域名，用于图片回显
+// 固定代理域名，用于上传后存储的 URL（后端/数据库中的地址）
 // const OSS_PROXY_DOMAIN = 'https://oss-proxy.vencenty.cc'
 const OSS_PROXY_DOMAIN = 'https://bucket.vencenty.cc'
 // const OSS_PROXY_DOMAIN = 'https://photo-kits-storage-hangzhou.oss-cn-hangzhou.aliyuncs.com'
+
+// CDN 域名，用于前端展示时加速访问（将 OSS 域名替换为 CDN）
+const IMG_CDN_DOMAIN = 'https://img.vencenty.cc'
+
+/**
+ * 将 OSS 图片 URL 转为 CDN URL，用于加速展示
+ * 仅替换已知的 OSS 源站域名，其它 URL 原样返回
+ */
+export function toCdnUrl(url: string): string {
+  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url
+  try {
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase()
+    const isOss =
+      host === 'bucket.vencenty.cc' ||
+      host === 'oss-proxy.vencenty.cc'
+    if (isOss) {
+      const pathAndSearch = u.pathname + u.search
+      return IMG_CDN_DOMAIN + pathAndSearch
+    }
+  } catch {
+    // 非合法 URL 则原样返回
+  }
+  return url
+}
+
+/**
+ * 将 CDN/任意 OSS 展示 URL 转回 bucket 源站 URL，用于发给服务端存储
+ * 服务端下载用 bucket 地址可避免走 CDN 产生费用
+ */
+export function toBucketUrl(url: string): string {
+  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url
+  try {
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase()
+    const pathAndSearch = u.pathname + u.search
+    if (host === 'img.vencenty.cc' || host.endsWith('.aliyuncs.com') || host === 'oss-proxy.vencenty.cc') {
+      return OSS_PROXY_DOMAIN + pathAndSearch
+    }
+  } catch {
+    // 非合法 URL 则原样返回
+  }
+  return url
+}
 
 /**
  * 上传选项
@@ -360,16 +404,16 @@ export async function uploadToOss(
 }
 
 /**
- * 获取图片完整 URL（用于显示）
+ * 获取图片完整 URL（用于显示，走 CDN 加速）
  */
 export function getImageUrl(path: string): string {
   if (!path) return ''
-  // 如果已经是完整 URL，直接返回
+  // 如果已经是完整 URL，转为 CDN URL 后返回
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
-    return path
+    return toCdnUrl(path)
   }
-  // 拼接代理域名
-  return `${OSS_PROXY_DOMAIN}/${path}`
+  // 相对路径：用 CDN 域名拼接
+  return `${IMG_CDN_DOMAIN}/${path.replace(/^\//, '')}`
 }
 
 // ==================== 订单相关 ====================
@@ -523,11 +567,19 @@ export interface AddPhotoParams {
 /**
  * 添加照片到订单
  * 后端路由: POST /api/order/photo
+ * 发给服务端的 url 会转为 bucket 源站地址
  */
 export async function addPhotoToOrder(params: AddPhotoParams): Promise<{ id: number; photoId: string; message: string }> {
+  const body: AddPhotoParams = {
+    ...params,
+    url: toBucketUrl(params.url),
+    cropInfo: params.cropInfo?.originalUrl
+      ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
+      : params.cropInfo,
+  }
   return request<{ id: number; photoId: string; message: string }>('/api/order/photo', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   })
 }
 
@@ -543,11 +595,19 @@ export interface UpdatePhotoParams {
 /**
  * 更新照片
  * 后端路由: PUT /api/order/photo
+ * 发给服务端的 outputUrl 会转为 bucket 源站地址
  */
 export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message: string }> {
+  const body: UpdatePhotoParams = {
+    ...params,
+    outputUrl: params.outputUrl ? toBucketUrl(params.outputUrl) : params.outputUrl,
+    cropInfo: params.cropInfo?.originalUrl
+      ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
+      : params.cropInfo,
+  }
   return request<{ message: string }>('/api/order/photo', {
     method: 'PUT',
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   })
 }
 
@@ -569,11 +629,27 @@ export interface BatchUpdatePhotosParams {
  * 支持两种模式：
  * 1. 简单模式：只传 photoIds 和 cropMode，服务端计算裁切坐标
  * 2. 精确模式：传 photos 数组，前端已计算好 cropInfo 和 outputUrl，服务端直接使用
+ * 
+ * 发给服务端的 URL 会统一转为 bucket 源站地址，避免服务端下载走 CDN 产生费用
  */
 export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promise<{ updatedCount: number; message: string }> {
+  const body: BatchUpdatePhotosParams = {
+    photoIds: params.photoIds,
+    cropMode: params.cropMode,
+    photos: params.photos?.map((p) => ({
+      photoId: p.photoId,
+      cropInfo: p.cropInfo
+        ? {
+            ...p.cropInfo,
+            originalUrl: p.cropInfo.originalUrl ? toBucketUrl(p.cropInfo.originalUrl) : p.cropInfo.originalUrl,
+          }
+        : p.cropInfo,
+      outputUrl: p.outputUrl ? toBucketUrl(p.outputUrl) : p.outputUrl,
+    })),
+  }
   return request<{ updatedCount: number; message: string }>('/api/order/photos/batch', {
     method: 'PUT',
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   })
 }
 
