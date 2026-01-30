@@ -72,8 +72,6 @@ function UploadPageContent() {
   const [ossSignature, setOssSignature] = useState<OssSignature | null>(null)
   const loadedRef = useRef(false) // 防止重复加载
   const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁单
-  // 数量输入框：当前正在编辑的卡片 id 与输入值，blur 时提交
-  const [editingQuantity, setEditingQuantity] = useState<{ id: string; value: string } | null>(null)
 
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
@@ -809,18 +807,24 @@ function UploadPageContent() {
   }
 
   const handleCountChange = async (id: string, delta: number) => {
+    // 检查订单是否已锁单
     if (isOrderLocked) {
       alert('订单已锁单，无法修改照片数量。如需修改，请联系客服。')
       return
     }
+    
     const image = images.find((img) => img.id === id)
     if (image) {
-      const newCount = Math.max(1, Math.min(9999, image.printCount + delta))
+      const newCount = Math.max(1, image.printCount + delta)
       updateImage(id, { printCount: newCount })
-      setEditingQuantity((prev) => (prev?.id === id ? null : prev))
+      
+      // 同步到后端
       try {
         setApiLoading(true, '更新数量中...')
-        await updatePhoto({ photoId: id, quantity: newCount })
+        await updatePhoto({
+          photoId: id,
+          quantity: newCount,
+        })
       } catch (error) {
         console.error('更新照片数量失败:', error)
       } finally {
@@ -828,31 +832,6 @@ function UploadPageContent() {
       }
     }
   }
-
-  // 用户输入具体数量后 blur 或 Enter 时提交，范围 1–9999
-  const commitQuantityInput = useCallback(
-    async (id: string, raw: string) => {
-      setEditingQuantity(null)
-      if (isOrderLocked) return
-      const num = parseInt(raw.trim(), 10)
-      if (Number.isNaN(num) || num < 1) {
-        return
-      }
-      const newCount = Math.min(9999, Math.max(1, num))
-      const image = images.find((img) => img.id === id)
-      if (!image || image.printCount === newCount) return
-      updateImage(id, { printCount: newCount })
-      try {
-        setApiLoading(true, '更新数量中...')
-        await updatePhoto({ photoId: id, quantity: newCount })
-      } catch (error) {
-        console.error('更新照片数量失败:', error)
-      } finally {
-        setApiLoading(false, '')
-      }
-    },
-    [images, isOrderLocked, updateImage]
-  )
 
   const handleEdit = (id: string) => {
     // 检查订单是否已锁单
@@ -1341,41 +1320,19 @@ function UploadPageContent() {
                                     e.stopPropagation()
                                     handleCountChange(image.id, -1)
                                   }}
-                                  className="w-7 h-7 flex items-center justify-center text-gray-600 shrink-0"
+                                  className="w-7 h-7 flex items-center justify-center text-gray-600"
                                 >
                                   <Minus className="w-4 h-4" />
                                 </button>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  className="w-10 text-center text-sm font-medium text-gray-700 bg-transparent border-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                  value={
-                                    editingQuantity?.id === image.id
-                                      ? editingQuantity.value
-                                      : String(image.printCount)
-                                  }
-                                  onChange={(e) => {
-                                    const v = e.target.value.replace(/\D/g, '').slice(0, 6)
-                                    setEditingQuantity({ id: image.id, value: v })
-                                  }}
-                                  onFocus={(e) => {
-                                    e.stopPropagation()
-                                    setEditingQuantity({ id: image.id, value: String(image.printCount) })
-                                  }}
-                                  onBlur={(e) => commitQuantityInput(image.id, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.currentTarget.blur()
-                                    }
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
+                                <span className="w-6 text-center text-sm font-medium text-gray-700">
+                                  {image.printCount}
+                                </span>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleCountChange(image.id, 1)
                                   }}
-                                  className="w-7 h-7 flex items-center justify-center text-gray-600 shrink-0"
+                                  className="w-7 h-7 flex items-center justify-center text-gray-600"
                                 >
                                   <Plus className="w-4 h-4" />
                                 </button>

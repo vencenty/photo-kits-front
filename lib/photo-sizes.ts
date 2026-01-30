@@ -15,13 +15,13 @@ export const PAPER_TYPES: PaperType[] = [
     id: 'fuji-glossy',
     name: '富士光面',
     description: '光泽亮丽，色彩鲜艳',
-    supportedSizes: [ '5inch', 'large5inch','square5inch', '6inch', 'large6inch', '7inch', '8inch',  'A4']
+    supportedSizes: [ '5inch', 'large5inch','square5inch', '6inch','square6inch' ,'large6inch', '7inch', '8inch',  'A4']
   },
   {
     id: 'fuji-matte',
     name: '富士绒面',
     description: '柔和质感，不反光',
-    supportedSizes: ['5inch', 'large5inch','square5inch', '6inch', 'large6inch', '7inch', '8inch',  'A4']
+    supportedSizes: ['5inch', 'large5inch','square5inch', '6inch','square6inch' ,'large6inch', '7inch', '8inch',  'A4']
   },
   {
     id: 'pantone-glossy',
@@ -103,6 +103,14 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 102, 
     "height": 152, 
     "ratio": 102/152,
+    // 使用默认配置：四周留白 + 居中裁剪
+  },
+  { 
+    "id": "square6inch", 
+    "name": "6寸正方形", 
+    "width": 152, 
+    "height": 152, 
+    "ratio": 152/152,
     // 使用默认配置：四周留白 + 居中裁剪
   },
   { 
