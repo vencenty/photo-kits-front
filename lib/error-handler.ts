@@ -9,6 +9,14 @@ export interface ApiErrorResponse {
   msg: string
 }
 
+/** 订单相关业务错误码（与 server/internal/errors 保持一致） */
+export const ORDER_ERROR = {
+  /** 需要绑定关联订单号（11 位手机号时必填 19 位淘宝订单号） */
+  NEED_BIND_RELATED_ORDER: 10008,
+  /** 关联订单号格式错误（应为 19 位） */
+  RELATED_ORDER_INVALID: 10009,
+} as const
+
 // 业务错误类
 export class BusinessError extends Error {
   code: number

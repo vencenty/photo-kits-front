@@ -438,26 +438,32 @@ export async function createOrder(orderNo: string): Promise<OrderInfo> {
   })
 }
 
+export interface UpdateOrderParams {
+  receiverName?: string
+  relatedOrderNo?: string // 关联的淘宝订单号（当 orderNo 为 11 位手机号时用于绑定）
+}
+
 /**
- * 更新订单信息（收货人、引导页状态）
+ * 更新订单信息（收货人、关联订单号、引导页状态）
  * 后端路由: PUT /api/order/:orderNo/update
  * @param orderNo 订单号
- * @param receiverName 收货人信息（姓名或完整地址）
+ * @param params 可选：receiverName 收货人；relatedOrderNo 19 位淘宝订单号（11 位手机号时绑定）
  */
-export async function updateOrder(orderNo: string, receiverName: string): Promise<{
+export async function updateOrder(orderNo: string, params: UpdateOrderParams): Promise<{
   success: boolean
   receiverName: string
   guideViewed: number
 }> {
   return request(`/api/order/${orderNo}/update`, {
     method: 'PUT',
-    body: JSON.stringify({ receiverName }),
+    body: JSON.stringify(params),
   })
 }
 
 export interface OrderDetailResponse {
   orderId: string
   orderSn: string
+  relatedOrderNo?: string // 关联的淘宝订单号（11 位手机号时用户绑定后回显）
   size: string
   style: string
   totalQuantity: number
@@ -737,6 +743,7 @@ export async function submitOrderStatus(orderNo: string): Promise<{ code: number
 export interface SubmitOrderForProductionParams {
   orderSn: string
   receiverName?: string
+  relatedOrderNo?: string // 关联的淘宝订单号（当 orderSn 为 11 位手机号时必填）
 }
 
 export async function submitOrderForProduction(params: SubmitOrderForProductionParams): Promise<{ message: string }> {

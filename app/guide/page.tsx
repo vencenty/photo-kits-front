@@ -47,7 +47,7 @@ function GuidePageContent() {
 
     setIsSubmitting(true)
     try {
-      await updateOrder(orderNo, receiverName.trim())
+      await updateOrder(orderNo, { receiverName: receiverName.trim() })
       
       // 保存到 sessionStorage 和 localStorage
       sessionStorage.setItem('pending-order-number', orderNo)
