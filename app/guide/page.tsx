@@ -119,12 +119,11 @@ function GuidePageContent() {
             {!isOrderLocked && <span className="text-red-500 text-sm">*</span>}
           </div>
           
-          <textarea
+          <input
             value={receiverName}
             onChange={(e) => setReceiverName(e.target.value)}
             placeholder="请输入收货人姓名"
             className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-[#ff4d6d] focus:outline-none resize-none disabled:bg-gray-100 disabled:text-gray-500"
-            rows={4}
             disabled={isOrderLocked}
           />
           
@@ -135,17 +134,18 @@ function GuidePageContent() {
 
         {/* 操作指引区域 - 预留 */}
         <div className="bg-white rounded-xl p-4 mb-6 shadow-sm">
-          <h2 className="text-base font-semibold mb-3">📖 使用说明</h2>
+          {/* <h2 className="text-base font-semibold mb-3">📖 使用说明</h2> */}
           
-          {/* 这里预留给您填充内容：视频、图文教程等 */}
+          {/* 重要说明区域 */}
           <div className="space-y-3">
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600">
-                📌 操作步骤说明区域（预留）
+            <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
+              <p className="text-sm font-semibold text-red-700">
+                🚨 下单前必读（务必看完再操作）
               </p>
-              <p className="text-xs text-gray-400 mt-1">
-                您可以在这里添加：操作视频、图文教程、常见问题等
-              </p>
+              <ul className="mt-2 text-xs text-red-700 space-y-1 list-disc list-inside">
+                <li>每次手机选择照片不要超过30张，超过30张需要分多次上传避免卡死浏览器</li>
+                <li>请拍多少传多少，订单和这里的要保持一致，否则会延误制作发货～</li>
+              </ul>
             </div>
             
             {/* 示例：常见问题 */}
@@ -164,7 +164,7 @@ function GuidePageContent() {
                   ✅ 照片会被裁剪吗？
                 </summary>
                 <p className="text-xs text-gray-600 mt-2">
-                  您可以选择居中裁剪、打印整图、四周留白三种模式
+                  四周留白样式没有任何裁剪，放心选择。
                 </p>
               </details>
               
@@ -173,7 +173,7 @@ function GuidePageContent() {
                   ✅ 预览效果准确吗？
                 </summary>
                 <p className="text-xs text-gray-600 mt-2">
-                  列表预览图已压缩，但冲印时会使用原图，效果更佳
+                  列表预览图已压缩，效果为参考图，最终效果以实际打印为准
                 </p>
               </details>
             </div>
@@ -181,14 +181,14 @@ function GuidePageContent() {
         </div>
 
         {/* 注意事项 */}
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
+        {/* <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
           <h3 className="text-sm font-semibold text-orange-700 mb-2">⚠️ 温馨提示</h3>
           <ul className="text-xs text-orange-600 space-y-1">
             <li>• 预览效果即为最终打印效果</li>
             <li>• 提交后订单将锁定，无法修改</li>
             <li>• 建议先上传1-2张照片测试效果</li>
           </ul>
-        </div>
+        </div> */}
       </div>
 
       {/* 底部按钮 */}
