@@ -69,6 +69,10 @@ export default function SuccessPage() {
   const [showBindInConfirm, setShowBindInConfirm] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [bindRelatedInput, setBindRelatedInput] = useState('')
+  // 订单详情中的关联淘宝订单号（19 位）；用于判断是否需要先绑定再提交
+  const [relatedOrderNoFromDetail, setRelatedOrderNoFromDetail] = useState<string | null>(null)
+  // 订单详情中的最后一次提交时间（服务端 submitTime）
+  const [submitTime, setSubmitTime] = useState<string | null>(null)
 
   // 获取订单号
   useEffect(() => {
@@ -110,6 +114,8 @@ export default function SuccessPage() {
         
         setOrderStatus(orderDetail.status)
         setIsLocked(checkOrderLocked(orderDetail.status))
+        setRelatedOrderNoFromDetail(orderDetail.relatedOrderNo ?? null)
+        setSubmitTime(orderDetail.submitTime ?? null)
         
         // 从订单详情中获取规格列表
         const specs = orderDetail.specs || []
@@ -167,8 +173,8 @@ export default function SuccessPage() {
     router.push(`/upload?sizeId=${size.id}`)
   }, [orderNumber, setCurrentSession, clearImages, router])
 
-  // 点击「锁定订单，确认制作」：仅校验照片数量，直接打开确认弹窗（不预请求订单详情、不预判绑定）
-  const handleSubmitOrderClick = () => {
+  // 点击「锁定订单，确认制作」：先请求订单详情，若无 relatedOrderNo 则弹窗内先展示绑定淘宝订单号，再提交
+  const handleSubmitOrderClick = async () => {
     if (!orderNumber || isLocked) return
 
     const totalPhotos = allSizes.reduce((sum, size) => sum + size.imageCount, 0)
@@ -177,13 +183,28 @@ export default function SuccessPage() {
       return
     }
 
-    setShowBindInConfirm(false)
     setSubmitError('')
     setBindRelatedInput('')
-    setShowSubmitConfirm(true)
+    try {
+      setApiLoading(true, '加载订单信息...')
+      const detail = await getOrderDetail(orderNumber, false)
+      setRelatedOrderNoFromDetail(detail.relatedOrderNo ?? null)
+      // 订单号为 11 位手机号且详情中无有效 19 位淘宝订单号时，弹窗内先展示绑定输入
+      const needBind = Boolean(
+        /^\d{11}$/.test(orderNumber) &&
+        (!detail.relatedOrderNo || detail.relatedOrderNo.length !== 19)
+      )
+      setShowBindInConfirm(needBind)
+      setShowSubmitConfirm(true)
+    } catch (e) {
+      console.error('获取订单详情失败', e)
+      alert('获取订单信息失败，请重试')
+    } finally {
+      setApiLoading(false, '')
+    }
   }
 
-  // 弹窗内点击「确认提交」：直接调用 order/submit；若返回「需要绑定订单号」则在同一弹窗内展示输入框
+  // 弹窗内点击「确认提交」：调用 order/submit，需绑定时传 relatedOrderNo；若后端仍返回「需要绑定」则展示输入框
   const handleConfirmSubmitOrder = async () => {
     if (!orderNumber || isLocked) return
 
@@ -191,13 +212,17 @@ export default function SuccessPage() {
     setSubmitError('')
     try {
       setApiLoading(true, '提交订单中...')
+      const relatedNo = needBindInConfirm ? bindRelatedInput.trim() : (relatedOrderNoFromDetail || undefined)
       await submitOrderForProduction({
         orderSn: orderNumber,
         receiverName: '',
+        ...(relatedNo ? { relatedOrderNo: relatedNo } : {}),
       })
       const orderDetail = await getOrderDetail(orderNumber, false)
       setOrderStatus(orderDetail.status)
       setIsLocked(checkOrderLocked(orderDetail.status))
+      setRelatedOrderNoFromDetail(orderDetail.relatedOrderNo ?? null)
+      setSubmitTime(orderDetail.submitTime ?? null)
       setShowSubmitConfirm(false)
       setShowBindInConfirm(false)
     } catch (error) {
@@ -234,6 +259,8 @@ export default function SuccessPage() {
       const orderDetail = await getOrderDetail(orderNumber, false)
       setOrderStatus(orderDetail.status)
       setIsLocked(checkOrderLocked(orderDetail.status))
+      setRelatedOrderNoFromDetail(orderDetail.relatedOrderNo ?? null)
+      setSubmitTime(orderDetail.submitTime ?? null)
       setShowSubmitConfirm(false)
       setShowBindInConfirm(false)
       setBindRelatedInput('')
@@ -281,6 +308,13 @@ export default function SuccessPage() {
     router.push('/')
   }
 
+  // 当前订单号为 11 位手机号且详情中无有效 19 位淘宝订单号时，需在确认弹窗内先绑定
+  const needBindInConfirm = Boolean(
+    orderNumber &&
+    /^\d{11}$/.test(orderNumber) &&
+    (!relatedOrderNoFromDetail || relatedOrderNoFromDetail.length !== 19)
+  )
+
   return (
     <>
       <style>{shimmerStyle}</style>
@@ -326,7 +360,9 @@ export default function SuccessPage() {
               <div className="flex justify-between">
                 <span className="text-gray-500">最后一次提交时间</span>
                 <span className="font-medium">
-                  {new Date().toLocaleString('zh-CN')}
+                  {submitTime
+                    ? new Date(submitTime).toLocaleString('zh-CN')
+                    : '暂无'}
                 </span>
               </div>
             </div>
