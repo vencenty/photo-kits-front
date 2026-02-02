@@ -213,10 +213,8 @@ export default function SelectSizePage() {
   }
 
   // 选择规格进入上传
+  // 不再依赖 getPhotoSizeById 校验，直接使用服务端返回的规格数据，避免因历史数据或新尺寸未配置导致无法点击进入
   const handleSelectSize = (size: AddedSize) => {
-    const photoSize = getPhotoSizeById(size.id)
-    if (!photoSize) return
-
     const currentOrderNo = orderNumber || `ORDER-${Date.now()}`
     const sessionId = `${currentOrderNo}-${size.id}`
 

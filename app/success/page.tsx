@@ -145,10 +145,8 @@ export default function SuccessPage() {
   }, [orderNumber, setApiLoading])
 
   // 点击规格跳转到上传页面
+  // 注意：不再依赖 getPhotoSizeById 的结果，避免因历史数据或新尺寸未配置导致「点击无反应」
   const handleSelectSize = useCallback((size: SizeSummary) => {
-    const photoSize = getPhotoSizeById(size.id)
-    if (!photoSize) return
-
     const currentOrderNo = orderNumber || `ORDER-${Date.now()}`
     const sessionId = `${currentOrderNo}-${size.id}`
 
