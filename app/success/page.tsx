@@ -65,7 +65,7 @@ export default function SuccessPage() {
   const [isLocking, setIsLocking] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false) // 确认提交弹窗
-  // 在确认弹窗内：submit 返回「需要绑定订单号」时展示绑定输入，用户输入后点「绑定并提交」再次调用 submit
+  // 后端返回「需要绑定订单号」时置为 true，与 needBindInConfirm 一起控制弹窗内是否展示绑定输入
   const [showBindInConfirm, setShowBindInConfirm] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [bindRelatedInput, setBindRelatedInput] = useState('')
@@ -185,16 +185,11 @@ export default function SuccessPage() {
 
     setSubmitError('')
     setBindRelatedInput('')
+    setShowBindInConfirm(false)
     try {
       setApiLoading(true, '加载订单信息...')
       const detail = await getOrderDetail(orderNumber, false)
       setRelatedOrderNoFromDetail(detail.relatedOrderNo ?? null)
-      // 订单号为 11 位手机号且详情中无有效 19 位淘宝订单号时，弹窗内先展示绑定输入
-      const needBind = Boolean(
-        /^\d{11}$/.test(orderNumber) &&
-        (!detail.relatedOrderNo || detail.relatedOrderNo.length !== 19)
-      )
-      setShowBindInConfirm(needBind)
       setShowSubmitConfirm(true)
     } catch (e) {
       console.error('获取订单详情失败', e)
@@ -204,15 +199,17 @@ export default function SuccessPage() {
     }
   }
 
-  // 弹窗内点击「确认提交」：调用 order/submit，需绑定时传 relatedOrderNo；若后端仍返回「需要绑定」则展示输入框
+  // 弹窗内点击「确认提交」：调用 order/submit；需绑定时传用户输入的 relatedOrderNo，后端返回需绑定时展示错误并保留弹窗
   const handleConfirmSubmitOrder = async () => {
     if (!orderNumber || isLocked) return
+    const needBind = needBindInConfirm || showBindInConfirm
+    if (needBind && bindRelatedInput.trim().length !== 19) return
 
     setIsLocking(true)
     setSubmitError('')
     try {
       setApiLoading(true, '提交订单中...')
-      const relatedNo = needBindInConfirm ? bindRelatedInput.trim() : (relatedOrderNoFromDetail || undefined)
+      const relatedNo = needBind ? bindRelatedInput.trim() : (relatedOrderNoFromDetail || undefined)
       await submitOrderForProduction({
         orderSn: orderNumber,
         receiverName: '',
@@ -225,6 +222,7 @@ export default function SuccessPage() {
       setSubmitTime(orderDetail.submitTime ?? null)
       setShowSubmitConfirm(false)
       setShowBindInConfirm(false)
+      setBindRelatedInput('')
     } catch (error) {
       const msg = error instanceof Error ? error.message : ''
       const code = error instanceof BusinessError ? error.code : 0
@@ -237,36 +235,6 @@ export default function SuccessPage() {
       } else {
         alert(msg || '提交失败，请重试')
       }
-    } finally {
-      setIsLocking(false)
-      setApiLoading(false, '')
-    }
-  }
-
-  // 弹窗内已展示「需要绑定」时，用户输入 19 位订单号后点击「绑定并提交」，再次调用 order/submit 带 relatedOrderNo
-  const handleBindAndSubmit = async () => {
-    if (!orderNumber || isLocked || bindRelatedInput.trim().length !== 19) return
-
-    setIsLocking(true)
-    setSubmitError('')
-    try {
-      setApiLoading(true, '提交订单中...')
-      await submitOrderForProduction({
-        orderSn: orderNumber,
-        receiverName: '',
-        relatedOrderNo: bindRelatedInput.trim(),
-      })
-      const orderDetail = await getOrderDetail(orderNumber, false)
-      setOrderStatus(orderDetail.status)
-      setIsLocked(checkOrderLocked(orderDetail.status))
-      setRelatedOrderNoFromDetail(orderDetail.relatedOrderNo ?? null)
-      setSubmitTime(orderDetail.submitTime ?? null)
-      setShowSubmitConfirm(false)
-      setShowBindInConfirm(false)
-      setBindRelatedInput('')
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : ''
-      setSubmitError(msg || '提交失败，请重试')
     } finally {
       setIsLocking(false)
       setApiLoading(false, '')
@@ -487,119 +455,67 @@ export default function SuccessPage() {
       <GlobalLoading />
     </div>
 
-      {/* 确认提交订单弹窗（正常态 / 需绑定订单号态 共用同一弹窗） */}
+      {/* 确认提交订单弹窗（统一二次确认，需绑定时展示淘宝订单号输入） */}
       {showSubmitConfirm && !isLocked && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            {showBindInConfirm ? (
-              <>
-                <h3 className="text-lg font-bold text-center mb-2 text-amber-700">需要绑定订单号</h3>
-                {submitError && (
-                  <p className="text-sm text-red-600 mb-4 text-center bg-red-50 rounded-lg px-3 py-2">
-                    {submitError}
-                  </p>
-                )}
-                <p className="text-sm text-gray-600 mb-3">
-                  请您到淘宝订单页面复制 19 位订单号，输入下方后点击「绑定并提交」即可完成提交。
+            <h3 className="text-lg font-bold text-center mb-4">确认订单并提交制作</h3>
+            <div className="space-y-3 text-sm text-gray-700 mb-4">
+              <p className="text-red-600 font-semibold">
+                提交后订单将进入制作流程，<span className="underline">只能查看，无法修改照片和数量</span>。
+              </p>
+              <p>请仔细检查所有规格、照片数量和裁剪效果是否正确。</p>
+              <p className="text-gray-500">如需修改，请先返回上一页，在确认无误后再提交。</p>
+            </div>
+
+            {(needBindInConfirm || showBindInConfirm) && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-sm text-amber-800 font-medium mb-2">
+                  当前订单为手机号，请先输入19位淘宝订单号以关联本单，便于店铺核对。
                 </p>
+                {submitError && <p className="text-xs text-red-600 mb-2">{submitError}</p>}
                 <input
                   type="text"
                   inputMode="numeric"
                   maxLength={19}
                   placeholder="请输入 19 位淘宝订单号"
                   value={bindRelatedInput}
-                  onChange={(e) => setBindRelatedInput(e.target.value.replace(/\D/g, '').slice(0, 19))}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-base mb-4 focus:border-amber-500 focus:outline-none"
+                  onChange={(e) => {
+                    setBindRelatedInput(e.target.value.replace(/\D/g, '').slice(0, 19))
+                    setSubmitError('')
+                  }}
+                  className="w-full px-4 py-2.5 border-2 border-amber-200 rounded-lg text-base focus:border-amber-500 focus:outline-none"
                 />
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    disabled={isLocking}
-                    onClick={() => {
-                      setShowSubmitConfirm(false)
-                      setShowBindInConfirm(false)
-                      setSubmitError('')
-                      setBindRelatedInput('')
-                    }}
-                    className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    再检查一下
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isLocking || bindRelatedInput.trim().length !== 19}
-                    onClick={handleBindAndSubmit}
-                    className="flex-1 py-3 bg-amber-500 text-white rounded-full font-medium hover:bg-amber-600 shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isLocking ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    绑定并提交
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3 className="text-lg font-bold text-center mb-4">确认订单并提交制作</h3>
-                <div className="space-y-3 text-sm text-gray-700 mb-6">
-                  <p className="text-red-600 font-semibold">
-                    提交后订单将进入制作流程，<span className="underline">只能查看，无法修改照片和数量</span>。
-                  </p>
-                  <p>
-                    请仔细检查所有规格、照片数量和裁剪效果是否正确。
-                  </p>
-                  <p className="text-gray-500">
-                    如需修改，请先返回上一页，在确认无误后再提交。
-                  </p>
-                </div>
-
-                {needBindInConfirm && (
-                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                    <p className="text-sm text-amber-800 font-medium mb-2">
-                      当前为订单为手机号，请先输入 19 位淘宝订单号以关联本单，便于店铺核对。
-                    </p>
-                    {submitError && (
-                      <p className="text-xs text-red-600 mb-2">{submitError}</p>
-                    )}
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={19}
-                      placeholder="请输入 19 位淘宝订单号"
-                      value={bindRelatedInput}
-                      onChange={(e) => {
-                        setBindRelatedInput(e.target.value.replace(/\D/g, '').slice(0, 19))
-                        setSubmitError('')
-                      }}
-                      className="w-full px-4 py-2.5 border-2 border-amber-200 rounded-lg text-base focus:border-amber-500 focus:outline-none"
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    disabled={isLocking}
-                    onClick={() => {
-                      setShowSubmitConfirm(false)
-                      setShowBindInConfirm(false)
-                      setSubmitError('')
-                      setBindRelatedInput('')
-                    }}
-                    className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    再检查一下
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isLocking || (needBindInConfirm && bindRelatedInput.trim().length !== 19)}
-                    onClick={handleConfirmSubmitOrder}
-                    className="flex-1 py-3 bg-pink-500 text-white rounded-full font-medium hover:bg-pink-600 shadow-md disabled:opacity-50 disabled:bg-gray-300 disabled:shadow-none flex items-center justify-center gap-2"
-                  >
-                    {isLocking ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-                    确认提交
-                  </button>
-                </div>
-              </>
+              </div>
             )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={isLocking}
+                onClick={() => {
+                  setShowSubmitConfirm(false)
+                  setShowBindInConfirm(false)
+                  setSubmitError('')
+                  setBindRelatedInput('')
+                }}
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                再检查一下
+              </button>
+              <button
+                type="button"
+                disabled={
+                  isLocking ||
+                  ((needBindInConfirm || showBindInConfirm) && bindRelatedInput.trim().length !== 19)
+                }
+                onClick={handleConfirmSubmitOrder}
+                className="flex-1 py-3 bg-pink-500 text-white rounded-full font-medium hover:bg-pink-600 shadow-md disabled:opacity-50 disabled:bg-gray-300 disabled:shadow-none flex items-center justify-center gap-2"
+              >
+                {isLocking ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+                确认提交
+              </button>
+            </div>
           </div>
         </div>
       )}
