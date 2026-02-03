@@ -471,7 +471,7 @@ export interface OrderDetailResponse {
   shippingFee: number
   status: number
   submitTime: string
-  receiverName: string
+  receiverName: string // 后端 JSON 字段为 receiverName
   guideViewed: number // 是否已查看引导页：0-未查看 1-已查看
   photos?: PhotoDetail[] // 可选，根据 includePhotos 参数决定
   specs?: SpecInfo[] // 规格列表

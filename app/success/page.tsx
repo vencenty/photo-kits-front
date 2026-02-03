@@ -50,6 +50,15 @@ interface SizeSummary {
   height: number
 }
 
+/** 订单详情（页面内统一用这一份数据，避免多个分散的 state） */
+interface OrderDetailState {
+  status: number
+  relatedOrderNo: string | null
+  submitTime: string | null
+  sizes: SizeSummary[]
+  receiver: string | null
+}
+
 export default function SuccessPage() {
   const router = useRouter()
   const currentSession = useStore((state) => state.currentSession)
@@ -58,90 +67,70 @@ export default function SuccessPage() {
   const clearImages = useStore((state) => state.clearImages)
   const setApiLoading = useStore((state) => state.setApiLoading)
   
-  const [allSizes, setAllSizes] = useState<SizeSummary[]>([])
-  const [isLoadingSizes, setIsLoadingSizes] = useState(true)
+  const [orderDetail, setOrderDetail] = useState<OrderDetailState | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
-  const [orderStatus, setOrderStatus] = useState<number | null>(null)
   const [isLocking, setIsLocking] = useState(false)
-  const [isLocked, setIsLocked] = useState(false)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false) // 确认提交弹窗
-  // 后端返回「需要绑定订单号」时置为 true，与 needBindInConfirm 一起控制弹窗内是否展示绑定输入
-  const [showBindInConfirm, setShowBindInConfirm] = useState(false)
+  const [showBindInConfirm, setShowBindInConfirm] = useState(false) // 后端返回需绑定时展示绑定输入
   const [submitError, setSubmitError] = useState('')
   const [bindRelatedInput, setBindRelatedInput] = useState('')
-  // 订单详情中的关联淘宝订单号（19 位）；用于判断是否需要先绑定再提交
-  const [relatedOrderNoFromDetail, setRelatedOrderNoFromDetail] = useState<string | null>(null)
-  // 订单详情中的最后一次提交时间（服务端 submitTime）
-  const [submitTime, setSubmitTime] = useState<string | null>(null)
 
-  // 获取订单号
+  const isLocked = orderDetail ? checkOrderLocked(orderDetail.status) : false
+  const allSizes = orderDetail?.sizes ?? []
+  // 有订单号且详情未返回时视为加载中（数据一律从接口拿，不依赖 localStorage 缓存）
+  const isLoadingSizes = orderNumber !== null && orderDetail === null
+
+  // 订单号只从当前 session 取，不读 localStorage（避免用缓存；详情统一从接口拉）
   useEffect(() => {
-    // 优先从 currentSession 获取
     if (currentSession?.orderNo) {
       setOrderNumber(currentSession.orderNo)
       return
     }
-    
-    // 从 localStorage 获取
-    const savedOrder = localStorage.getItem('current-order-number')
-    if (savedOrder) {
-      setOrderNumber(savedOrder)
-      return
-    }
-    
-    // 从 sessionId 解析（兼容旧版本）
     if (currentSession?.id) {
       const parts = currentSession.id.split('-')
-      if (parts.length > 1) {
-        setOrderNumber(parts[0])
-      }
+      if (parts.length > 1) setOrderNumber(parts[0])
     }
   }, [currentSession])
 
-  // 加载订单详情（包含规格列表，不包含照片列表）
+  // 有订单号时直接拉接口拿订单详情
   useEffect(() => {
-    const loadOrderDetail = async () => {
-      if (!orderNumber) {
-        setIsLoadingSizes(false)
-        return
-      }
-
-      setIsLoadingSizes(true)
-      try {
-        setApiLoading(true, '加载订单详情...')
-        // 只获取订单详情和规格列表，不获取照片列表（includePhotos=false）
-        const orderDetail = await getOrderDetail(orderNumber, false)
-        
-        setOrderStatus(orderDetail.status)
-        setIsLocked(checkOrderLocked(orderDetail.status))
-        setRelatedOrderNoFromDetail(orderDetail.relatedOrderNo ?? null)
-        setSubmitTime(orderDetail.submitTime ?? null)
-        
-        // 从订单详情中获取规格列表
-        const specs = orderDetail.specs || []
-        
-        // 转换为 SizeSummary 格式
-        const sizes: SizeSummary[] = specs.map((spec: SpecInfo) => ({
+    if (!orderNumber) {
+      setOrderDetail(null)
+      return
+    }
+    let cancelled = false
+    setOrderDetail(null)
+    setApiLoading(true, '加载订单详情...')
+    getOrderDetail(orderNumber, false)
+      .then((res) => {
+        if (cancelled) return
+        const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
           id: spec.sessionId,
           sizeId: spec.sizeId,
           paperName: spec.paperName,
           sizeName: spec.sizeName,
-          totalPrintCount: spec.photoCount || 0,  // 照片数量
+          totalPrintCount: spec.photoCount || 0,
           imageCount: spec.photoCount || 0,
           width: spec.canvasWidth,
           height: spec.canvasHeight,
         }))
-        
-        setAllSizes(sizes)
-      } catch (error) {
-        console.error('加载订单详情失败:', error)
-      } finally {
-        setIsLoadingSizes(false)
-        setApiLoading(false, '')
-      }
+        setOrderDetail({
+          status: res.status,
+          relatedOrderNo: res.relatedOrderNo ?? null,
+          receiver: res.receiverName ?? null,
+          submitTime: res.submitTime ?? null,
+          sizes,
+        })
+      })
+      .catch((error) => {
+        if (!cancelled) console.error('加载订单详情失败:', error)
+      })
+      .finally(() => {
+        if (!cancelled) setApiLoading(false, '')
+      })
+    return () => {
+      cancelled = true
     }
-
-    loadOrderDetail()
   }, [orderNumber, setApiLoading])
 
   // 点击规格跳转到上传页面
@@ -187,7 +176,9 @@ export default function SuccessPage() {
     try {
       setApiLoading(true, '加载订单信息...')
       const detail = await getOrderDetail(orderNumber, false)
-      setRelatedOrderNoFromDetail(detail.relatedOrderNo ?? null)
+      setOrderDetail((prev) =>
+        prev ? { ...prev, relatedOrderNo: detail.relatedOrderNo ?? null } : null
+      )
       setShowSubmitConfirm(true)
     } catch (e) {
       console.error('获取订单详情失败', e)
@@ -207,17 +198,30 @@ export default function SuccessPage() {
     setSubmitError('')
     try {
       setApiLoading(true, '提交订单中...')
-      const relatedNo = needBind ? bindRelatedInput.trim() : (relatedOrderNoFromDetail || undefined)
+      const relatedNo = needBind ? bindRelatedInput.trim() : (orderDetail?.relatedOrderNo ?? undefined)
       await submitOrderForProduction({
         orderSn: orderNumber,
         receiverName: '',
         ...(relatedNo ? { relatedOrderNo: relatedNo } : {}),
       })
-      const orderDetail = await getOrderDetail(orderNumber, false)
-      setOrderStatus(orderDetail.status)
-      setIsLocked(checkOrderLocked(orderDetail.status))
-      setRelatedOrderNoFromDetail(orderDetail.relatedOrderNo ?? null)
-      setSubmitTime(orderDetail.submitTime ?? null)
+      const res = await getOrderDetail(orderNumber, false)
+      const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
+        id: spec.sessionId,
+        sizeId: spec.sizeId,
+        paperName: spec.paperName,
+        sizeName: spec.sizeName,
+        totalPrintCount: spec.photoCount || 0,
+        imageCount: spec.photoCount || 0,
+        width: spec.canvasWidth,
+        height: spec.canvasHeight,
+      }))
+      setOrderDetail({
+        status: res.status,
+        relatedOrderNo: res.relatedOrderNo ?? null,
+        submitTime: res.submitTime ?? null,
+        receiver: res.receiverName ?? null,
+        sizes,
+      })
       setShowSubmitConfirm(false)
       setShowBindInConfirm(false)
       setBindRelatedInput('')
@@ -251,8 +255,7 @@ export default function SuccessPage() {
     try {
       setApiLoading(true, '锁单中...')
       await lockOrder(orderNumber)
-      setIsLocked(true)
-      setOrderStatus(2) // 状态2表示客户已确认/锁单
+      setOrderDetail((prev) => (prev ? { ...prev, status: 2 } : null)) // 状态2表示客户已确认/锁单
       alert('锁单成功！订单已确认，可以开始制作了。')
     } catch (error) {
       console.error('锁单失败:', error)
@@ -278,7 +281,7 @@ export default function SuccessPage() {
   const needBindInConfirm = Boolean(
     orderNumber &&
     /^\d{11}$/.test(orderNumber) &&
-    (!relatedOrderNoFromDetail || relatedOrderNoFromDetail.length !== 19)
+    (!orderDetail?.relatedOrderNo || orderDetail.relatedOrderNo.length !== 19)
   )
 
   return (
@@ -317,6 +320,12 @@ export default function SuccessPage() {
                 <span className="text-gray-500">订单编号</span>
                 <span className="font-bold text-pink-500">{orderNumber}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">收货人姓名</span>
+                <span className="font-bold text-pink-500">
+                  {orderDetail?.receiver?.trim() ? orderDetail.receiver : '暂无'}
+                </span>
+              </div>
               {currentSession && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">当前规格</span>
@@ -326,8 +335,8 @@ export default function SuccessPage() {
               <div className="flex justify-between">
                 <span className="text-gray-500">最后一次提交时间</span>
                 <span className="font-medium">
-                  {submitTime
-                    ? new Date(submitTime).toLocaleString('zh-CN')
+                  {orderDetail?.submitTime
+                    ? new Date(orderDetail.submitTime).toLocaleString('zh-CN')
                     : '暂无'}
                 </span>
               </div>
