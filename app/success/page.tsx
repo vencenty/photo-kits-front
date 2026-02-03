@@ -8,7 +8,7 @@ import { GlobalLoading } from '@/components/GlobalLoading'
 import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
 import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
-import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
+import { isOrderLocked as checkOrderLocked, ORDER_ACCESS_VALID_DAYS } from '@/lib/constants'
 import { BusinessError, ORDER_ERROR } from '@/lib/error-handler'
 
 // 闪光动画样式
@@ -104,6 +104,16 @@ export default function SuccessPage() {
     getOrderDetail(orderNumber, false)
       .then((res) => {
         if (cancelled) return
+        // 订单超期访问控制：submitTime 距今超过配置天数，则跳转到超期页面
+        if (res.submitTime) {
+          const submit = new Date(res.submitTime).getTime()
+          const now = Date.now()
+          const diffDays = (now - submit) / (1000 * 60 * 60 * 24)
+          if (diffDays > ORDER_ACCESS_VALID_DAYS) {
+            router.replace('/order-expired')
+            return
+          }
+        }
         const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
           id: spec.sessionId,
           sizeId: spec.sizeId,

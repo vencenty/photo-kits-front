@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Camera, Search, Loader2 } from 'lucide-react'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { getOrderDetail } from '@/lib/api'
+import { ORDER_ACCESS_VALID_DAYS } from '@/lib/constants'
 
 export default function Home() {
   const [orderNumber, setOrderNumber] = useState('')
@@ -23,9 +24,20 @@ export default function Home() {
     setError('')
 
     try {
-      // 查询订单详情，判断是否已查看引导页
+      // 查询订单详情，判断是否已查看引导页 & 是否超出有效期
       const orderDetail = await getOrderDetail(trimmedOrder, false)
-      
+
+      // 超期访问控制：submitTime 距今超过配置天数，则直接跳转到超期页面
+      if (orderDetail.submitTime) {
+        const submit = new Date(orderDetail.submitTime).getTime()
+        const now = Date.now()
+        const diffDays = (now - submit) / (1000 * 60 * 60 * 24)
+        if (diffDays > ORDER_ACCESS_VALID_DAYS) {
+          router.push('/order-expired')
+          return
+        }
+      }
+
       // 保存订单号到 sessionStorage
       sessionStorage.setItem('pending-order-number', trimmedOrder)
       
