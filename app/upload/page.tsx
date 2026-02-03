@@ -133,7 +133,8 @@ function UploadPageContent() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const columns = useColumns()
-  const GAP = 8 // gap-2 = 8px
+  const GAP = 8 // 水平间距 gap-x-2.5 估算
+  const ROW_GAP = 16 // gap-y-4，卡片行与行之间的垂直间距
   const MAX_CONCURRENT_UPLOADS = 5 // ⚙️ 最大并发上传数量
 
   // 获取相纸尺寸配置
@@ -164,7 +165,7 @@ function UploadPageContent() {
       // 假设屏幕宽度约 375px（移动端），卡片宽度约 115px
       const estimatedCardWidth = 115
       const estimatedCardHeight = estimatedCardWidth / paperRatio + 50 // 50px 包含编辑按钮和间距
-      return estimatedCardHeight + GAP
+      return estimatedCardHeight + ROW_GAP
     }
     
     const containerWidth = scrollContainerRef.current.offsetWidth - 24 // px-3 = 12px * 2
@@ -172,13 +173,13 @@ function UploadPageContent() {
       // 容器宽度无效，使用保守估算
       const estimatedCardWidth = 115
       const estimatedCardHeight = estimatedCardWidth / paperRatio + 50
-      return estimatedCardHeight + GAP
+      return estimatedCardHeight + ROW_GAP
     }
     
     const cardWidth = (containerWidth - GAP * (columns - 1)) / columns
     // 卡片高度 = 图片区域（基于宽高比）+ 编辑按钮高度（py-2.5 ≈ 40px）+ 额外边距（10px）
     const cardHeight = cardWidth / paperRatio + 50
-    return cardHeight + GAP
+    return cardHeight + ROW_GAP
   }, [paperRatio, columns])
 
   // 虚拟滚动器
@@ -1162,14 +1163,14 @@ function UploadPageContent() {
   // 等待 hydration 和 session 加载
   if (!hasHydrated || !currentSession) {
     return (
-      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+      <div className="min-h-screen bg-[#eae9e7] flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-[#ff4d6d] animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] pb-32 overscroll-none">
+    <div className="min-h-screen bg-[#eae9e7] pb-32 overscroll-none">
       {/* Header */}
       <div className="bg-white sticky top-0 z-10 desktop-nav">
         <div className="desktop-container flex items-center justify-between px-4 py-3">
@@ -1269,7 +1270,7 @@ function UploadPageContent() {
                         rowRefs.current.delete(virtualRow.index)
                       }
                     }}
-                    className="absolute left-0 right-0 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5"
+                    className="absolute left-0 right-0 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2.5 gap-y-4"
                     style={{
                       top: `${virtualRow.start}px`,
                     }}
@@ -1277,7 +1278,7 @@ function UploadPageContent() {
                     {rowImages.map((image) => (
                       <div
                         key={image.id}
-                        className={`bg-white rounded-lg overflow-hidden border border-gray-100 ${
+                        className={`bg-[#faf8f5] rounded-lg overflow-hidden border border-gray-200 ${
                           isBatchMode && !isOrderLocked ? 'cursor-pointer' : ''
                         }`}
                         style={{
@@ -1295,7 +1296,7 @@ function UploadPageContent() {
                         }}
                       >
                         <div 
-                          className="relative bg-white"
+                          className="relative bg-[#faf8f5]"
                           style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
                         >
                   <PhotoPreviewCard
@@ -1637,7 +1638,7 @@ function UploadPageContent() {
 export default function UploadPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+      <div className="min-h-screen bg-[#eae9e7] flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-[#ff4d6d] animate-spin" />
       </div>
     }>
