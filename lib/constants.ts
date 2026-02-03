@@ -25,4 +25,4 @@ export function isOrderLocked(status: number): boolean {
  * 超过该天数后，前端将禁止用户继续访问上传/成功页，并跳转到提示页面。
  * 后续如需调整，只需修改这里的数值。
  */
-export const ORDER_ACCESS_VALID_DAYS = 1
+export const ORDER_ACCESS_VALID_DAYS = 15
