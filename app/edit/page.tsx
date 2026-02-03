@@ -482,14 +482,14 @@ function EditPageContent() {
     <div className="min-h-screen bg-black">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 to-transparent">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center md:py-6">
           <button
             onClick={() => router.push(`/upload?sizeId=${currentSession?.sizeId}`)}
-            className="mr-4 p-2 hover:bg-white/10 rounded-full transition-colors"
+            className="mr-4 p-2 hover:bg-white/10 rounded-full transition-colors desktop-hover"
           >
-            <ArrowLeft className="w-6 h-6 text-white" />
+            <ArrowLeft className="w-6 h-6 md:w-7 md:h-7 text-white" />
           </button>
-          <h1 className="text-lg font-semibold text-white">照片编辑</h1>
+          <h1 className="text-lg font-semibold text-white md:text-xl">照片编辑</h1>
         </div>
       </div>
 

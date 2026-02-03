@@ -8,7 +8,7 @@ import { GlobalLoading } from '@/components/GlobalLoading'
 import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
 import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
-import { isOrderLocked as checkOrderLocked, ORDER_ACCESS_VALID_DAYS } from '@/lib/constants'
+import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import { BusinessError, ORDER_ERROR } from '@/lib/error-handler'
 
 // 闪光动画样式
@@ -104,16 +104,6 @@ export default function SuccessPage() {
     getOrderDetail(orderNumber, false)
       .then((res) => {
         if (cancelled) return
-        // 订单超期访问控制：submitTime 距今超过配置天数，则跳转到超期页面
-        if (res.submitTime) {
-          const submit = new Date(res.submitTime).getTime()
-          const now = Date.now()
-          const diffDays = (now - submit) / (1000 * 60 * 60 * 24)
-          if (diffDays > ORDER_ACCESS_VALID_DAYS) {
-            router.replace('/order-expired')
-            return
-          }
-        }
         const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
           id: spec.sessionId,
           sizeId: spec.sizeId,
@@ -298,24 +288,24 @@ export default function SuccessPage() {
     <>
       <style>{shimmerStyle}</style>
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md md:max-w-lg">
         {/* Success Icon */}
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-6 md:mb-8">
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-primary rounded-full blur-xl opacity-50 animate-pulse"></div>
-            <div className="relative w-24 h-24 bg-gradient-primary rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-16 h-16 text-white" strokeWidth={2.5} />
+            <div className="relative w-24 h-24 md:w-32 md:h-32 bg-gradient-primary rounded-full flex items-center justify-center desktop-hover">
+              <CheckCircle2 className="w-16 h-16 md:w-20 md:h-20 text-white" strokeWidth={2.5} />
             </div>
           </div>
         </div>
 
         {/* Success Message */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6 ">
-          <h1 className="text-2xl font-bold text-center text-gray-800 mb-3">
+        <div className="bg-white rounded-2xl shadow-xl md:shadow-2xl p-8 mb-6 desktop-shadow">
+          <h1 className="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-3 md:mb-4">
             照片提交成功
           </h1>
           <p 
-            className="text-center text-red-600 font-bold mb-6 px-4 py-3 bg-red-50 border-2 border-red-400 rounded-lg inline-block mx-auto"
+            className="text-center text-red-600 font-bold mb-6 px-4 py-3 bg-red-50 border-2 border-red-400 rounded-lg inline-block mx-auto md:px-6 md:py-4"
             style={{
               animation: 'blink 1.5s ease-in-out infinite, pulse-glow 2s ease-in-out infinite',
             }}
@@ -325,7 +315,7 @@ export default function SuccessPage() {
 
           {/* 订单信息 */}
           {orderNumber && (
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2 text-sm">
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2 text-sm md:text-base desktop-shadow">
               <div className="flex justify-between">
                 <span className="text-gray-500">订单编号</span>
                 <span className="font-bold text-pink-500">{orderNumber}</span>
@@ -356,19 +346,19 @@ export default function SuccessPage() {
           {/* 所有规格摘要 */}
           {orderNumber && (
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+              <h3 className="text-sm md:text-base font-semibold text-gray-700 mb-3">
                 所有规格摘要
-                <span className="ml-2 text-xs font-normal text-gray-400">
+                <span className="ml-2 text-xs md:text-sm font-normal text-gray-400">
                   （点击可继续上传）
                 </span>
               </h3>
               {isLoadingSizes ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-5 h-5 text-pink-500 animate-spin mr-2" />
-                  <span className="text-sm text-gray-500">加载中...</span>
+                  <Loader2 className="w-5 h-5 md:w-6 md:h-6 text-pink-500 animate-spin mr-2" />
+                  <span className="text-sm md:text-base text-gray-500">加载中...</span>
                 </div>
               ) : allSizes.length === 0 ? (
-                <div className="text-center py-4 text-sm text-gray-400">
+                <div className="text-center py-4 text-sm md:text-base text-gray-400">
                   暂无规格信息
                 </div>
               ) : (
@@ -379,7 +369,7 @@ export default function SuccessPage() {
                       <button
                         key={size.id}
                         onClick={() => handleSelectSize(size)}
-                        className={`w-full bg-white border rounded-lg p-3 transition-all active:scale-[0.98] text-left ${
+                        className={`w-full bg-white border rounded-lg p-3 md:p-4 transition-all active:scale-[0.98] text-left desktop-shadow desktop-hover ${
                           isCurrentSize
                             ? 'border-pink-400 bg-pink-50 shadow-sm'
                             : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
@@ -388,31 +378,31 @@ export default function SuccessPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-medium text-gray-800">
+                              <span className="text-sm md:text-base font-medium text-gray-800">
                                 {size.paperName}
                               </span>
-                              <span className="text-sm font-bold text-pink-500">
+                              <span className="text-sm md:text-base font-bold text-pink-500">
                                 {size.sizeName}
                               </span>
                               {isCurrentSize && (
-                                <span className="px-1.5 py-0.5 bg-pink-100 text-pink-600 text-xs rounded">
+                                <span className="px-1.5 py-0.5 bg-pink-100 text-pink-600 text-xs md:text-sm rounded">
                                   刚提交
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs md:text-sm text-gray-400">
                               {size.width}×{size.height}mm
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <div className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                            <div className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-xs md:text-sm font-medium ${
                               size.totalPrintCount > 0
                                 ? 'bg-green-50 text-green-600'
                                 : 'bg-gray-100 text-gray-400'
                             }`}>
                               {size.totalPrintCount} 张
                             </div>
-                            <ChevronRight className="w-4 h-4 text-gray-300" />
+                            <ChevronRight className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
                           </div>
                         </div>
                       </button>
@@ -424,26 +414,26 @@ export default function SuccessPage() {
           )}
 
           {/* Action Buttons */}
-          <div className="space-y-3">
+          <div className="space-y-3 md:space-y-4">
             {isLocked ? (
-              <div className="w-full py-3 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-5 h-5" />
+              <div className="w-full py-3 md:py-4 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" />
                 订单已锁定，正在制作中
               </div>
             ) : (
               <button
                 onClick={handleSubmitOrderClick}
                 disabled={isLocking || !orderNumber}
-                className="w-full py-3 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 md:py-4 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed desktop-hover desktop-shadow"
               >
                 {isLocking ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
                     提交中...
                   </>
                 ) : (
                   <>
-                    <Image className="w-5 h-5" />
+                    <Image className="w-5 h-5 md:w-6 md:h-6" />
                     锁定订单，确认制作
                   </>
                 )}
@@ -452,17 +442,17 @@ export default function SuccessPage() {
            
             <button
               onClick={handleBackHome}
-              className="w-full py-3 gradient-primary text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+              className="w-full py-3 md:py-4 gradient-primary text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 desktop-hover desktop-shadow"
             >
-              <Home className="w-5 h-5" />
+              <Home className="w-5 h-5 md:w-6 md:h-6" />
               返回首页
             </button>
           </div>
         </div>
 
         {/* Tips */}
-        <div className="bg-white/60 backdrop-blur rounded-lg p-4">
-          <p className="text-sm text-gray-600 text-center leading-relaxed">
+        <div className="bg-white/60 backdrop-blur rounded-lg p-4 md:p-5">
+          <p className="text-sm md:text-base text-gray-600 text-center leading-relaxed">
             上传的照片临时保存7天，作为售后凭证，您可输入订单号查询。保存已上传的照片，7日后将自动删除。
           </p>
         </div>

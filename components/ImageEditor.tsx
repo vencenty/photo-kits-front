@@ -260,139 +260,139 @@ export default function ImageEditor({
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      {/* 提示信息 */}
-      <div className="px-4 py-3">
-        <div className="flex items-center justify-center gap-2 text-sm">
-          <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0" />
+      {/* 提示信息：移动端略大，PC/iPad 紧凑 */}
+      <div className="px-4 py-3 md:py-2 md:px-6">
+        <div className="flex items-center justify-center gap-2 text-sm md:text-xs">
+          <Lightbulb className="w-5 h-5 md:w-4 md:h-4 text-blue-400 flex-shrink-0" />
           <span className="text-blue-400">{getModeHint()}</span>
         </div>
         {mode === 'cover' && (
-          <p className="text-center text-red-400 text-sm mt-1">红色边框外的画面在冲印时会被裁掉，红色边框内侧约 2mm 也可能被裁切，请不要把人物的脸或重要部分放在这里。</p>
+          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色边框外的画面在冲印时会被裁掉，红色边框内侧约 2mm 也可能被裁切，请不要把人物的脸或重要部分放在这里。</p>
         )}
       </div>
 
-      {/* 编辑区域 */}
-      <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden min-h-0">
+      {/* 编辑区域：PC 上画布可略大 */}
+      <div className="flex-1 flex items-center justify-center p-4 md:p-6 relative overflow-hidden min-h-0">
         <div
-          className="relative bg-white shadow-2xl overflow-hidden"
+          className="relative bg-white shadow-2xl overflow-hidden w-full max-w-[32rem] md:max-w-[36rem] lg:max-w-[42rem]"
           style={{
             aspectRatio: paperAspectRatio,
-            width: '100%',
-            maxWidth: '32rem',
             maxHeight: '100%',
           }}
         >
           {/* 加载状态 */}
           {isImageLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 z-10">
-              <Loader2 className="w-10 h-10 text-pink-500 animate-spin" />
-              <p className="mt-3 text-gray-500 text-sm">图片加载中...</p>
+              <Loader2 className="w-10 h-10 md:w-8 md:h-8 text-pink-500 animate-spin" />
+              <p className="mt-3 text-gray-500 text-sm md:text-xs">图片加载中...</p>
             </div>
           )}
           {renderEditor()}
         </div>
       </div>
 
-      {/* 导航按钮区域 */}
-      <div className="px-4 py-4 bg-gray-900 border-t border-gray-800">
+      {/* 导航按钮区域：PC/iPad 缩小按钮 */}
+      <div className="px-4 py-4 md:py-3 bg-gray-900 border-t border-gray-800">
         <div className="flex items-center justify-between gap-4 max-w-2xl mx-auto">
           <button
             onClick={onPrevious}
             disabled={!hasPrevious}
             className={`
-              group flex items-center gap-2 px-4 py-3 rounded-xl font-medium
+              group flex items-center gap-2 px-4 py-3 md:px-3 md:py-2 rounded-xl font-medium text-sm md:text-xs
               transition-all duration-200 ease-in-out
               ${hasPrevious
-                ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
+                ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg md:hover:scale-105 active:scale-100'
                 : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
               }
             `}
           >
-            <ChevronLeft className="w-5 h-5" />
-            <span className="text-sm">上一张</span>
+            <ChevronLeft className="w-5 h-5 md:w-4 md:h-4" />
+            <span>上一张</span>
           </button>
           <div className="flex-1" />
           <button
             onClick={onNext}
             disabled={!hasNext}
             className={`
-              group flex items-center gap-2 px-4 py-3 rounded-xl font-medium
+              group flex items-center gap-2 px-4 py-3 md:px-3 md:py-2 rounded-xl font-medium text-sm md:text-xs
               transition-all duration-200 ease-in-out
               ${hasNext
-                ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg hover:scale-105 active:scale-100'
+                ? 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg md:hover:scale-105 active:scale-100'
                 : 'bg-gray-800/50 text-gray-500 cursor-not-allowed opacity-50'
               }
             `}
           >
-            <span className="text-sm">下一张</span>
-            <ChevronRight className="w-5 h-5" />
+            <span>下一张</span>
+            <ChevronRight className="w-5 h-5 md:w-4 md:h-4" />
           </button>
         </div>
       </div>
 
-      {/* 底部控制栏 */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4 pb-8">
-        {/* 模式选择器 */}
-        <div className="flex gap-2 mb-4 justify-center">
-          {cropConfig.availableModes.includes('cover') && (
-            <button
-              onClick={() => handleModeChange('cover')}
-              className={`px-3 py-3 rounded-lg font-medium transition-all text-sm ${
-                mode === 'cover'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              居中裁剪
-            </button>
-          )}
-          {cropConfig.availableModes.includes('full') && (
-            <button
-              onClick={() => handleModeChange('full')}
-              className={`px-3 py-3 rounded-lg font-medium transition-all text-sm ${
-                mode === 'full'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              打印整图
-            </button>
-          )}
-          {cropConfig.availableModes.includes('lomo') && (
-            <button
-              onClick={() => handleModeChange('lomo')}
-              className={`px-3 py-3 rounded-lg font-medium transition-all text-sm ${
-                mode === 'lomo'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              四周留白
-            </button>
-          )}
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3 bg-gray-700 text-white rounded-full font-medium transition-all hover:bg-gray-600"
-          >
-            返回列表
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex-1 py-3 gradient-primary text-white rounded-full font-medium shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-          >
-            <Check className="w-5 h-5" />
-            <span>保存</span>
-            {photoData.isAdjusted && (
-              <span className="ml-1 px-2 py-0.5 rounded-full bg-green-500/90 text-xs flex items-center gap-1">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-white" />
-                <span>已调整</span>
-              </span>
+      {/* 底部控制栏：PC 下 max-width + 更小按钮，避免巨大按钮 */}
+      <div className="bg-gray-900 border-t border-gray-800 p-4 pb-8 md:pb-6 md:p-4">
+        <div className="max-w-2xl mx-auto">
+          {/* 模式选择器 */}
+          <div className="flex gap-2 mb-4 md:mb-3 justify-center flex-wrap">
+            {cropConfig.availableModes.includes('cover') && (
+              <button
+                onClick={() => handleModeChange('cover')}
+                className={`px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
+                  mode === 'cover'
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                居中裁剪
+              </button>
             )}
-          </button>
+            {cropConfig.availableModes.includes('full') && (
+              <button
+                onClick={() => handleModeChange('full')}
+                className={`px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
+                  mode === 'full'
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                打印整图
+              </button>
+            )}
+            {cropConfig.availableModes.includes('lomo') && (
+              <button
+                onClick={() => handleModeChange('lomo')}
+                className={`px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
+                  mode === 'lomo'
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                四周留白
+              </button>
+            )}
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex gap-3 md:gap-2">
+            <button
+              onClick={onCancel}
+              className="flex-1 py-3 md:py-2.5 bg-gray-700 text-white rounded-full font-medium text-sm md:text-xs transition-all hover:bg-gray-600"
+            >
+              返回列表
+            </button>
+            <button
+              onClick={handleSave}
+              className="flex-1 py-3 md:py-2.5 gradient-primary text-white rounded-full font-medium text-sm md:text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <Check className="w-5 h-5 md:w-4 md:h-4" />
+              <span>保存</span>
+              {photoData.isAdjusted && (
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-green-500/90 text-xs flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-white" />
+                  <span>已调整</span>
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

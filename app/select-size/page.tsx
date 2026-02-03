@@ -286,26 +286,26 @@ export default function SelectSizePage() {
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
       {/* Header */}
-      <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center px-4 py-3">
+      <div className="bg-white sticky top-0 z-10 shadow-sm desktop-nav">
+        <div className="desktop-container flex items-center px-4 py-3">
           <button
             onClick={() => router.push('/')}
-            className="mr-3 p-1 text-gray-700"
+            className="mr-3 p-1 text-gray-700 hover:text-gray-900 transition-colors desktop-hover"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6 md:w-7 md:h-7" />
           </button>
-          <h1 className="text-lg font-semibold">选择照片尺寸</h1>
+          <h1 className="text-lg font-semibold md:text-xl">选择照片尺寸</h1>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="desktop-container p-4">
         {/* 订单信息显示 */}
         {orderNumber && (
-          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden desktop-shadow">
             {/* 订单号 */}
             <div className="px-4 py-2.5">
-              <p className="text-sm text-blue-700">
+              <p className="text-sm text-blue-700 md:text-base">
                 📦 订单编号：<span className="font-bold">{orderNumber}</span>
               </p>
             </div>
@@ -314,17 +314,17 @@ export default function SelectSizePage() {
             {receiverName && (
               <div className="px-4 py-2.5 bg-blue-100/50 border-t border-blue-200 flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-blue-700 md:text-base">
                     👤 收货人：<span className="font-medium">{receiverName}</span>
                   </p>
                 </div>
                 {!isOrderLocked && (
                   <button
                     onClick={() => router.push(`/guide?orderNo=${orderNumber}`)}
-                    className="ml-2 p-1.5 text-blue-600 hover:bg-blue-200 rounded transition-colors flex-shrink-0"
+                    className="ml-2 p-1.5 text-blue-600 hover:bg-blue-200 rounded transition-colors flex-shrink-0 desktop-hover"
                     title="编辑收货人信息"
                   >
-                    <Edit className="w-4 h-4" />
+                    <Edit className="w-4 h-4 md:w-5 md:h-5" />
                   </button>
                 )}
               </div>
@@ -333,7 +333,7 @@ export default function SelectSizePage() {
             {/* 锁定状态提示 */}
             {isOrderLocked && (
               <div className="px-4 py-2.5 bg-green-100/50 border-t border-green-200">
-                <p className="text-sm text-green-700">
+                <p className="text-sm text-green-700 md:text-base">
                   🔒 订单已锁定，正在制作中
                 </p>
               </div>
@@ -345,10 +345,10 @@ export default function SelectSizePage() {
         {!isOrderLocked && (
           <button
             onClick={() => setShowAddModal(true)}
-            className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-[#ff4d6d] hover:bg-pink-50 transition-colors active:scale-[0.98]"
+            className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-[#ff4d6d] hover:bg-pink-50 transition-colors active:scale-[0.98] md:py-4 desktop-hover"
           >
-            <Plus className="w-5 h-5" />
-            <span className="font-medium">添加规格</span>
+            <Plus className="w-5 h-5 md:w-6 md:h-6" />
+            <span className="font-medium md:text-base">添加规格</span>
           </button>
         )}
 
@@ -356,7 +356,7 @@ export default function SelectSizePage() {
         {isLoading && (
           <div className="py-20 text-center">
             <Loader2 className="w-10 h-10 mx-auto mb-4 text-[#ff4d6d] animate-spin" />
-            <p className="text-gray-400">加载中...</p>
+            <p className="text-gray-400 md:text-lg">加载中...</p>
           </div>
         )}
 
@@ -366,25 +366,25 @@ export default function SelectSizePage() {
             <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
               <ImageIcon className="w-10 h-10 text-gray-300" />
             </div>
-            <p className="text-gray-400 mb-1">还没有添加规格</p>
-            <p className="text-sm text-gray-300">点击上方"添加规格"开始选择</p>
+            <p className="text-gray-400 mb-1 md:text-lg">还没有添加规格</p>
+            <p className="text-sm text-gray-300 md:text-base">点击上方"添加规格"开始选择</p>
           </div>
         ) : !isLoading && (
           <div className="space-y-3">
             {addedSizes.map((size) => (
               <div
                 key={size.id}
-                className="bg-white rounded-xl overflow-hidden shadow-sm active:bg-gray-50 transition-colors"
+                className="bg-white rounded-xl overflow-hidden shadow-sm active:bg-gray-50 transition-colors desktop-shadow desktop-hover"
                 onClick={() => handleSelectSize(size)}
               >
-                <div className="flex items-center px-4 py-3">
+                <div className="flex items-center px-4 py-3 md:py-4">
                   {/* 左侧信息 */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base font-bold text-gray-800">{size.paperName}</span>
-                      <span className="text-lg font-bold text-[#ff4d6d]">{size.sizeName}</span>
+                      <span className="text-base font-bold text-gray-800 md:text-lg">{size.paperName}</span>
+                      <span className="text-lg font-bold text-[#ff4d6d] md:text-xl">{size.sizeName}</span>
                     </div>
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-400 md:text-sm">
                       {size.width}×{size.height}mm
                     </div>
                   </div>
@@ -396,9 +396,9 @@ export default function SelectSizePage() {
                       size.totalPrintCount > 0
                         ? 'bg-green-50 text-green-600'
                         : 'bg-gray-100 text-gray-400'
-                    }`}>
+                    } md:px-4 md:py-2`}>
                       <span className="flex items-center gap-1">
-                        <ImageIcon className="w-3.5 h-3.5" />
+                        <ImageIcon className="w-3.5 h-3.5 md:w-4 md:h-4" />
                         已上传{size.totalPrintCount}张
                       </span>
                     </div>
@@ -408,18 +408,18 @@ export default function SelectSizePage() {
                       <button
                         onClick={(e) => handleDeleteSize(size, e)}
                         disabled={isDeleting === size.id}
-                        className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
+                        className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50 md:w-8 md:h-8 desktop-hover"
                       >
                         {isDeleting === size.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin md:w-5 md:h-5" />
                         ) : (
-                          <X className="w-4 h-4" />
+                          <X className="w-4 h-4 md:w-5 md:h-5" />
                         )}
                       </button>
                     )}
 
                     {/* 箭头 */}
-                    <ChevronRight className="w-5 h-5 text-gray-300" />
+                    <ChevronRight className="w-5 h-5 text-gray-300 md:w-6 md:h-6" />
                   </div>
                 </div>
               </div>
@@ -429,7 +429,7 @@ export default function SelectSizePage() {
 
         {/* 底部提示 */}
         {!isLoading && addedSizes.length > 0 && (
-          <p className="mt-6 text-center text-xs text-gray-400">
+          <p className="mt-6 text-center text-xs text-gray-400 md:text-sm">
             点击规格可进入上传页面
           </p>
         )}
@@ -438,8 +438,8 @@ export default function SelectSizePage() {
       {/* Toast 提示 */}
       {showToast && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
-          <div className="px-6 py-3 bg-black/75 text-white text-sm rounded-lg shadow-lg flex items-center gap-2">
-            <Check className="w-4 h-4" />
+          <div className="px-6 py-3 bg-black/75 text-white text-sm rounded-lg shadow-lg flex items-center gap-2 md:text-base">
+            <Check className="w-4 h-4 md:w-5 md:h-5" />
             {showToast}
           </div>
         </div>
@@ -456,12 +456,12 @@ export default function SelectSizePage() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white shadow-xl overflow-hidden"
+            className="w-full max-w-md rounded-2xl bg-white shadow-xl overflow-hidden desktop-shadow"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 pt-5 pb-4">
-              <h3 className="text-base font-semibold text-gray-900">确认删除</h3>
-              <div className="mt-2 text-sm text-gray-600 leading-relaxed">
+              <h3 className="text-base font-semibold text-gray-900 md:text-lg">确认删除</h3>
+              <div className="mt-2 text-sm text-gray-600 leading-relaxed md:text-base">
                 <p>
                   确定要删除「{pendingDeleteSize.paperName} {pendingDeleteSize.sizeName}」吗？
                 </p>
@@ -485,7 +485,7 @@ export default function SelectSizePage() {
                   setShowDeleteConfirm(false)
                   setPendingDeleteSize(null)
                 }}
-                className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-700 font-medium active:scale-[0.99] disabled:opacity-50"
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-700 font-medium active:scale-[0.99] disabled:opacity-50 desktop-hover"
               >
                 取消
               </button>
@@ -493,7 +493,7 @@ export default function SelectSizePage() {
                 type="button"
                 disabled={isDeleting === pendingDeleteSize.id}
                 onClick={confirmDeleteSize}
-                className="flex-1 h-11 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 h-11 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2 desktop-hover"
               >
                 {isDeleting === pendingDeleteSize.id && <Loader2 className="w-4 h-4 animate-spin" />}
                 确认删除
@@ -518,19 +518,19 @@ export default function SelectSizePage() {
                   setSelectedPaper(null)
                   setSelectedSize(null)
                 }}
-                className="text-gray-500 text-sm"
+                className="text-gray-500 text-sm md:text-base desktop-hover"
               >
                 取消
               </button>
-              <h3 className="font-semibold">添加规格</h3>
+              <h3 className="font-semibold md:text-lg">添加规格</h3>
               <button
                 onClick={handleAddSize}
                 disabled={!selectedPaper || !selectedSize || isAdding}
-                className={`text-sm font-medium flex items-center gap-1 ${
+                className={`text-sm font-medium flex items-center gap-1 md:text-base ${
                   selectedPaper && selectedSize && !isAdding
                     ? 'text-[#ff4d6d]'
                     : 'text-gray-300'
-                }`}
+                } desktop-hover`}
               >
                 {isAdding && <Loader2 className="w-4 h-4 animate-spin" />}
                 添加
@@ -540,7 +540,7 @@ export default function SelectSizePage() {
             <div className="p-4 overflow-y-auto">
               {/* 选择相纸 */}
               <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">选择相纸</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-3 md:text-base">选择相纸</h4>
                 <div className="flex flex-wrap gap-2">
                   {PAPER_TYPES.map((paper) => {
                     const isDisabled = disabledPapers.has(paper.id)
@@ -549,13 +549,13 @@ export default function SelectSizePage() {
                         key={paper.id}
                         onClick={() => !isDisabled && handleSelectPaper(paper.id)}
                         disabled={isDisabled}
-                        className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all md:px-5 md:py-3 md:text-base ${
                           selectedPaper === paper.id
                             ? 'bg-[#ff4d6d] text-white shadow-sm'
                             : isDisabled
                               ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                        } desktop-hover`}
                       >
                         {paper.name}
                       </button>
@@ -563,7 +563,7 @@ export default function SelectSizePage() {
                   })}
                 </div>
                 {selectedPaper && (
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-500 md:text-sm">
                     {PAPER_TYPES.find(p => p.id === selectedPaper)?.description}
                   </p>
                 )}
@@ -571,8 +571,8 @@ export default function SelectSizePage() {
 
               {/* 选择尺寸 */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">选择尺寸</h4>
-                <div className="grid grid-cols-4 gap-2">
+                <h4 className="text-sm font-medium text-gray-700 mb-3 md:text-base">选择尺寸</h4>
+                <div className="grid grid-cols-4 gap-2 md:grid-cols-6 md:gap-3">
                   {SIZE_OPTIONS.map((size) => {
                     const isDisabled = disabledSizes.has(size.id)
                     return (
@@ -580,13 +580,13 @@ export default function SelectSizePage() {
                         key={size.id}
                         onClick={() => !isDisabled && handleSizeOptionClick(size.id)}
                         disabled={isDisabled}
-                        className={`py-3 rounded-lg text-sm font-medium transition-all ${
+                        className={`py-3 rounded-lg text-sm font-medium transition-all md:py-4 md:text-base ${
                           selectedSize === size.id
                             ? 'bg-[#ff4d6d] text-white shadow-sm'
                             : isDisabled
                               ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                        } desktop-hover`}
                       >
                         {size.name}
                       </button>
@@ -594,7 +594,7 @@ export default function SelectSizePage() {
                   })}
                 </div>
                 {selectedSize && (
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-500 md:text-sm">
                     尺寸：{SIZE_OPTIONS.find(s => s.id === selectedSize)?.width}×
                     {SIZE_OPTIONS.find(s => s.id === selectedSize)?.height}mm
                   </p>
@@ -604,14 +604,14 @@ export default function SelectSizePage() {
               {/* 当前选择预览 */}
               {selectedPaper && selectedSize && (
                 <div className="mt-6 p-4 bg-gradient-to-r from-pink-50 to-orange-50 rounded-xl border border-pink-100">
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 md:text-base">
                     当前选择：
                     <span className="font-bold text-[#ff4d6d]">
                       {' '}{PAPER_TYPES.find(p => p.id === selectedPaper)?.name}{' '}
                       {SIZE_OPTIONS.find(s => s.id === selectedSize)?.name}
                     </span>
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400 mt-1 md:text-sm">
                     {SIZE_OPTIONS.find(s => s.id === selectedSize)?.width}×
                     {SIZE_OPTIONS.find(s => s.id === selectedSize)?.height}mm
                   </p>

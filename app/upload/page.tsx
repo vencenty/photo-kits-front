@@ -28,6 +28,32 @@ import {
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
 
+/** 与页面 grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 保持一致的响应式列数 */
+function useColumns() {
+  const [columns, setColumns] = useState(3)
+  useEffect(() => {
+    const mqlXl = window.matchMedia('(min-width: 1280px)')
+    const mqlLg = window.matchMedia('(min-width: 1024px)')
+    const mqlMd = window.matchMedia('(min-width: 768px)')
+    const update = () => {
+      if (mqlXl.matches) setColumns(6)
+      else if (mqlLg.matches) setColumns(5)
+      else if (mqlMd.matches) setColumns(4)
+      else setColumns(3)
+    }
+    update()
+    mqlXl.addEventListener('change', update)
+    mqlLg.addEventListener('change', update)
+    mqlMd.addEventListener('change', update)
+    return () => {
+      mqlXl.removeEventListener('change', update)
+      mqlLg.removeEventListener('change', update)
+      mqlMd.removeEventListener('change', update)
+    }
+  }, [])
+  return columns
+}
+
 /**
  * 计算 cover 模式下的居中裁切尺寸
  * 图片需要完全覆盖相纸区域，居中裁切
@@ -103,10 +129,10 @@ function UploadPageContent() {
   const [showUnadjustedDialog, setShowUnadjustedDialog] = useState(false) // 显示未调整照片确认对话框
   const [unadjustedImages, setUnadjustedImages] = useState<ImageType[]>([]) // 未调整的照片列表
 
-  // 虚拟滚动相关
+  // 虚拟滚动相关（列数与 grid-cols-3 md:4 lg:5 xl:6 一致，避免只占半屏）
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
-  const COLUMNS = 3
+  const columns = useColumns()
   const GAP = 8 // gap-2 = 8px
   const MAX_CONCURRENT_UPLOADS = 5 // ⚙️ 最大并发上传数量
 
@@ -119,7 +145,7 @@ function UploadPageContent() {
   const cropConfig = sizeId ? getCropConfigForSize(sizeId) : { defaultMode: 'cover' as CropMode, availableModes: ['cover', 'full', 'lomo'] as CropMode[] }
 
   // 计算行数
-  const rowCount = Math.ceil(images.length / COLUMNS)
+  const rowCount = Math.ceil(images.length / columns)
 
   // 动态计算行高（基于容器宽度和相纸比例）
   const getRowHeight = useCallback((index: number) => {
@@ -149,11 +175,11 @@ function UploadPageContent() {
       return estimatedCardHeight + GAP
     }
     
-    const cardWidth = (containerWidth - GAP * (COLUMNS - 1)) / COLUMNS
+    const cardWidth = (containerWidth - GAP * (columns - 1)) / columns
     // 卡片高度 = 图片区域（基于宽高比）+ 编辑按钮高度（py-2.5 ≈ 40px）+ 额外边距（10px）
     const cardHeight = cardWidth / paperRatio + 50
     return cardHeight + GAP
-  }, [paperRatio])
+  }, [paperRatio, columns])
 
   // 虚拟滚动器
   const rowVirtualizer = useVirtualizer({
@@ -229,7 +255,7 @@ function UploadPageContent() {
             if (scrollData.imageId) {
               const currentImageIndex = images.findIndex(img => img.id === scrollData.imageId)
               if (currentImageIndex !== -1) {
-                targetRowIndex = Math.floor(currentImageIndex / COLUMNS)
+                targetRowIndex = Math.floor(currentImageIndex / columns)
                 console.log('📍 找到图片当前位置:', { imageId: scrollData.imageId, newRowIndex: targetRowIndex })
               }
             }
@@ -853,8 +879,8 @@ function UploadPageContent() {
     const imageIndex = images.findIndex((img) => img.id === id)
     if (imageIndex === -1) return
     
-    // 计算该图片所在的行索引
-    const rowIndex = Math.floor(imageIndex / COLUMNS)
+    // 计算该图片所在的行索引（与当前响应式列数一致）
+    const rowIndex = Math.floor(imageIndex / columns)
     
     const scrollData = {
       imageId: id,           // 保存图片ID（用于精确定位）
@@ -1145,27 +1171,27 @@ function UploadPageContent() {
   return (
     <div className="min-h-screen bg-[#f5f5f5] pb-32 overscroll-none">
       {/* Header */}
-      <div className="bg-white sticky top-0 z-10">
-        <div className="flex items-center justify-between px-4 py-3">
+      <div className="bg-white sticky top-0 z-10 desktop-nav">
+        <div className="desktop-container flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <button onClick={handleBack} className="p-1 text-gray-700">
-              <ArrowLeft className="w-6 h-6" />
+            <button onClick={handleBack} className="p-1 text-gray-700 hover:text-gray-900 transition-colors">
+              <ArrowLeft className="w-6 h-6 md:w-7 md:h-7" />
             </button>
-            <button onClick={() => router.push('/')} className="p-1 text-gray-700">
-              <Home className="w-6 h-6" />
+            <button onClick={() => router.push('/')} className="p-1 text-gray-700 hover:text-gray-900 transition-colors">
+              <Home className="w-6 h-6 md:w-7 md:h-7" />
             </button>
-            <span className="text-lg font-medium ml-2">已上传照片</span>
+            <span className="text-lg font-medium ml-2 md:text-xl">已上传照片</span>
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 md:text-base">
             {currentSession.sizeName}·{currentSession.canvasWidth}×{currentSession.canvasHeight}{currentSession.unit || 'mm'}
           </div>
         </div>
       </div>
 
       {/* 提示横幅 */}
-      <div className="bg-[#fff8f5] px-4 py-3 flex items-start gap-2">
+      <div className="desktop-container bg-[#fff8f5] px-4 py-3 flex items-start gap-2">
         <span className="text-xl">🔥</span>
-        <p className="text-sm text-[#ff6b35] leading-relaxed flex-1">
+        <p className="text-sm text-[#ff6b35] leading-relaxed flex-1 md:text-base">
           列表预览图已压缩，冲印时会使用原图。列表页所见即冲印最终效果参考。
         </p>
       </div>
@@ -1180,34 +1206,34 @@ function UploadPageContent() {
       
       {/* 未完成上传提示 */}
       {hasUnfinishedUploads && !isUploading && (
-        <div className="bg-yellow-50 px-4 py-3 flex items-center gap-2">
+        <div className="desktop-container bg-yellow-50 px-4 py-3 flex items-center gap-2">
           <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />
-          <p className="text-sm text-yellow-600">有照片正在上传中，请等待上传完成后再编辑</p>
+          <p className="text-sm text-yellow-600 md:text-base">有照片正在上传中，请等待上传完成后再编辑</p>
         </div>
       )}
 
-      {/* 图片列表 */}
-      <div className="px-3 pt-3">
+      {/* 图片列表：PC 铺满可用宽度并居中，超宽屏限制最大宽度 */}
+      <div className="w-full max-w-[1600px] mx-auto px-3 pt-3 md:px-4 lg:px-6">
         {isLoadingPhotos ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg desktop-shadow">
             <Loader2 className="w-12 h-12 text-[#ff4d6d] animate-spin mb-4" />
-            <p className="text-gray-500">正在加载照片...</p>
+            <p className="text-gray-500 md:text-lg">正在加载照片...</p>
           </div>
         ) : images.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg desktop-shadow">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <Upload className="w-12 h-12 text-gray-400" />
             </div>
-            <p className="text-gray-500 mb-6">还没有上传照片</p>
+            <p className="text-gray-500 mb-6 md:text-lg">还没有上传照片</p>
             {isOrderLocked ? (
-              <div className="px-6 py-3 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center">
+              <div className="px-6 py-3 md:px-6 md:py-2.5 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center md:text-sm">
                 订单已锁定，正在制作中
               </div>
             ) : (
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="px-6 py-3 bg-[#ff4d6d] text-white rounded-full font-medium disabled:opacity-50"
+                className="px-6 py-3 md:px-6 md:py-2.5 bg-[#ff4d6d] text-white rounded-full font-medium text-sm disabled:opacity-50 desktop-hover"
               >
                 开始上传
               </button>
@@ -1216,8 +1242,7 @@ function UploadPageContent() {
         ) : (
           <div 
             ref={scrollContainerRef}
-            className="overflow-auto hide-scrollbar"
-            style={{ height: 'calc(100vh - 280px)' }} // 减去 header + footer 高度
+            className="overflow-auto hide-scrollbar h-[calc(100vh-280px)] md:h-[calc(100vh-240px)] md:max-h-[720px]"
           >
             <div
               style={{
@@ -1230,8 +1255,8 @@ function UploadPageContent() {
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const startIndex = virtualRow.index * COLUMNS
-                const rowImages = images.slice(startIndex, startIndex + COLUMNS)
+                const startIndex = virtualRow.index * columns
+                const rowImages = images.slice(startIndex, startIndex + columns)
                 
                 return (
                   <div
@@ -1244,7 +1269,7 @@ function UploadPageContent() {
                         rowRefs.current.delete(virtualRow.index)
                       }
                     }}
-                    className="absolute left-0 right-0 grid grid-cols-3 gap-2.5"
+                    className="absolute left-0 right-0 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5"
                     style={{
                       top: `${virtualRow.start}px`,
                     }}
@@ -1320,11 +1345,11 @@ function UploadPageContent() {
                                     e.stopPropagation()
                                     handleCountChange(image.id, -1)
                                   }}
-                                  className="w-7 h-7 flex items-center justify-center text-gray-600"
+                                  className="w-7 h-7 md:w-6 md:h-6 flex items-center justify-center text-gray-600"
                                 >
-                                  <Minus className="w-4 h-4" />
+                                  <Minus className="w-4 h-4 md:w-3.5 md:h-3.5" />
                                 </button>
-                                <span className="w-6 text-center text-sm font-medium text-gray-700">
+                                <span className="w-6 md:w-5 text-center text-sm md:text-xs font-medium text-gray-700">
                                   {image.printCount}
                                 </span>
                                 <button
@@ -1332,9 +1357,9 @@ function UploadPageContent() {
                                     e.stopPropagation()
                                     handleCountChange(image.id, 1)
                                   }}
-                                  className="w-7 h-7 flex items-center justify-center text-gray-600"
+                                  className="w-7 h-7 md:w-6 md:h-6 flex items-center justify-center text-gray-600"
                                 >
-                                  <Plus className="w-4 h-4" />
+                                  <Plus className="w-4 h-4 md:w-3.5 md:h-3.5" />
                                 </button>
                               </div>
                             </div>
@@ -1359,7 +1384,7 @@ function UploadPageContent() {
                               handleEdit(image.id)
                             }}
                             disabled={!image.uploadStatus?.ossUploaded || !image.uploadStatus?.backendSynced}
-                            className="w-full py-2.5 bg-[#f5f5f5] text-gray-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-2.5 md:py-2 bg-[#f5f5f5] text-gray-600 text-sm md:text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced ? '编辑' : '上传中...'}
                           </button>
@@ -1367,7 +1392,7 @@ function UploadPageContent() {
                         
                         {/* 锁定状态下显示"仅查看"文字 */}
                         {!isBatchMode && isOrderLocked && (
-                          <div className="w-full py-2.5 bg-[#f5f5f5] text-gray-500 text-sm font-medium text-center">
+                          <div className="w-full py-2.5 md:py-2 bg-[#f5f5f5] text-gray-500 text-sm md:text-xs font-medium text-center">
                             仅查看
                           </div>
                         )}
@@ -1381,14 +1406,14 @@ function UploadPageContent() {
         )}
       </div>
 
-      {/* 底部操作栏 */}
+      {/* 底部操作栏：PC/iPad 下约束宽度、缩小按钮 */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20">
-        <div className="px-4 pt-3 pb-4 safe-area-inset-bottom" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+        <div className="desktop-container px-4 pt-3 pb-4 md:pt-2 md:pb-3 safe-area-inset-bottom" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px) + 1rem)' }}>
           {!isBatchMode ? (
             <>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 md:gap-2">
                 {isOrderLocked ? (
-                  <div className="flex-1 py-3 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center">
+                  <div className="flex-1 py-3 md:py-2.5 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center text-sm md:text-xs">
                     订单已锁定，正在制作中
                   </div>
                 ) : (
@@ -1403,7 +1428,7 @@ function UploadPageContent() {
                         clearSelection()
                         setBatchCropMode(null)
                       }}
-                      className="text-[#ff4d6d] font-medium text-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-[#ff4d6d] font-medium text-sm md:text-xs whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={images.length === 0 || hasUnfinishedUploads}
                     >
                       批量编辑
@@ -1411,9 +1436,9 @@ function UploadPageContent() {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploading}
-                      className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium text-base disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="flex-1 py-3 md:py-2.5 bg-[#ff4d6d] text-white rounded-full font-medium text-base md:text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}
+                      {isUploading && <Loader2 className="w-5 h-5 md:w-4 md:h-4 animate-spin" />}
                       继续上传
                     </button>
                   </>
@@ -1424,7 +1449,7 @@ function UploadPageContent() {
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="w-full mt-3 mb-1 py-3 bg-green-500 text-white rounded-full font-medium disabled:opacity-50"
+                  className="w-full mt-3 mb-1 py-3 md:py-2.5 md:mt-2 md:mb-0 bg-green-500 text-white rounded-full font-medium text-sm md:text-xs disabled:opacity-50"
                 >
                   确认(共上传{totalPrintCount}张)
                 </button>
@@ -1432,32 +1457,31 @@ function UploadPageContent() {
             </>
           ) : !isOrderLocked ? (
             <>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 md:mb-2">
                 <button
                   onClick={handleToggleSelectAll}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${
+                  className={`flex items-center gap-2 px-3 py-1.5 md:py-1 rounded-full border text-sm md:text-xs ${
                     isAllSelected
                       ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
                       : 'border-gray-300 text-gray-600'
                   }`}
                 >
-                  <CheckSquare className="w-4 h-4" />
+                  <CheckSquare className="w-4 h-4 md:w-3.5 md:h-3.5" />
                   <span>{isAllSelected ? '取消全选' : '全选'}</span>
                 </button>
-                <span className="text-sm text-gray-500">
+                <span className="text-sm md:text-xs text-gray-500">
                   已选择 {selectedIds.length}/{images.length} 张
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center justify-between gap-2 mb-3 md:mb-2">
                 <div className="flex gap-2 flex-wrap">
-                  {/* 根据当前尺寸的配置显示可选的裁剪模式 */}
                   {cropConfig.availableModes.map((mode) => (
                     <button
                       key={mode}
                       onClick={() => handleApplyBatchCrop(mode)}
                       disabled={selectedIds.length === 0}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm ${
+                      className={`flex items-center gap-1 px-3 py-1.5 md:px-2.5 md:py-1 rounded-full border text-sm md:text-xs ${
                         selectedIds.length === 0
                           ? 'border-gray-300 text-gray-400 bg-gray-50 cursor-not-allowed'
                           : batchCropMode === mode
@@ -1465,11 +1489,11 @@ function UploadPageContent() {
                           : 'border-gray-300 text-gray-600'
                       }`}
                     >
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                      <div className={`w-4 h-4 md:w-3.5 md:h-3.5 rounded border-2 flex items-center justify-center ${
                         batchCropMode === mode ? 'border-[#ff4d6d] bg-[#ff4d6d]' : 'border-gray-400'
                       }`}>
                         {batchCropMode === mode && (
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="w-3 h-3 md:w-2.5 md:h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         )}
@@ -1481,7 +1505,7 @@ function UploadPageContent() {
 
                 <button
                   onClick={handleBatchDelete}
-                  className={`text-sm whitespace-nowrap font-medium ${
+                  className={`text-sm md:text-xs whitespace-nowrap font-medium ${
                     selectedIds.length === 0 ? 'text-gray-400' : 'text-red-500'
                   }`}
                   disabled={selectedIds.length === 0}
@@ -1493,7 +1517,7 @@ function UploadPageContent() {
               <button
                 onClick={executeBatchCrop}
                 disabled={selectedIds.length === 0 || !batchCropMode}
-                className={`w-full py-3 rounded-full font-medium ${
+                className={`w-full py-3 md:py-2.5 rounded-full font-medium text-sm md:text-xs ${
                   selectedIds.length === 0 || !batchCropMode
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-[#ff4d6d] text-white'

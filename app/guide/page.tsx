@@ -79,25 +79,25 @@ function GuidePageContent() {
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
       {/* Header */}
-      <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center px-4 py-3">
+      <div className="bg-white sticky top-0 z-10 shadow-sm desktop-nav">
+        <div className="desktop-container flex items-center px-4 py-3">
           <button
             onClick={() => router.push('/')}
-            className="mr-3 p-1 text-gray-700"
+            className="mr-3 p-1 text-gray-700 hover:text-gray-900 transition-colors desktop-hover"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6 md:w-7 md:h-7" />
           </button>
-          <h1 className="text-lg font-semibold">
+          <h1 className="text-lg font-semibold md:text-xl">
             {isOrderLocked ? '订单信息' : '欢迎使用照片冲印服务'}
           </h1>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-4 pb-24">
+      <div className="desktop-container p-4 pb-24">
         {/* 订单号显示 */}
         <div className="mb-6 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-700">
+          <p className="text-sm text-blue-700 md:text-base">
             📦 订单编号：<span className="font-bold">{orderNo}</span>
           </p>
         </div>
@@ -105,44 +105,42 @@ function GuidePageContent() {
         {/* 订单已锁定提示 */}
         {isOrderLocked && (
           <div className="mb-6 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-700 font-medium">
+            <p className="text-sm text-green-700 font-medium md:text-base">
               🔒 订单已锁定，正在制作中，无法修改收货人信息
             </p>
           </div>
         )}
 
         {/* 收货人信息表单 */}
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm">
+        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm desktop-shadow">
           <div className="flex items-center gap-2 mb-3">
-            <User className="w-5 h-5 text-[#ff4d6d]" />
-            <h2 className="text-base font-semibold">收货人信息</h2>
-            {!isOrderLocked && <span className="text-red-500 text-sm">*</span>}
+            <User className="w-5 h-5 md:w-6 md:h-6 text-[#ff4d6d]" />
+            <h2 className="text-base font-semibold md:text-lg">收货人信息</h2>
+            {!isOrderLocked && <span className="text-red-500 text-sm md:text-base">*</span>}
           </div>
           
           <input
             value={receiverName}
             onChange={(e) => setReceiverName(e.target.value)}
             placeholder="请输入收货人姓名"
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-[#ff4d6d] focus:outline-none resize-none disabled:bg-gray-100 disabled:text-gray-500"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-[#ff4d6d] focus:outline-none resize-none disabled:bg-gray-100 disabled:text-gray-500 md:py-4 md:text-base"
             disabled={isOrderLocked}
           />
           
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-gray-400 md:text-sm">
             💡 提示：要和淘宝收货人姓名一致哦～
           </p>
         </div>
 
         {/* 操作指引区域 - 预留 */}
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm">
-          {/* <h2 className="text-base font-semibold mb-3">📖 使用说明</h2> */}
-          
+        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm desktop-shadow">
           {/* 重要说明区域 */}
           <div className="space-y-3">
             <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
-              <p className="text-sm font-semibold text-red-700">
+              <p className="text-sm font-semibold text-red-700 md:text-base">
                 🚨 下单前必读（务必看完再操作）
               </p>
-              <ul className="mt-2 text-xs text-red-700 space-y-1 list-disc list-inside">
+              <ul className="mt-2 text-xs text-red-700 space-y-1 list-disc list-inside md:text-sm">
                 <li>每次手机选择照片不要超过30张，超过30张需要分多次上传避免卡死浏览器</li>
                 <li>请拍多少传多少，订单和这里的要保持一致，否则会延误制作发货～</li>
               </ul>
@@ -150,70 +148,62 @@ function GuidePageContent() {
             
             {/* 示例：常见问题 */}
             <div className="space-y-2">
-              <details className="p-3 bg-gray-50 rounded-lg">
-                <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+              <details className="p-3 bg-gray-50 rounded-lg desktop-hover">
+                <summary className="text-sm font-medium text-gray-700 cursor-pointer md:text-base">
                   ✅ 支持哪些图片格式？
                 </summary>
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-gray-600 mt-2 md:text-sm">
                   支持 JPG、PNG、HEIC、WebP 等常见图片格式
                 </p>
               </details>
               
-              <details className="p-3 bg-gray-50 rounded-lg">
-                <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+              <details className="p-3 bg-gray-50 rounded-lg desktop-hover">
+                <summary className="text-sm font-medium text-gray-700 cursor-pointer md:text-base">
                   ✅ 照片会被裁剪吗？
                 </summary>
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-gray-600 mt-2 md:text-sm">
                   四周留白样式没有任何裁剪，放心选择。
                 </p>
               </details>
               
-              <details className="p-3 bg-gray-50 rounded-lg">
-                <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+              <details className="p-3 bg-gray-50 rounded-lg desktop-hover">
+                <summary className="text-sm font-medium text-gray-700 cursor-pointer md:text-base">
                   ✅ 预览效果准确吗？
                 </summary>
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-gray-600 mt-2 md:text-sm">
                   列表预览图已压缩，效果为参考图，最终效果以实际打印为准
                 </p>
               </details>
             </div>
           </div>
         </div>
-
-        {/* 注意事项 */}
-        {/* <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
-          <h3 className="text-sm font-semibold text-orange-700 mb-2">⚠️ 温馨提示</h3>
-          <ul className="text-xs text-orange-600 space-y-1">
-            <li>• 预览效果即为最终打印效果</li>
-            <li>• 提交后订单将锁定，无法修改</li>
-            <li>• 建议先上传1-2张照片测试效果</li>
-          </ul>
-        </div> */}
       </div>
 
       {/* 底部按钮 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
-        {isOrderLocked ? (
-          <button
-            onClick={() => router.push('/select-size')}
-            className="w-full py-3 bg-gray-600 text-white rounded-full font-medium text-base active:scale-[0.98]"
-          >
-            返回
-          </button>
-        ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting || !receiverName.trim()}
-            className={`w-full py-3 rounded-full font-medium text-base flex items-center justify-center gap-2 ${
-              isSubmitting || !receiverName.trim()
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-[#ff4d6d] text-white active:scale-[0.98]'
-            }`}
-          >
-            {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-            {isSubmitting ? '提交中...' : '下一步，开始上传照片'}
-          </button>
-        )}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg desktop-nav">
+        <div className="desktop-container">
+          {isOrderLocked ? (
+            <button
+              onClick={() => router.push('/select-size')}
+              className="w-full py-3 bg-gray-600 text-white rounded-full font-medium text-base active:scale-[0.98] md:py-4 desktop-hover"
+            >
+              返回
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting || !receiverName.trim()}
+              className={`w-full py-3 rounded-full font-medium text-base flex items-center justify-center gap-2 ${
+                isSubmitting || !receiverName.trim()
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-[#ff4d6d] text-white active:scale-[0.98]'
+              } md:py-4 desktop-hover`}
+            >
+              {isSubmitting && <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />}
+              {isSubmitting ? '提交中...' : '下一步，开始上传照片'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
