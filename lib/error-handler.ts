@@ -15,6 +15,8 @@ export const ORDER_ERROR = {
   NEED_BIND_RELATED_ORDER: 10008,
   /** 关联订单号格式错误（应为 19 位） */
   RELATED_ORDER_INVALID: 10009,
+  /** 订单已超出可在线查看有效期 */
+  ORDER_EXPIRED: 10010,
 } as const
 
 // 业务错误类
@@ -103,11 +105,20 @@ const specialErrorHandlers: SpecialErrorHandler[] = [
       }
     },
   },
+  // 订单已锁定：目前仅做日志记录，可按需扩展
   {
-    code: 10002, // 订单已锁定
+    code: 10002,
     handler: (msg: string) => {
-      // 示例：订单已锁定时的特殊处理
       console.log('订单已锁定，可能需要跳转到订单详情页')
+    },
+  },
+  // 订单已超出在线查看有效期：统一跳转到过期页
+  {
+    code: ORDER_ERROR.ORDER_EXPIRED,
+    handler: () => {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/order-expired'
+      }
     },
   },
   {

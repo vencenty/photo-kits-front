@@ -11,6 +11,7 @@ import {
   isSystemError,
   handleSpecialError,
   reportErrorToMonitoring,
+  ORDER_ERROR,
   type ApiErrorResponse,
 } from './error-handler'
 
@@ -126,6 +127,12 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
  */
 function handleErrorResponse(errorData: ApiErrorResponse, silent: boolean): never {
   const { code, msg } = errorData
+
+  // 订单过期：不展示 toast，只做统一跳转
+  if (code === ORDER_ERROR.ORDER_EXPIRED) {
+    handleSpecialError(code, msg)
+    throw new BusinessError(code, msg)
+  }
 
   // 业务错误 (10000-49999)
   if (isBusinessError(code)) {
@@ -471,6 +478,7 @@ export interface OrderDetailResponse {
   shippingFee: number
   status: number
   submitTime: string
+  submitDays: number // 从提交时间到当前时间经过的天数（向下取整）
   receiverName: string // 后端 JSON 字段为 receiverName
   guideViewed: number // 是否已查看引导页：0-未查看 1-已查看
   photos?: PhotoDetail[] // 可选，根据 includePhotos 参数决定

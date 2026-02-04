@@ -362,7 +362,7 @@ function UploadPageContent() {
         console.log('📦 使用缓存数据，跳过 API 调用 (图片数:', images.length, ')')
         setIsLoadingPhotos(false)
         
-        // 后台静默更新订单状态（不影响用户体验）
+        // 后台静默更新订单状态（不影响用户体验；过期逻辑交给全局错误处理）
         getOrderDetail(orderSn)
           .then(orderDetail => {
             setIsOrderLocked(checkOrderLocked(orderDetail.status))
@@ -383,7 +383,7 @@ function UploadPageContent() {
       try {
         setApiLoading(true, '加载照片列表...')
         
-        // 检查订单状态
+        // 检查订单状态（是否锁单等；过期逻辑交给全局错误处理）
         try {
           const orderDetail = await getOrderDetail(orderSn)
           // 使用常量检查订单是否已锁定

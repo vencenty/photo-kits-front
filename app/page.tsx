@@ -23,7 +23,7 @@ export default function Home() {
     setError('')
 
     try {
-      // 查询订单详情，判断是否已查看引导页
+      // 查询订单详情，判断是否已查看引导页（过期逻辑由后端 + 全局错误处理统一控制）
       const orderDetail = await getOrderDetail(trimmedOrder, false)
 
       // 保存订单号到 sessionStorage
