@@ -80,7 +80,7 @@ export default function Home() {
                   setError('')
                 }}
                 onKeyPress={handleKeyPress}
-                placeholder="请输入订单编号"
+                placeholder="请输入订单编号或手机号"
                 className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent transition-all md:py-4 md:text-base"
                 disabled={isLoading}
               />
@@ -110,7 +110,7 @@ export default function Home() {
           {/* 说明文字 */}
           <div className="mt-4 p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500 leading-relaxed md:text-sm">
-              📌 输入订单编号后，选择照片尺寸开始上传
+              📌 若使用手机号，可以先传图后下单，最后也需要绑定对应的订单号哦。
             </p>
           </div>
         </div>
