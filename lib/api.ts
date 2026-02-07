@@ -723,17 +723,6 @@ export interface SubmitOrderParams {
 }
 
 /**
- * 提交订单（照片批量提交）
- * 后端路由: POST /api/photo/submit
- */
-export async function submitOrder(params: SubmitOrderParams): Promise<{ orderId: string; orderSn: string; message: string }> {
-  return request<{ orderId: string; orderSn: string; message: string }>('/api/photo/submit', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  })
-}
-
-/**
  * 提交订单状态更新
  * 后端路由: PUT /api/order/:orderNo/submit
  */

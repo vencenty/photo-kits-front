@@ -40,7 +40,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
 
   const previewUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
     isLandscape: image.isLandscape,
-    shortWidth: 200, // 列表页缩略图短边宽度
+    shortWidth: 300, // 列表页缩略图短边宽度
     quality: 70,
     format: 'jpg',
   })
