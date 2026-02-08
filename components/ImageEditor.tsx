@@ -6,6 +6,8 @@ import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, SimpleCropInfo, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
 import { getCropConfigForSize } from '@/lib/photo-sizes'
 import { useImagePreload } from '@/lib/use-image-preload'
+import { getPhotoDetail } from '@/lib/api'
+import { mapCropModeFromServer } from '@/lib/utils'
 import {
   CoverModeEditor,
   FullModeEditor,
@@ -74,6 +76,69 @@ export default function ImageEditor({
   )
 
   const imageUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
+
+  // 切图时先按 props 同步状态（无闪烁），再后台用 API 校正，保证与后端一致
+  useEffect(() => {
+    const photoId = photoData.id
+    if (!photoId || !imageUrl) return
+
+    const fromProps =
+      photoData.cropMode && cropConfig.availableModes.includes(photoData.cropMode)
+        ? photoData.cropMode
+        : cropConfig.defaultMode
+    setMode(fromProps)
+    if (fromProps === 'cover' && photoData.cropInfo) {
+      setCoverCropInfo(photoData.cropInfo)
+      setCoverOutputUrl(photoData.outputUrl || buildOssCropUrl(imageUrl, photoData.cropInfo))
+    } else {
+      setCoverCropInfo(null)
+      setCoverOutputUrl('')
+    }
+
+    let cancelled = false
+    getPhotoDetail(photoId)
+      .then((res) => {
+        if (cancelled) return
+        const nextMode = res.photo.cropMode && cropConfig.availableModes.includes(res.photo.cropMode as EditMode)
+          ? (mapCropModeFromServer(res.photo.cropMode) as EditMode)
+          : cropConfig.defaultMode
+        setMode(nextMode)
+
+        if (nextMode === 'cover' && res.photo.cropInfo) {
+          const c = res.photo.cropInfo
+          const cropWidth = c.cropWidth ?? c.sourceWidth
+          const cropHeight = c.cropHeight ?? c.sourceHeight
+          const backendPercent = (c as { croppedAreaPercent?: { x: number; y: number; width: number; height: number } }).croppedAreaPercent
+          const simple: SimpleCropInfo = {
+            offsetX: c.offsetX,
+            offsetY: c.offsetY,
+            cropWidth,
+            cropHeight,
+            sourceWidth: c.sourceWidth,
+            sourceHeight: c.sourceHeight,
+            styleType: (c.styleType || 'cover') as 'cover' | 'full' | 'lomo',
+            croppedAreaPercent: backendPercent ?? (c.sourceWidth && c.sourceHeight
+              ? {
+                  x: (c.offsetX / c.sourceWidth) * 100,
+                  y: (c.offsetY / c.sourceHeight) * 100,
+                  width: (cropWidth / c.sourceWidth) * 100,
+                  height: (cropHeight / c.sourceHeight) * 100,
+                }
+              : undefined),
+          }
+          setCoverCropInfo(simple)
+          setCoverOutputUrl(buildOssCropUrl(imageUrl, simple))
+        } else {
+          setCoverCropInfo(null)
+          setCoverOutputUrl('')
+        }
+      })
+      .catch(() => {
+        // 未同步到后端的照片会 404，上面已用 props 设好，无需再改
+      })
+
+    return () => { cancelled = true }
+  }, [photoData.id, imageUrl])
   const sourceSize = useMemo(
     () => ({
       width: photoData.width || 0,

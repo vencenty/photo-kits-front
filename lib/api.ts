@@ -11,7 +11,6 @@ import {
   isSystemError,
   handleSpecialError,
   reportErrorToMonitoring,
-  ORDER_ERROR,
   type ApiErrorResponse,
 } from './error-handler'
 
@@ -127,12 +126,6 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
  */
 function handleErrorResponse(errorData: ApiErrorResponse, silent: boolean): never {
   const { code, msg } = errorData
-
-  // 订单过期：不展示 toast，只做统一跳转
-  if (code === ORDER_ERROR.ORDER_EXPIRED) {
-    handleSpecialError(code, msg)
-    throw new BusinessError(code, msg)
-  }
 
   // 业务错误 (10000-49999)
   if (isBusinessError(code)) {
