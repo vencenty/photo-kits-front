@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2, Crop, Image as ImageIcon, Frame } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, SimpleCropInfo, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
 import { getCropConfigForSize } from '@/lib/photo-sizes'
@@ -401,36 +401,39 @@ export default function ImageEditor({
             {cropConfig.availableModes.includes('cover') && (
               <button
                 onClick={() => handleModeChange('cover')}
-                className={`px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
+                className={`flex items-center gap-2 px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
                   mode === 'cover'
                     ? 'bg-pink-500 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
               >
+                <Crop className="w-4 h-4 md:w-3.5 md:h-3.5 flex-shrink-0" />
                 居中裁剪
               </button>
             )}
             {cropConfig.availableModes.includes('full') && (
               <button
                 onClick={() => handleModeChange('full')}
-                className={`px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
+                className={`flex items-center gap-2 px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
                   mode === 'full'
                     ? 'bg-pink-500 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
               >
+                <ImageIcon className="w-4 h-4 md:w-3.5 md:h-3.5 flex-shrink-0" />
                 打印整图
               </button>
             )}
             {cropConfig.availableModes.includes('lomo') && (
               <button
                 onClick={() => handleModeChange('lomo')}
-                className={`px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
+                className={`flex items-center gap-2 px-3 py-3 md:px-3 md:py-2 rounded-lg font-medium transition-all text-sm md:text-xs ${
                   mode === 'lomo'
                     ? 'bg-pink-500 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
               >
+                <Frame className="w-4 h-4 md:w-3.5 md:h-3.5 flex-shrink-0" />
                 四周留白
               </button>
             )}

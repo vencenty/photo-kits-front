@@ -1387,7 +1387,7 @@ function UploadPageContent() {
                             disabled={!image.uploadStatus?.ossUploaded || !image.uploadStatus?.backendSynced}
                             className="w-full py-2.5 md:py-2 bg-[#f5f5f5] text-gray-600 text-sm md:text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced ? '编辑' : '上传中...'}
+                            {image.uploadStatus?.ossUploaded && image.uploadStatus?.backendSynced ? '调整' : '上传中...'}
                           </button>
                         )}
                         
@@ -1422,7 +1422,7 @@ function UploadPageContent() {
                     <button
                       onClick={() => {
                         if (hasUnfinishedUploads) {
-                          alert('有照片尚未上传完成，请等待上传完成后再进行批量编辑')
+                          alert('有照片尚未上传完成，请等待上传完成后再进行批量调整')
                           return
                         }
                         setIsBatchMode(true)
@@ -1432,7 +1432,7 @@ function UploadPageContent() {
                       className="text-[#ff4d6d] font-medium text-sm md:text-xs whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={images.length === 0 || hasUnfinishedUploads}
                     >
-                      批量编辑
+                      批量调整
                     </button>
                     <button
                       onClick={() => fileInputRef.current?.click()}

@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ant-design/pro-components": "^2.8.10",
     "@tanstack/react-virtual": "^3.13.16",
+    "antd": "^6.2.3",
     "clsx": "^2.1.1",
     "konva": "^9.3.0",
     "lucide-react": "^0.344.0",
