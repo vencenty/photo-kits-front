@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Loader2, User } from 'lucide-react'
+import { ArrowLeft, Loader2, User, Crop, ImageIcon, Frame } from 'lucide-react'
 import { updateOrder, getOrderDetail } from '@/lib/api'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
@@ -93,8 +94,8 @@ function GuidePageContent() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="desktop-container p-4 pb-24">
+      {/* Content - 可无限下滑，后续可继续补充更多图片和内容 */}
+      <div className="desktop-container p-4 pb-32 min-h-screen">
         {/* 订单号显示 */}
         <div className="mb-6 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-700 md:text-base">
@@ -131,6 +132,99 @@ function GuidePageContent() {
             💡 提示：要和淘宝收货人姓名一致哦～
           </p>
         </div>
+
+        {/* 三种冲印样式对比 - 帮助客户理解差异 */}
+        <section className="mb-8">
+          <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2 md:text-lg">
+            <Crop className="w-5 h-5 text-[#ff4d6d]" />
+            三种冲印样式对比
+          </h2>
+          <p className="text-sm text-gray-500 mb-4 md:text-base">
+            上传照片时可选择不同样式，同一张照片效果对比如下：
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            {/* 居中裁剪 */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow hover:border-pink-200 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
+                  <Crop className="w-4 h-4 text-[#ff4d6d]" />
+                </span>
+                <span className="font-medium text-gray-800">居中裁剪</span>
+              </div>
+              <div 
+                className="relative w-full rounded-lg overflow-hidden bg-gray-100"
+                style={{ aspectRatio: '89/127' }}
+              >
+                <Image
+                  src="/images/767ca761813e48ef1d6c58a23490d297.jpg"
+                  alt="居中裁剪示例"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+              <p className="mt-3 text-xs text-gray-600 md:text-sm">
+                填满相纸，多余部分居中裁掉。适合构图完整的照片。
+              </p>
+            </div>
+
+            {/* 打印整图 */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow hover:border-pink-200 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <ImageIcon className="w-4 h-4 text-blue-600" />
+                </span>
+                <span className="font-medium text-gray-800">打印整图</span>
+              </div>
+              <div 
+                className="relative w-full rounded-lg overflow-hidden bg-white flex items-center justify-center"
+                style={{ aspectRatio: '89/127' }}
+              >
+                <Image
+                  src="/images/767ca761813e48ef1d6c58a23490d297.jpg"
+                  alt="打印整图示例"
+                  fill
+                  className="object-contain"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+              <p className="mt-3 text-xs text-gray-600 md:text-sm">
+                图片完整显示，上下或左右可能留白。不裁切任何内容。
+              </p>
+            </div>
+
+            {/* 四周留白 */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow hover:border-pink-200 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                  <Frame className="w-4 h-4 text-amber-600" />
+                </span>
+                <span className="font-medium text-gray-800">四周留白</span>
+              </div>
+              <div 
+                className="relative w-full rounded-lg overflow-hidden bg-white flex items-center justify-center"
+                style={{ aspectRatio: '89/127' }}
+              >
+                {/* 四周留白：图片缩放至 90%，四周自然形成白边 */}
+                <div className="relative w-[90%] h-[90%]">
+                  <Image
+                    src="/images/767ca761813e48ef1d6c58a23490d297.jpg"
+                    alt="四周留白示例"
+                    fill
+                    className="object-contain"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                  />
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-gray-600 md:text-sm">
+                完整显示图片，四周留白边。文艺风格，无任何裁剪。
+              </p>
+            </div>
+          </div>
+
+          {/* 预留区域：后续可在此追加更多图片和说明，页面可无限下滑 */}
+        </section>
 
         {/* 操作指引区域 - 预留 */}
         <div className="bg-white rounded-xl p-4 mb-6 shadow-sm desktop-shadow">
