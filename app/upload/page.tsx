@@ -949,6 +949,13 @@ function UploadPageContent() {
 
   const isAllSelected = images.length > 0 && selectedIds.length === images.length
 
+  // 当没有选中图片时，清空裁剪模式选择，照片恢复为原始样式
+  useEffect(() => {
+    if (isBatchMode && selectedIds.length === 0) {
+      setBatchCropMode(null)
+    }
+  }, [isBatchMode, selectedIds.length])
+
   // 批量应用裁剪模式 - 只设置选择状态，不执行操作
   const handleApplyBatchCrop = (mode: CropMode) => {
     setBatchCropMode(mode)
@@ -956,7 +963,11 @@ function UploadPageContent() {
 
   // 执行批量操作（在点击完成按钮时调用）
   const executeBatchCrop = async () => {
+    // 未选中或未选择模式时，直接退出批量模式，避免用户交互流程卡住
     if (selectedIds.length === 0 || !batchCropMode) {
+      setIsBatchMode(false)
+      clearSelection()
+      setBatchCropMode(null)
       return
     }
     const targetIds = selectedIds
@@ -1300,9 +1311,10 @@ function UploadPageContent() {
                           style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
                         >
                   <PhotoPreviewCard
-                    key={`${image.id}-${image.cropMode}`} // 添加key，确保cropMode变化时重新渲染
+                    key={`${image.id}-${image.cropMode}-${isBatchMode && selectedIds.includes(image.id) ? batchCropMode : ''}`}
                     image={image}
                     aspectRatio={paperRatio}
+                    previewCropMode={isBatchMode && selectedIds.includes(image.id) && batchCropMode ? batchCropMode : undefined}
                     onClick={
                       isBatchMode
                         ? undefined // 批量模式下，由外层 div 处理点击，避免重复触发
@@ -1480,14 +1492,15 @@ function UploadPageContent() {
                   {cropConfig.availableModes.map((mode) => (
                     <button
                       key={mode}
+                      type="button"
                       onClick={() => handleApplyBatchCrop(mode)}
                       disabled={selectedIds.length === 0}
-                      className={`flex items-center gap-1 px-3 py-1.5 md:px-2.5 md:py-1 rounded-full border text-sm md:text-xs ${
+                      className={`flex items-center gap-1 px-3 py-1.5 md:px-2.5 md:py-1 rounded-full border text-sm md:text-xs transition-colors ${
                         selectedIds.length === 0
                           ? 'border-gray-300 text-gray-400 bg-gray-50 cursor-not-allowed'
                           : batchCropMode === mode
-                          ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d]'
-                          : 'border-gray-300 text-gray-600'
+                          ? 'border-[#ff4d6d] bg-pink-50 text-[#ff4d6d] cursor-pointer hover:bg-pink-100'
+                          : 'border-gray-300 text-gray-600 cursor-pointer hover:bg-gray-50'
                       }`}
                     >
                       <div className={`w-4 h-4 md:w-3.5 md:h-3.5 rounded border-2 flex items-center justify-center ${
@@ -1499,7 +1512,7 @@ function UploadPageContent() {
                           </svg>
                         )}
                       </div>
-                      <span>{mode === 'cover' ? '居中裁剪' : mode === 'full' ? '打印整图' : '四周留白'}</span>
+                      <span>{mode === 'cover' ? '满版裁剪' : mode === 'full' ? '打印整图' : '四周留白'}</span>
                     </button>
                   ))}
                 </div>
@@ -1517,12 +1530,7 @@ function UploadPageContent() {
 
               <button
                 onClick={executeBatchCrop}
-                disabled={selectedIds.length === 0 || !batchCropMode}
-                className={`w-full py-3 md:py-2.5 rounded-full font-medium text-sm md:text-xs ${
-                  selectedIds.length === 0 || !batchCropMode
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-[#ff4d6d] text-white'
-                }`}
+                className="w-full py-3 md:py-2.5 rounded-full font-medium text-sm md:text-xs bg-[#ff4d6d] text-white"
               >
                 完成
               </button>

@@ -63,7 +63,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 63.5, 
     "height": 89, 
     "ratio": 63.5/89,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "4inch", 
@@ -71,7 +71,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 76, 
     "height": 102, 
     "ratio": 76/102,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "square5inch", 
@@ -79,7 +79,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 127, 
     "height": 127, 
     "ratio": 127/127,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "5inch", 
@@ -87,7 +87,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 89, 
     "height": 127, 
     "ratio": 89/127,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "large5inch", 
@@ -95,7 +95,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 95, 
     "height": 127, 
     "ratio": 95/127,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "6inch", 
@@ -103,7 +103,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 102, 
     "height": 152, 
     "ratio": 102/152,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "square6inch", 
@@ -111,7 +111,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 152, 
     "height": 152, 
     "ratio": 152/152,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "large6inch", 
@@ -119,7 +119,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 114, 
     "height": 152, 
     "ratio": 114/152,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "7inch", 
@@ -127,7 +127,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 127, 
     "height": 178, 
     "ratio": 127/178,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "8inch", 
@@ -135,7 +135,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 152, 
     "height": 203, 
     "ratio": 152/203,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "10inch", 
@@ -143,7 +143,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 203, 
     "height": 254, 
     "ratio": 203/254,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   },
   { 
     "id": "A4", 
@@ -151,7 +151,7 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "width": 210, 
     "height": 297, 
     "ratio": 210/297,
-    // 使用默认配置：四周留白 + 居中裁剪
+    // 使用默认配置：四周留白 + 满版裁剪
   }
 ]
 
@@ -262,7 +262,7 @@ export function getPhotoSizeById(id: string): PhotoSize | undefined {
 /**
  * 默认裁剪配置
  * - 默认模式：四周留白（lomo）
- * - 可用模式：四周留白 + 居中裁剪（暂不开放打印整图）
+ * - 可用模式：四周留白 + 满版裁剪（暂不开放打印整图）
  * - 如需为某尺寸开放"打印整图"模式，在该尺寸的 cropConfig 中单独配置 availableModes 包含 'full'
  */
 const DEFAULT_CROP_CONFIG: CropStyleConfig = {

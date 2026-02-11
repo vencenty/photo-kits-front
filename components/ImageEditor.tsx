@@ -228,7 +228,7 @@ export default function ImageEditor({
         cropInfo = coverCropInfo
         outputUrl = coverOutputUrl
       } else {
-        // 默认居中裁剪
+        // 默认满版裁剪
         const { cropWidth, cropHeight } = calculateCoverCropSize(
           sourceSize.width,
           sourceSize.height,
@@ -315,7 +315,7 @@ export default function ImageEditor({
   const getModeHint = () => {
     switch (mode) {
       case 'cover':
-        return '居中裁剪模式：可拖拽移动图片位置'
+        return '满版裁剪模式：可拖拽移动图片位置'
       case 'full':
         return '打印整图模式：图片完整显示'
       case 'lomo':
@@ -408,7 +408,7 @@ export default function ImageEditor({
                 }`}
               >
                 <Crop className="w-4 h-4 md:w-3.5 md:h-3.5 flex-shrink-0" />
-                居中裁剪
+                满版裁剪
               </button>
             )}
             {cropConfig.availableModes.includes('full') && (

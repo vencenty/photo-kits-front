@@ -26,7 +26,7 @@
 4. **图片编辑器** - `app/edit/[imageId]/page.tsx` + `components/ImageEditor.tsx`
    - 使用 Konva.js 实现
    - 三种裁剪模式：
-     * 居中裁剪
+     * 满版裁剪
      * 打印整图
      * 四周留白（Lomo）
    - 手势操作：拖动、缩放、旋转

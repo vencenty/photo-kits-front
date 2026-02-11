@@ -193,7 +193,7 @@ export type CropMode = 'cover' | 'full' | 'lomo'
 
 /**
  * 将前端的裁剪模式转换为后端的 cropMode（现在前后端统一，直接返回）
- * - cover (居中裁剪) → cover
+ * - cover (满版裁剪) → cover
  * - full (打印整图) → full
  * - lomo (四周留白) → lomo
  */
@@ -207,7 +207,7 @@ export function mapCropModeToServer(mode: CropMode | string): string {
 
 /**
  * 将后端的 cropMode 转换为前端的模式（现在前后端统一，直接返回）
- * - cover → cover (居中裁剪)
+ * - cover → cover (满版裁剪)
  * - full → full (打印整图)
  * - lomo → lomo (四周留白)
  */

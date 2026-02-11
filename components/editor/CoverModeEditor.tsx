@@ -41,7 +41,7 @@ function calculateCoverCropSize(
 }
 
 /**
- * Cover 模式编辑器 - 居中裁剪
+ * Cover 模式编辑器 - 满版裁剪
  * 使用 react-easy-crop 实现拖拽裁剪
  */
 export function CoverModeEditor({
@@ -163,7 +163,7 @@ export function CoverModeEditor({
         croppedAreaPercent,
       }
     }
-    // 默认居中裁剪
+    // 默认满版裁剪
     const { cropWidth, cropHeight } = calculateCoverCropSize(sourceWidth, sourceHeight, cropAspectRatio)
     const offsetX = (sourceWidth - cropWidth) / 2
     const offsetY = (sourceHeight - cropHeight) / 2

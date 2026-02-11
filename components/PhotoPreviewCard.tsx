@@ -5,13 +5,17 @@ import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
 import { getListThumbnailUrl, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
+type CropMode = 'cover' | 'full' | 'lomo'
+
 interface PhotoPreviewCardProps {
   image: ImageType
   aspectRatio: number // 相纸宽高比
+  /** 预览时覆盖的裁剪模式（用于批量编辑即时预览） */
+  previewCropMode?: CropMode
   onClick?: () => void
 }
 
-export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCardProps) {
+export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick }: PhotoPreviewCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isClient, setIsClient] = useState(false)
 
@@ -46,9 +50,11 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
   })
   
   // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
+  // previewCropMode 用于批量编辑时的即时预览，选中后切换模式立即呈现效果
+  const displayMode = previewCropMode ?? image.cropMode
   const renderImage = () => {
     // 没有cropInfo时，根据样式类型使用不同的显示方式
-    if (image.cropMode === 'cover') {
+    if (displayMode === 'cover') {
       // Cover 模式：直接使用缩略图压缩格式
       return (
         <img
@@ -57,7 +63,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
           className="w-full h-full object-cover"
         />
       )
-    } else if (image.cropMode === 'full') {
+    } else if (displayMode === 'full') {
       // Full 模式：使用 object-contain 完整显示图片
       return (
         <div className="relative w-full h-full bg-white flex items-center justify-center">
@@ -69,7 +75,7 @@ export function PhotoPreviewCard({ image, aspectRatio, onClick }: PhotoPreviewCa
         </div>
       )
     } else {
-      // Lomo 模式：使用 transform: scale() 实现等比例缩放，四周白边自然形成
+      // Lomo 模式（四周留白）：使用 transform: scale() 实现等比例缩放，四周白边自然形成
       const scale = (100 - WHITE_MARGIN_PERCENT * 2) / 100 // 如果白边是 5%，scale = 0.9
       return (
         <div className="absolute inset-0 bg-white flex items-center justify-center">
