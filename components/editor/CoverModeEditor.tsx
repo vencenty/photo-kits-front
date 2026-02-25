@@ -143,10 +143,11 @@ export function CoverModeEditor({
         -45deg,
         #ef4444,
         #ef4444 2px,
-        rgba(239, 68, 68, 0.2) 2px,
-        rgba(239, 68, 68, 0.2) 4px
+         rgba(239, 68, 68, 0.2) 2px,
+         rgba(239, 68, 68, 0.2) 4px
       ) 8`,
     },
+    // padding: '8px',
   }), [])
 
   // 获取默认裁剪信息（用于首次保存时还没有拖动的情况）

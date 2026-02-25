@@ -144,13 +144,13 @@ function GuidePageContent() {
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            {/* 居中裁剪 */}
+            {/* 满版（裁剪） */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow hover:border-pink-200 transition-colors">
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
                   <Crop className="w-4 h-4 text-[#ff4d6d]" />
                 </span>
-                <span className="font-medium text-gray-800">居中裁剪</span>
+                <span className="font-medium text-gray-800">满版（裁剪）</span>
               </div>
               <div 
                 className="relative w-full rounded-lg overflow-hidden bg-gray-100"
@@ -158,7 +158,7 @@ function GuidePageContent() {
               >
                 <Image
                   src="/images/767ca761813e48ef1d6c58a23490d297.jpg"
-                  alt="居中裁剪示例"
+                  alt="满版（裁剪）示例"
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 33vw"

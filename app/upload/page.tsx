@@ -820,12 +820,17 @@ function UploadPageContent() {
       alert('订单已锁单，无法删除照片。如需修改，请联系客服。')
       return
     }
+    const orderSn = getOrderSn()
+    if (!orderSn) {
+      alert('订单号不存在，无法删除')
+      return
+    }
     // 直接删除，不弹确认框
     deleteImage(id)
     // 后台异步删除，不阻塞 UI
     try {
       setApiLoading(true, '删除照片中...')
-      await deletePhotoFromOrder(id)
+      await deletePhotoFromOrder(orderSn, id)
     } catch (error) {
       console.error('删除照片失败:', error)
     } finally {
@@ -917,11 +922,16 @@ function UploadPageContent() {
 
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return
+    const orderSn = getOrderSn()
+    if (!orderSn) {
+      alert('订单号不存在，无法删除')
+      return
+    }
     if (confirm(`确定要删除选中的 ${selectedIds.length} 张图片吗？`)) {
       try {
         setApiLoading(true, `删除 ${selectedIds.length} 张照片...`)
         // 🚀 优化：使用批量删除接口，一条 SQL 删除所有照片
-        await deletePhotoFromOrder(selectedIds)
+        await deletePhotoFromOrder(orderSn, selectedIds)
         
         // 批量从本地 store 删除
         for (const id of selectedIds) {
@@ -1524,7 +1534,7 @@ function UploadPageContent() {
                   }`}
                   disabled={selectedIds.length === 0}
                 >
-                  删除
+                  批量删除
                 </button>
               </div>
 
