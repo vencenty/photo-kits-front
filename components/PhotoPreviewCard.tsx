@@ -106,11 +106,11 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
       {isClient && renderImage()}
       
       {/* 已调整角标 */}
-      {image.isAdjusted && (
+      {/* {image.isAdjusted && (
         <div className="absolute top-1 left-1 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded shadow-md z-10">
           已调整
         </div>
-      )}
+      )} */}
     </div>
   )
 }

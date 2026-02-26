@@ -1299,7 +1299,7 @@ function UploadPageContent() {
                     {rowImages.map((image) => (
                       <div
                         key={image.id}
-                        className={`bg-[#faf8f5] rounded-lg overflow-hidden border border-gray-200 ${
+                        className={`bg-[#faf8f5] overflow-hidden border border-gray-200 ${
                           isBatchMode && !isOrderLocked ? 'cursor-pointer' : ''
                         }`}
                         style={{
