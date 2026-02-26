@@ -292,6 +292,9 @@ export default function ImageEditor({
           <FullModeEditor
             imageUrl={imageUrl}
             imageId={photoData.id}
+            sourceWidth={sourceSize.width}
+            sourceHeight={sourceSize.height}
+            paperAspectRatio={paperAspectRatio}
             imageCompressOptions={imageCompressOptions}
             thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
           />
