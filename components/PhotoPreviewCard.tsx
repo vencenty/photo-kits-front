@@ -48,7 +48,7 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
     quality: 70,
     format: 'jpg',
   })
-  
+
   // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
   // previewCropMode 用于批量编辑时的即时预览，选中后切换模式立即呈现效果
   const displayMode = previewCropMode ?? image.cropMode
@@ -104,13 +104,13 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
       onClick={onClick}
     >
       {isClient && renderImage()}
-      
-      {/* 已调整角标 */}
-      {/* {image.isAdjusted && (
-        <div className="absolute top-1 left-1 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded shadow-md z-10">
+
+      {/* 已调整角标 - z-20 确保在删除按钮(z-10)等元素之上 */}
+      {image.isAdjusted && (
+        <div className="absolute top-1 left-1 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded shadow-md z-20">
           已调整
         </div>
-      )} */}
+      )}
     </div>
   )
 }
