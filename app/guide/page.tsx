@@ -105,8 +105,8 @@ function GuidePageContent() {
 
         {/* 订单已锁定提示 */}
         {isOrderLocked && (
-          <div className="mb-6 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-700 font-medium md:text-base">
+          <div className="mb-6 px-4 py-3 bg-amber-50 border-2 border-amber-500 rounded-lg">
+            <p className="text-sm text-amber-800 font-medium md:text-base">
               🔒 订单已锁定，正在制作中，无法修改收货人信息
             </p>
           </div>

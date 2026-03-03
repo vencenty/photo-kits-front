@@ -1248,7 +1248,7 @@ function UploadPageContent() {
             </div>
             <p className="text-gray-500 mb-6 md:text-lg">还没有上传照片</p>
             {isOrderLocked ? (
-              <div className="px-6 py-3 md:px-6 md:py-2.5 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center md:text-sm">
+              <div className="px-6 py-3 md:px-6 md:py-2.5 bg-amber-50 border-2 border-amber-500 text-amber-800 rounded-full font-medium text-center md:text-sm">
                 订单已锁定，正在制作中
               </div>
             ) : (
@@ -1436,7 +1436,7 @@ function UploadPageContent() {
             <>
               <div className="flex items-center gap-3 md:gap-2">
                 {isOrderLocked ? (
-                  <div className="flex-1 py-3 md:py-2.5 bg-green-50 border-2 border-green-400 text-green-700 rounded-full font-medium text-center text-sm md:text-xs">
+                  <div className="flex-1 py-3 md:py-2.5 bg-amber-50 border-2 border-amber-500 text-amber-800 rounded-full font-medium text-center text-sm md:text-xs">
                     订单已锁定，正在制作中
                   </div>
                 ) : (

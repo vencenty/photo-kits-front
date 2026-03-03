@@ -310,7 +310,7 @@ export default function SuccessPage() {
               animation: 'blink 1.5s ease-in-out infinite, pulse-glow 2s ease-in-out infinite',
             }}
           >
-           确认无问题请点击锁单，店铺进入制作流程。锁单后无法修改照片。
+           确认无问题请点击锁单，店铺进入制作流程。锁单后不支持退款。
           </p>
 
           {/* 订单信息 */}
@@ -416,7 +416,7 @@ export default function SuccessPage() {
           {/* Action Buttons */}
           <div className="space-y-3 md:space-y-4">
             {isLocked ? (
-              <div className="w-full py-3 md:py-4 bg-green-50 border-2 border-green-400 text-green-700 font-medium rounded-lg flex items-center justify-center gap-2">
+              <div className="w-full py-3 md:py-4 bg-amber-50 border-2 border-amber-500 text-amber-800 font-medium rounded-lg flex items-center justify-center gap-2 shadow-sm">
                 <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" />
                 订单已锁定，正在制作中
               </div>
@@ -424,7 +424,7 @@ export default function SuccessPage() {
               <button
                 onClick={handleSubmitOrderClick}
                 disabled={isLocking || !orderNumber}
-                className="w-full py-3 md:py-4 bg-white border-2 border-pink-400 text-pink-500 font-medium rounded-lg shadow-sm hover:bg-pink-50 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed desktop-hover desktop-shadow"
+                className="w-full py-3 md:py-4 gradient-primary text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed desktop-hover desktop-shadow"
               >
                 {isLocking ? (
                   <>
@@ -442,7 +442,7 @@ export default function SuccessPage() {
            
             <button
               onClick={handleBackHome}
-              className="w-full py-3 md:py-4 gradient-primary text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 desktop-hover desktop-shadow"
+              className="w-full py-3 md:py-4 bg-gray-100 border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 desktop-hover"
             >
               <Home className="w-5 h-5 md:w-6 md:h-6" />
               返回首页

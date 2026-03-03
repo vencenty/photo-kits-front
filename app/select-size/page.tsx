@@ -332,8 +332,8 @@ export default function SelectSizePage() {
             
             {/* 锁定状态提示 */}
             {isOrderLocked && (
-              <div className="px-4 py-2.5 bg-green-100/50 border-t border-green-200">
-                <p className="text-sm text-green-700 md:text-base">
+              <div className="px-4 py-2.5 bg-amber-50 border-t-2 border-amber-500">
+                <p className="text-sm text-amber-800 font-medium md:text-base">
                   🔒 订单已锁定，正在制作中
                 </p>
               </div>
