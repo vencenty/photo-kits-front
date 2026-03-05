@@ -42,8 +42,17 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
   // 如果是横图，追加 rotate,90 参数来旋转图片
   const originalUrl = image.originalUrl || image.thumbnailUrl || ''
 
+  // 对于 full/lomo 模式，竖图（height > width）必须不旋转，否则会错误铺满
+  // 苹果截图等无 EXIF 的图片可能被误判为横图，用实际尺寸做二次校验
+  const displayMode = previewCropMode ?? image.cropMode
+  const isPortraitByDimensions = image.width && image.height && image.height > image.width
+  const effectiveIsLandscape =
+    displayMode === 'full' || displayMode === 'lomo'
+      ? image.isLandscape && !isPortraitByDimensions // 竖图强制不旋转
+      : image.isLandscape
+
   const previewUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
-    isLandscape: image.isLandscape,
+    isLandscape: effectiveIsLandscape,
     shortWidth: 300, // 列表页缩略图短边宽度
     quality: 70,
     format: 'jpg',
@@ -51,7 +60,6 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
 
   // 渲染图片 - 优先使用 outputUrl（最终成品），否则根据cropInfo和样式类型决定显示方式
   // previewCropMode 用于批量编辑时的即时预览，选中后切换模式立即呈现效果
-  const displayMode = previewCropMode ?? image.cropMode
   const renderImage = () => {
     // 没有cropInfo时，根据样式类型使用不同的显示方式
     if (displayMode === 'cover') {

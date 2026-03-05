@@ -545,14 +545,17 @@ function UploadPageContent() {
   }, []) // 只在组件挂载时执行一次
 
   /**
-   * 判断图片是否需要旋转
+   * 判断图片是否需要旋转（横图转竖图以适配相纸）
+   * 竖图（含 9:16 长截图）绝不旋转，避免苹果截图等无 EXIF 图片被误判
    */
   const shouldRotateImage = (imageWidth: number, imageHeight: number): boolean => {
+    if (!imageWidth || !imageHeight) return false
     const ratio = imageWidth / imageHeight
     const isSquare = ratio >= 0.95 && ratio <= 1.05
     if (isSquare) return false
-    const isImageLandscape = imageWidth > imageHeight
-    return isImageLandscape
+    // 竖图（height > width）不旋转，包括 9:16 长条图
+    if (imageHeight > imageWidth) return false
+    return imageWidth > imageHeight
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
