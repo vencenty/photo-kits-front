@@ -478,17 +478,17 @@ export default function SuccessPage() {
             {(needBindInConfirm || showBindInConfirm) && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                 <p className="text-sm text-amber-800 font-medium mb-2">
-                  当前订单为手机号，请先输入19位淘宝订单号以关联本单，便于店铺核对。
+                  请输入19位订单号以关联本单，便于店铺核对制作。
                 </p>
                 {submitError && <p className="text-xs text-red-600 mb-2">{submitError}</p>}
                 <input
                   type="text"
-                  inputMode="numeric"
+                  inputMode="text"
                   maxLength={19}
-                  placeholder="请输入 19 位淘宝订单号"
+                  placeholder="请输入 19 位订单号"
                   value={bindRelatedInput}
                   onChange={(e) => {
-                    setBindRelatedInput(e.target.value.replace(/\D/g, '').slice(0, 19))
+                    setBindRelatedInput(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 19))
                     setSubmitError('')
                   }}
                   className="w-full px-4 py-2.5 border-2 border-amber-200 rounded-lg text-base focus:border-amber-500 focus:outline-none"
