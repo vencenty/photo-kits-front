@@ -62,7 +62,7 @@ export default function Home() {
             <div className="absolute inset-0 rounded-full bg-white/20 animate-pulse"></div>
             <Camera className="w-12 h-12 md:w-16 md:h-16 text-white" strokeWidth={2} />
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">田田洗照片</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">传图工具</h1>
         </div>
 
         {/* 输入框 */}
