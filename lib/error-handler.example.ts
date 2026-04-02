@@ -101,7 +101,7 @@ export const handleSpecialErrorWithLog = (msg: string) => {
 export const handleErrorWithApiCall = async (msg: string) => {
   // 例如：订单不存在时，可能需要调用接口记录用户行为
   try {
-    // await fetch('/api/track-event', {
+    // await fetch('/v1/track-event', {
     //   method: 'POST',
     //   body: JSON.stringify({
     //     event: 'order_not_found',

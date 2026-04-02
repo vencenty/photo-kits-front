@@ -8,7 +8,7 @@ import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
 import { getPhotoSizeById, getCropConfigForSize } from '@/lib/photo-sizes'
 import { buildOssCropUrl } from '@/lib/image-config'
 import { CropInfo } from '@/lib/api'
-import { generateId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
+import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
@@ -680,7 +680,7 @@ function UploadPageContent() {
           ossUrl = '' // 清空 URL，后续会用 thumbnailUrl 显示
         }
 
-        const photoId = generateId()
+        const photoId = generatePhotoId()
 
         // 默认编辑状态
         const defaultEditState: EditState = {

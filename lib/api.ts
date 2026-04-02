@@ -252,7 +252,7 @@ export interface OssSignature {
  */
 export async function getOssSignature(): Promise<OssSignature> {
   console.log('🔄 从服务器获取 OSS 签名...')
-  const signature = await request<OssSignature>('/api/oss/signature')
+  const signature = await request<OssSignature>('/v1/oss/signature')
   console.log('✅ OSS 签名获取成功')
   return signature
 }
@@ -432,7 +432,7 @@ export interface OrderInfo {
  * 创建订单
  */
 export async function createOrder(orderNo: string): Promise<OrderInfo> {
-  return request<OrderInfo>('/api/order', {
+  return request<OrderInfo>('/v1/order/create', {
     method: 'POST',
     body: JSON.stringify({ orderNo }),
   })
@@ -454,9 +454,10 @@ export async function updateOrder(orderNo: string, params: UpdateOrderParams): P
   receiverName: string
   guideViewed: number
 }> {
-  return request(`/api/order/${orderNo}/update`, {
-    method: 'PUT',
-    body: JSON.stringify(params),
+  // v1：POST /v1/order/update，且 orderNo 可能按 path tag 解析；因此同时放到 query + body
+  return request(`/v1/order/update`, {
+    method: 'POST',
+    body: JSON.stringify({ orderNo, ...params }),
   })
 }
 
@@ -481,16 +482,19 @@ export interface OrderDetailResponse {
 
 /**
  * 获取订单详情
- * 后端路由: GET /api/order/:orderSn
+ * 后端路由: POST /v1/order/init
  * @param orderSn 订单号
  * @param includePhotos 是否包含照片列表，默认 false（列表页不需要）
  */
-export async function getOrderDetail(orderSn: string, includePhotos: boolean = false): Promise<OrderDetailResponse> {
-  const params: Record<string, string> = {}
-  if (includePhotos) {
-    params.includePhotos = 'true'
-  }
-  return request<OrderDetailResponse>(`/api/order/${orderSn}`, { params })
+export async function getOrderDetail(orderNo: string, includePhotos: boolean = false): Promise<OrderDetailResponse> {
+  // POST /v1/order/init：请求体与 OrderDetail 入参语义一致（orderSn + includePhotos）
+  return request<OrderDetailResponse>('/v1/order/init', {
+    method: 'POST',
+    body: JSON.stringify({
+      orderNo,
+      ...(includePhotos ? { includePhotos: true } : {}),
+    }),
+  })
 }
 
 /**
@@ -507,7 +511,7 @@ export interface PhotoDetailResponse {
  * 后端路由: GET /api/photo/:photoId
  */
 export async function getPhotoDetail(photoId: string): Promise<PhotoDetailResponse> {
-  return request<PhotoDetailResponse>(`/api/photo/${photoId}`)
+  return request<PhotoDetailResponse>('/v1/order/photo/detail', { params: { photoId } })
 }
 
 // ==================== 规格相关 ====================
@@ -527,9 +531,11 @@ export interface AddSpecParams {
  * 后端路由: POST /api/order/:orderNo/spec
  */
 export async function addSpec(orderNo: string, params: AddSpecParams): Promise<SpecInfo> {
-  return request<SpecInfo>(`/api/order/${orderNo}/spec`, {
+  // v1：POST /v1/order/spec/create
+  // 后端 v1 路由没有 path param，因此这里同时把 `orderNo` 放到 query 与 body。
+  return request<SpecInfo>('/v1/order/spec/create', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify({ orderNo, ...params }),
   })
 }
 
@@ -538,8 +544,10 @@ export async function addSpec(orderNo: string, params: AddSpecParams): Promise<S
  * 后端路由: DELETE /api/order/:orderNo/spec/:id
  */
 export async function deleteSpec(orderNo: string, specId: number): Promise<{ code: number; message: string }> {
-  return request<{ code: number; message: string }>(`/api/order/${orderNo}/spec/${specId}`, {
-    method: 'DELETE',
+  // v1：POST /v1/order/spec/delete
+  return request<{ code: number; message: string }>('/v1/order/spec/delete', {
+    method: 'POST',
+    body: JSON.stringify({ orderNo, id: specId }),
   })
 }
 
@@ -552,7 +560,8 @@ export interface ListSpecsResponse {
  * 后端路由: GET /api/order/:orderNo/specs
  */
 export async function listSpecs(orderNo: string): Promise<ListSpecsResponse> {
-  return request<ListSpecsResponse>(`/api/order/${orderNo}/specs`)
+  // v1：GET /v1/order/spec/list
+  return request<ListSpecsResponse>('/v1/order/spec/list', { params: { orderNo } })
 }
 
 // ==================== 照片相关 ====================
@@ -584,7 +593,7 @@ export async function addPhotoToOrder(params: AddPhotoParams): Promise<{ id: num
       ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
       : params.cropInfo,
   }
-  return request<{ id: number; photoId: string; message: string }>('/api/order/photo', {
+  return request<{ id: number; photoId: string; message: string }>('/v1/order/photo/add', {
     method: 'POST',
     body: JSON.stringify(body),
   })
@@ -612,7 +621,8 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
       ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
       : params.cropInfo,
   }
-  return request<{ message: string }>('/api/order/photo', {
+  // 后端 v1 路由拼写为 /v/order/photo/update（缺少版本号 1）
+  return request<{ message: string }>('/v/order/photo/update', {
     method: 'PUT',
     body: JSON.stringify(body),
   })
@@ -654,7 +664,7 @@ export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promis
       outputUrl: p.outputUrl ? toBucketUrl(p.outputUrl) : p.outputUrl,
     })),
   }
-  return request<{ updatedCount: number; message: string }>('/api/order/photos/batch', {
+  return request<{ updatedCount: number; message: string }>('/v1/order/photo/batchUpdate', {
     method: 'PUT',
     body: JSON.stringify(body),
   })
@@ -670,8 +680,8 @@ export async function deletePhotoFromOrder(
   photoIdOrIds: string | string[]
 ): Promise<{ code: number; message: string }> {
   const photoIds = Array.isArray(photoIdOrIds) ? photoIdOrIds : [photoIdOrIds]
-  return request<{ code: number; message: string }>('/api/order/photo', {
-    method: 'DELETE',
+  return request<{ code: number; message: string }>('/v1/order/photo/delete', {
+    method: 'POST',
     body: JSON.stringify({ orderSn, photoIds }),
   })
 }
@@ -684,7 +694,7 @@ export async function listPhotos(orderSn?: string, specId?: string): Promise<{ p
   const params: Record<string, string> = {}
   if (orderSn) params.orderSn = orderSn
   if (specId) params.specId = specId
-  return request<{ photos: PhotoDetail[] }>('/api/order/photos', { params })
+  return request<{ photos: PhotoDetail[] }>('/v1/order/photo/list', { params })
 }
 
 // ==================== 订单提交相关 ====================
@@ -717,9 +727,10 @@ export interface SubmitOrderParams {
  * 提交订单状态更新
  * 后端路由: PUT /api/order/:orderNo/submit
  */
-export async function submitOrderStatus(orderNo: string): Promise<{ code: number; message: string }> {
-  return request<{ code: number; message: string }>(`/api/order/${orderNo}/submit`, {
-    method: 'PUT',
+export async function submitOrderStatus(orderNo: string): Promise<{ message: string }> {
+  return request<{ message: string }>('/v1/order/submit', {
+    method: 'POST',
+    body: JSON.stringify({ orderSn: orderNo }),
   })
 }
 
@@ -735,7 +746,7 @@ export interface SubmitOrderForProductionParams {
 }
 
 export async function submitOrderForProduction(params: SubmitOrderForProductionParams): Promise<{ message: string }> {
-  return request<{ message: string }>('/api/order/submit', {
+  return request<{ message: string }>('/v1/order/submit', {
     method: 'POST',
     body: JSON.stringify(params),
   })
@@ -746,12 +757,8 @@ export async function submitOrderForProduction(params: SubmitOrderForProductionP
  * 后端路由: PUT /api/order/:orderNo/lock
  * 注意：使用状态2（生产中）表示客户已确认/锁单
  */
-export async function lockOrder(orderNo: string): Promise<{ code: number; message: string }> {
-  // 使用 submitOrderStatus，但实际应该创建一个新的 lock 接口
-  // 暂时使用 submitOrderStatus，后续可以改为专门的 lock 接口
-  return request<{ code: number; message: string }>(`/api/order/${orderNo}/submit`, {
-    method: 'PUT',
-  })
+export async function lockOrder(orderNo: string): Promise<{ message: string }> {
+  return submitOrderStatus(orderNo)
 }
 
 // ==================== Admin API ====================

@@ -5,9 +5,35 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// 生成唯一ID
+/**
+ * 生成照片等业务用的唯一 ID（类似 MongoDB ObjectId：24 位十六进制，无连字符）
+ * - 前 4 字节：Unix 时间戳（秒），便于按创建时间排序、肉眼区分新旧
+ * - 后 8 字节：crypto 随机数，碰撞概率极低
+ */
+export function generatePhotoId(): string {
+  const bytes = new Uint8Array(12)
+  const ts = Math.floor(Date.now() / 1000)
+  bytes[0] = (ts >>> 24) & 0xff
+  bytes[1] = (ts >>> 16) & 0xff
+  bytes[2] = (ts >>> 8) & 0xff
+  bytes[3] = ts & 0xff
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes.subarray(4))
+  } else {
+    for (let i = 4; i < 12; i++) {
+      bytes[i] = Math.floor(Math.random() * 256)
+    }
+  }
+  let hex = ''
+  for (let i = 0; i < 12; i++) {
+    hex += bytes[i].toString(16).padStart(2, '0')
+  }
+  return hex
+}
+
+/** @deprecated 请优先使用 generatePhotoId，语义更清晰 */
 export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  return generatePhotoId()
 }
 
 // 格式化日期

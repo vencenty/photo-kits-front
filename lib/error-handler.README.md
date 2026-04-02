@@ -54,7 +54,7 @@ async function loadOrder() {
 import { request } from '@/lib/api'
 
 // 使用 silent 选项
-const result = await request('/api/some-endpoint', {
+const result = await request('/v1/some-endpoint', {
   method: 'POST',
   body: JSON.stringify(data),
   silent: true, // 不显示 toast

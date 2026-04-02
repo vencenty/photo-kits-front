@@ -194,20 +194,20 @@ backgroundImage: {
 
 当前前端功能完整，待实现的后端部分：
 
-1. **订单查询 API** - `POST /api/order/query`
+1. **订单查询 API** - `POST /v1/order/init`（body：`{ orderSn, includePhotos? }`，与 detail 入参语义一致）
    - 输入：订单号/手机号
    - 输出：订单信息和 SKU 列表
 
-2. **图片上传 API** - `POST /api/images/upload`
+2. **图片上传 API** - `POST /v1/order/photo/add`
    - 输入：图片文件 + session_id
    - 输出：图片 URL 和 ID
    - 存储到 OSS/S3
 
-3. **编辑状态保存 API** - `POST /api/images/edit`
+3. **编辑状态保存 API** - `PUT /v/order/photo/update`（或批量：`PUT /v1/order/photo/batchUpdate`）
    - 输入：image_id + edit_state
    - 输出：成功状态
 
-4. **提交订单 API** - `POST /api/submit`
+4. **提交订单 API** - `POST /v1/order/submit`
    - 输入：session_id
    - 输出：订单 ID
    - 触发服务端图片处理
