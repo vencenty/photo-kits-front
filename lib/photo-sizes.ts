@@ -267,7 +267,7 @@ export function getPhotoSizeById(id: string): PhotoSize | undefined {
  */
 const DEFAULT_CROP_CONFIG: CropStyleConfig = {
   defaultMode: 'lomo',
-  availableModes: [ 'cover','lomo']
+  availableModes: [ 'cover','lomo', 'full']
 }
 
 /**
