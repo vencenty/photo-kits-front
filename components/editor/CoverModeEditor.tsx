@@ -3,7 +3,9 @@
 import { useState, useCallback, useMemo } from 'react'
 import Cropper from 'react-easy-crop'
 import type { Area, Point } from 'react-easy-crop'
-import { buildOssCropUrl, SimpleCropInfo } from '@/lib/image-config'
+import { buildOssCropUrl } from '@/lib/image-config'
+import { calculateCoverCropSize } from '@/lib/utils'
+import type { SimpleCropInfo } from '@/lib/types'
 
 interface CoverModeEditorProps {
   imageUrl: string
@@ -17,27 +19,6 @@ interface CoverModeEditorProps {
   initialCropInfo?: SimpleCropInfo | null
   /** 编辑用缩略图短边尺寸（默认 800px，加载更快） */
   thumbnailShortEdge?: number
-}
-
-/**
- * 计算 cover 模式下的裁剪尺寸
- */
-function calculateCoverCropSize(
-  sourceWidth: number,
-  sourceHeight: number,
-  paperRatio: number
-) {
-  const imageRatio = sourceWidth / sourceHeight
-  if (imageRatio > paperRatio) {
-    return {
-      cropWidth: sourceHeight * paperRatio,
-      cropHeight: sourceHeight,
-    }
-  }
-  return {
-    cropWidth: sourceWidth,
-    cropHeight: sourceWidth / paperRatio,
-  }
 }
 
 /**
@@ -207,6 +188,3 @@ export function CoverModeEditor({
     />
   )
 }
-
-// 导出工具函数供外部使用
-export { calculateCoverCropSize }

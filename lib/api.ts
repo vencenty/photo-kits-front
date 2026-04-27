@@ -13,6 +13,7 @@ import {
   reportErrorToMonitoring,
   type ApiErrorResponse,
 } from './error-handler'
+import { OSS_PROXY_DOMAIN, toCdnUrl, toBucketUrl } from './url'
 
 // API 基础配置
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
@@ -167,27 +168,9 @@ function handleErrorResponse(errorData: ApiErrorResponse, silent: boolean): neve
 
 // ==================== 类型定义 ====================
 
-/** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
-export interface CropInfo {
-  canvasWidth: number // 相纸宽度（mm），用于计算相纸比例
-  canvasHeight: number // 相纸高度（mm），用于计算相纸比例
-  sourceWidth: number // 原图宽度（像素）
-  sourceHeight: number // 原图高度（像素）
-  offsetX: number // 原图坐标系中的X偏移量（px），裁剪起始位置
-  offsetY: number // 原图坐标系中的Y偏移量（px），裁剪起始位置
-  cropWidth: number // 裁剪宽度（像素）
-  cropHeight: number // 裁剪高度（像素）
-  rotateAngle: number // 旋转角度（仅0/90/180/270°）
-  originalUrl: string // 原图地址（服务端能访问的路径）
-  styleType?: string // 样式类型（可选）
-  // 🎯 百分比坐标（用于恢复裁剪位置，官方推荐）
-  croppedAreaPercent?: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
-}
+// 从 types.ts 重新导出，保持向后兼容
+export type { CropInfo } from './types'
+import type { CropInfo } from './types'
 
 export interface SpecInfo {
   id: number
@@ -251,59 +234,8 @@ export interface OssSignature {
  * 避免使用过期或无效的签名导致上传失败
  */
 export async function getOssSignature(): Promise<OssSignature> {
-  console.log('🔄 从服务器获取 OSS 签名...')
   const signature = await request<OssSignature>('/v1/oss/signature')
-  console.log('✅ OSS 签名获取成功')
   return signature
-}
-
-// 固定代理域名，用于上传后存储的 URL（后端/数据库中的地址）
-// const OSS_PROXY_DOMAIN = 'https://oss-proxy.vencenty.cc'
-const OSS_PROXY_DOMAIN = 'https://bucket.vencenty.cc'
-// const OSS_PROXY_DOMAIN = 'https://photo-kits-storage-hangzhou.oss-cn-hangzhou.aliyuncs.com'
-
-// CDN 域名，用于前端展示时加速访问（将 OSS 域名替换为 CDN）
-const IMG_CDN_DOMAIN = 'https://img.vencenty.cc'
-
-/**
- * 将 OSS 图片 URL 转为 CDN URL，用于加速展示
- * 仅替换已知的 OSS 源站域名，其它 URL 原样返回
- */
-export function toCdnUrl(url: string): string {
-  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url
-  try {
-    const u = new URL(url)
-    const host = u.hostname.toLowerCase()
-    const isOss =
-      host === 'bucket.vencenty.cc' ||
-      host === 'oss-proxy.vencenty.cc'
-    if (isOss) {
-      const pathAndSearch = u.pathname + u.search
-      return IMG_CDN_DOMAIN + pathAndSearch
-    }
-  } catch {
-    // 非合法 URL 则原样返回
-  }
-  return url
-}
-
-/**
- * 将 CDN/任意 OSS 展示 URL 转回 bucket 源站 URL，用于发给服务端存储
- * 服务端下载用 bucket 地址可避免走 CDN 产生费用
- */
-export function toBucketUrl(url: string): string {
-  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url
-  try {
-    const u = new URL(url)
-    const host = u.hostname.toLowerCase()
-    const pathAndSearch = u.pathname + u.search
-    if (host === 'img.vencenty.cc' || host.endsWith('.aliyuncs.com') || host === 'oss-proxy.vencenty.cc') {
-      return OSS_PROXY_DOMAIN + pathAndSearch
-    }
-  } catch {
-    // 非合法 URL 则原样返回
-  }
-  return url
 }
 
 /**
@@ -405,16 +337,9 @@ export async function uploadToOss(
 
 /**
  * 获取图片完整 URL（用于显示，走 CDN 加速）
+ * @deprecated 请从 @/lib/url 导入
  */
-export function getImageUrl(path: string): string {
-  if (!path) return ''
-  // 如果已经是完整 URL，转为 CDN URL 后返回
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
-    return toCdnUrl(path)
-  }
-  // 相对路径：用 CDN 域名拼接
-  return `${IMG_CDN_DOMAIN}/${path.replace(/^\//, '')}`
-}
+export { getImageUrl } from './url'
 
 // ==================== 订单相关 ====================
 
@@ -621,8 +546,7 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
       ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
       : params.cropInfo,
   }
-  // 后端 v1 路由拼写为 /v/order/photo/update（缺少版本号 1）
-  return request<{ message: string }>('/v/order/photo/update', {
+  return request<{ message: string }>('/v1/order/photo/update', {
     method: 'PUT',
     body: JSON.stringify(body),
   })

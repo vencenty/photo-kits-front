@@ -1,20 +1,21 @@
 /**
  * 图片压缩配置
  * 用于统一管理不同场景下的图片压缩参数
- * 
+ *
  * 使用说明：
  * 1. 修改 IMAGE_COMPRESS_CONFIG 中的配置来调整压缩参数
  * 2. width/height: 设置图片尺寸（0 表示不限制该维度）
  * 3. quality: 图片质量 0-100（数值越大质量越高，文件越大）
  * 4. format: 输出格式（jpg/webp/png），空字符串表示不转换格式
- * 
+ *
  * 注意事项：
  * - 阿里云 OSS 图片处理对 HEIC/HEIF 格式需要开通「图片高级处理」功能
  * - 源文件建议不超过 50MB
  * - 格式转换（format）会消耗额外的处理时间
  */
 
-import { toCdnUrl } from '@/lib/api'
+import { toCdnUrl, isOssUrl } from '@/lib/url'
+import type { SimpleCropInfo, CropMode } from './types'
 
 /**
  * OSS 图片处理配置
@@ -285,42 +286,10 @@ export function getPreviewImageUrl(url: string, cropInfo: SimpleCropInfo, isLand
   })
 }
 
-// ==================== OSS 裁剪相关 ====================
+// ==================== 类型重新导出（保持向后兼容） ====================
 
-/**
- * 简化的裁剪信息（用于 react-easy-crop）
- * 
- * 最佳实践：
- * - 保存时：同时保存像素坐标（用于服务端裁剪）和百分比坐标（用于恢复裁剪位置）
- * - 恢复时：使用 croppedAreaPercent（百分比）通过 initialCroppedAreaPercentages 恢复
- * - 官方推荐使用百分比恢复，因为像素值会被四舍五入，可能导致轻微的位置漂移
- */
-export interface SimpleCropInfo {
-  /** 裁剪起始 X（原图像素） */
-  offsetX: number
-  /** 裁剪起始 Y（原图像素） */
-  offsetY: number
-  /** 裁剪宽度（原图像素） */
-  cropWidth: number
-  /** 裁剪高度（原图像素） */
-  cropHeight: number
-  /** 原图宽度 */
-  sourceWidth: number
-  /** 原图高度 */
-  sourceHeight: number
-  /** 样式类型 */
-  styleType: 'cover' | 'full' | 'lomo'
-  /** 
-   * 百分比坐标（用于恢复裁剪位置，官方推荐）
-   * 格式与 react-easy-crop 的 croppedArea 一致
-   */
-  croppedAreaPercent?: {
-    x: number      // 裁剪区域左上角 X 坐标的百分比
-    y: number      // 裁剪区域左上角 Y 坐标的百分比
-    width: number  // 裁剪区域宽度的百分比
-    height: number // 裁剪区域高度的百分比
-  }
-}
+// 从 types.ts 重新导出，不再重复定义
+export type { SimpleCropInfo, CropMode } from './types'
 
 /**
  * 构建 OSS 裁剪 URL
@@ -356,11 +325,7 @@ export function buildOssCropUrl(
   originalUrl = toCdnUrl(originalUrl)
 
   // 判断是否为 OSS URL
-  const isOssUrl = originalUrl.includes('aliyuncs.com') ||
-                   originalUrl.includes('oss-proxy') ||
-                   originalUrl.includes('vencenty.cc')
-
-  if (!isOssUrl) {
+  if (!isOssUrl(originalUrl)) {
     return originalUrl
   }
 

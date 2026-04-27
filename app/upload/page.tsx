@@ -8,7 +8,7 @@ import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
 import { getPhotoSizeById, getCropConfigForSize } from '@/lib/photo-sizes'
 import { buildOssCropUrl } from '@/lib/image-config'
 import { CropInfo } from '@/lib/api'
-import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
+import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg, calculateCoverCropSize } from '@/lib/utils'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
@@ -52,37 +52,6 @@ function useColumns() {
     }
   }, [])
   return columns
-}
-
-/**
- * 计算 cover 模式下的居中裁切尺寸
- * 图片需要完全覆盖相纸区域，居中裁切
- */
-function calculateCoverCropSize(
-  sourceWidth: number,
-  sourceHeight: number,
-  paperRatio: number
-): { cropWidth: number; cropHeight: number; offsetX: number; offsetY: number } {
-  const imageRatio = sourceWidth / sourceHeight
-
-  let cropWidth: number
-  let cropHeight: number
-
-  if (imageRatio > paperRatio) {
-    // 图片更宽，裁剪左右
-    cropHeight = sourceHeight
-    cropWidth = sourceHeight * paperRatio
-  } else {
-    // 图片更高，裁剪上下
-    cropWidth = sourceWidth
-    cropHeight = sourceWidth / paperRatio
-  }
-
-  // 居中裁切：计算偏移量
-  const offsetX = (sourceWidth - cropWidth) / 2
-  const offsetY = (sourceHeight - cropHeight) / 2
-
-  return { cropWidth, cropHeight, offsetX, offsetY }
 }
 
 function UploadPageContent() {

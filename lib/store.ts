@@ -1,124 +1,9 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import type { CropInfo, EditState, Image, Session, PhotoSize, SimpleCropInfo } from './types'
 
-
-/** 裁剪信息 - 用于服务端处理，只包含服务端需要的字段 */
-export interface CropInfo {
-  /** 相纸宽度（mm），用于计算相纸比例 */
-  canvasWidth: number
-  /** 相纸高度（mm），用于计算相纸比例 */
-  canvasHeight: number
-  /** 原图宽度（像素） */
-  sourceWidth: number
-  /** 原图高度（像素） */
-  sourceHeight: number
-  /** 原图坐标系中的X偏移量（px），裁剪起始位置 */
-  offsetX: number
-  /** 原图坐标系中的Y偏移量（px），裁剪起始位置 */
-  offsetY: number
-  /** 裁剪宽度（px），在未旋转原图坐标系中 */
-  cropWidth?: number
-  /** 裁剪高度（px），在未旋转原图坐标系中 */
-  cropHeight?: number
-  /** 旋转角度（仅0/90/180/270°） */
-  rotateAngle: number
-  /** 原图地址（服务端能访问的路径） */
-  originalUrl: string
-  /** 样式类型（可选） */
-  styleType?: 'cover' | 'full' | 'lomo'
-}
-
-// 编辑状态类型（兼容旧版本）
-export interface EditState {
-  mode: 'cover' | 'full' | 'lomo'
-  scale: number
-  x: number
-  y: number
-  rotation: number
-  canvasWidth: number
-  canvasHeight: number
-}
-
-// 简化的裁剪信息（用于 react-easy-crop，与 image-config.ts 中的类型保持一致）
-export interface SimpleCropInfo {
-  /** 裁剪起始 X（原图像素） */
-  offsetX: number
-  /** 裁剪起始 Y（原图像素） */
-  offsetY: number
-  /** 裁剪宽度（原图像素） */
-  cropWidth: number
-  /** 裁剪高度（原图像素） */
-  cropHeight: number
-  /** 原图宽度 */
-  sourceWidth: number
-  /** 原图高度 */
-  sourceHeight: number
-  /** 样式类型 */
-  styleType: 'cover' | 'full' | 'lomo'
-  /** 
-   * 百分比坐标（用于恢复裁剪位置，官方推荐）
-   * 格式与 react-easy-crop 的 croppedArea 一致
-   */
-  croppedAreaPercent?: {
-    x: number      // 裁剪区域左上角 X 坐标的百分比
-    y: number      // 裁剪区域左上角 Y 坐标的百分比
-    width: number  // 裁剪区域宽度的百分比
-    height: number // 裁剪区域高度的百分比
-  }
-}
-
-// 图片类型
-export interface Image {
-  id: string
-  sessionId: string
-  originalUrl: string
-  thumbnailUrl: string
-  filename: string
-  width: number
-  height: number
-  printCount: number
-  editState: EditState | null
-  cropInfo?: SimpleCropInfo // 简化的裁剪信息（用于 react-easy-crop）
-  isLandscape: boolean // 是否是横图
-  outputUrl: string // 最终成品URL（带裁剪参数）
-  cropMode: 'cover' | 'full' | 'lomo' // 裁剪模式
-  isAdjusted?: boolean // 是否已调整：用户进入编辑页保存后为true
-  file?: File // 前端保存原始文件对象
-  // 上传状态跟踪
-  uploadStatus?: {
-    ossUploaded: boolean // 是否已上传到 OSS
-    backendSynced: boolean // 是否已同步到后端
-  }
-}
-
-// 会话类型
-export interface Session {
-  id: string
-  orderNo: string // 订单号
-  sizeId: string
-  sizeName: string
-  targetCount: number
-  currentCount: number
-  canvasWidth: number
-  canvasHeight: number
-  unit: string
-  ratio: number
-  createdAt: string
-}
-
-// 照片尺寸类型
-export interface PhotoSize {
-  id: string
-  name: string
-  width: number
-  height: number
-  unit: string
-  ratio: number
-  icon?: string           // 图标 emoji
-  description?: string    // 描述文字
-  recommended?: boolean   // 是否推荐
-  badge?: string          // 角标文字
-}
+// 重新导出类型以保持向后兼容
+export type { CropInfo, EditState, Image, Session, PhotoSize, SimpleCropInfo }
 
 interface StoreState {
   // Hydration 状态（用于解决刷新后跳转问题）
@@ -204,16 +89,19 @@ export const useStore = create<StoreState>()(
           }
         }),
       deleteImage: (id) =>
-        set((state) => ({
-          images: state.images.filter((img) => img.id !== id),
-          selectedIds: state.selectedIds.filter((selectedId) => selectedId !== id),
-          currentSession: state.currentSession
-            ? {
-                ...state.currentSession,
-                currentCount: state.images.length - 1,
-              }
-            : null,
-        })),
+        set((state) => {
+          const newImages = state.images.filter((img) => img.id !== id)
+          return {
+            images: newImages,
+            selectedIds: state.selectedIds.filter((selectedId) => selectedId !== id),
+            currentSession: state.currentSession
+              ? {
+                  ...state.currentSession,
+                  currentCount: newImages.length,
+                }
+              : null,
+          }
+        }),
       clearImages: () => set({ images: [] }),
       
       // 缓存管理

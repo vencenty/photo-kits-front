@@ -124,3 +124,224 @@ front/
 
 MIT
 
+---
+
+## 📋 代码风格与规范
+
+### 技术栈
+
+| 分类 | 技术 | 说明 |
+|------|------|------|
+| 框架 | Next.js 14 | App Router 模式 |
+| 语言 | TypeScript | 严格模式 (strict: true) |
+| 样式 | Tailwind CSS | 移动端优先响应式设计 |
+| 状态管理 | Zustand | 支持 localStorage 持久化 |
+| 图片编辑 | Konva.js + react-konva | Canvas 图片编辑器 |
+| 图标 | Lucide React | 线性图标库 |
+| 通知 | Sonner | Toast 通知 |
+
+### 项目结构规范
+
+```
+front/
+├── app/                      # Next.js App Router 页面
+│   ├── page.tsx             # 首页（订单查询）
+│   ├── layout.tsx           # 根布局
+│   ├── globals.css          # 全局样式 + Tailwind
+│   ├── select-size/         # 尺寸选择
+│   ├── upload/              # 图片上传
+│   ├── edit/                # 图片编辑
+│   └── error.tsx            # 错误边界
+├── components/              # 通用组件
+│   ├── ImageEditor.tsx     # 图片编辑器
+│   ├── PhotoPreviewCard.tsx # 照片预览卡片
+│   ├── ClientLayout.tsx    # 客户端布局
+│   └── GlobalLoading.tsx   # 全局 Loading
+├── lib/                     # 工具库
+│   ├── store.ts            # Zustand 状态管理
+│   ├── api.ts              # API 请求封装
+│   ├── utils.ts            # 工具函数
+│   ├── error-handler.ts    # 统一错误处理
+│   ├── image-config.ts     # 图片配置
+│   └── photo-sizes.ts      # 照片尺寸配置
+└── public/                  # 静态资源
+```
+
+### 代码风格
+
+#### 1. 组件规范
+
+```tsx
+// ✅ 正确：使用 'use client' 声明客户端组件
+'use client'
+
+import { useState, useCallback } from 'react'
+import { SomeIcon } from 'lucide-react'
+import type { ImageType } from '@/lib/store'
+
+interface Props {
+  image: ImageType
+  onSave: (data: SaveData) => void
+}
+
+// ✅ 正确：使用 function 声明 + export default
+export default function ImageEditor({ image, onSave }: Props) {
+  const [mode, setMode] = useState<string>('cover')
+
+  // ✅ 正确：使用 useCallback 优化回调
+  const handleSave = useCallback(() => {
+    onSave({ mode })
+  }, [mode, onSave])
+
+  return <div>...</div>
+}
+```
+
+#### 2. TypeScript 类型规范
+
+```typescript
+// ✅ 正确：使用 interface 定义组件 Props
+interface ImageEditorProps {
+  image: ImageType
+  canvasWidth: number
+  onSave: (saveData: SaveData) => void
+}
+
+// ✅ 正确：使用 type 定义联合类型/工具类型
+type EditMode = 'cover' | 'full' | 'lomo'
+
+// ✅ 正确：详细的 JSDoc 注释
+/**
+ * 生成照片唯一 ID
+ * @returns 24位十六进制字符串
+ */
+export function generatePhotoId(): string { ... }
+```
+
+#### 3. 状态管理规范 (Zustand)
+
+```typescript
+// ✅ 正确：清晰的接口定义和状态分组
+interface StoreState {
+  // Hydration 状态
+  _hasHydrated: boolean
+  setHasHydrated: (state: boolean) => void
+
+  // Session 相关
+  currentSession: Session | null
+  setCurrentSession: (session: Session) => void
+
+  // Images 相关
+  images: Image[]
+  addImages: (images: Image[]) => void
+  updateImage: (id: string, updates: Partial<Image>) => void
+}
+
+export const useStore = create<StoreState>()(
+  persist(
+    (set, get) => ({
+      _hasHydrated: false,
+      // ...实现
+    }),
+    {
+      name: 'photo-upload-storage',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+)
+```
+
+#### 4. API 请求规范
+
+```typescript
+// ✅ 正确：统一的错误处理和类型定义
+export interface ApiResponse<T> {
+  code?: number
+  msg?: string
+  data?: T
+}
+
+export class BusinessError extends Error {
+  code: number
+  msg: string
+  constructor(code: number, msg: string) { ... }
+}
+
+// ✅ 正确：完整的函数文档注释
+/**
+ * 获取订单详情
+ * @param orderNo 订单号
+ * @param includePhotos 是否包含照片列表
+ * @returns 订单详情响应
+ */
+export async function getOrderDetail(
+  orderNo: string,
+  includePhotos: boolean = false
+): Promise<OrderDetailResponse> { ... }
+```
+
+#### 5. 样式规范
+
+```tsx
+// ✅ 正确：使用 Tailwind 类名，响应式前缀
+<div className="px-4 py-3 md:py-2 md:px-6">
+  <button className="text-sm md:text-xs font-medium">
+    按钮
+  </button>
+</div>
+
+// ✅ 正确：使用 Tailwind 工具类合并
+import { cn } from '@/lib/utils'
+
+<div className={cn(
+  "flex items-center gap-2",
+  isActive && "bg-pink-500 text-white"
+)}>
+```
+
+#### 6. CSS 工具类约定
+
+```css
+/* globals.css 中定义的工具类 */
+@layer utilities {
+  .gradient-primary { ... }        /* 主题渐变 */
+  .writing-mode-vertical { ... }  /* 竖排文字 */
+  .safe-area-inset-bottom { ... } /* 安全区域适配 */
+  .hide-scrollbar { ... }         /* 隐藏滚动条 */
+  .desktop-hover { ... }          /* 桌面端悬停效果 */
+}
+```
+
+### 命名规范
+
+| 类型 | 规范 | 示例 |
+|------|------|------|
+| 组件文件 | PascalCase | `ImageEditor.tsx` |
+| 工具文件 | camelCase | `useImagePreload.ts` |
+| 类型/接口 | PascalCase | `ImageType`, `CropInfo` |
+| 常量 | SCREAMING_SNAKE_CASE | `ORDER_STATUS` |
+| 函数 | camelCase | `generatePhotoId()` |
+| CSS 类名 | kebab-case (Tailwind) | `bg-pink-500` |
+
+### Git 提交规范
+
+```
+feat: 新功能
+fix: 修复 bug
+docs: 文档更新
+style: 代码格式（不影响功能）
+refactor: 重构
+perf: 性能优化
+test: 测试
+chore: 构建/工具变更
+```
+
+### 开发检查清单
+
+- [ ] `npm run lint` 通过
+- [ ] `npm run build` 构建成功
+- [ ] TypeScript 无编译错误
+- [ ] 移动端响应式正常
+- [ ] API 错误处理完善
+- [ ] 关键函数有 JSDoc 注释
+
