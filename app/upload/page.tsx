@@ -97,6 +97,8 @@ function UploadPageContent() {
   const [isRestoringScroll, setIsRestoringScroll] = useState(false) // 是否正在恢复滚动位置
   const [showUnadjustedDialog, setShowUnadjustedDialog] = useState(false) // 显示未调整照片确认对话框
   const [unadjustedImages, setUnadjustedImages] = useState<ImageType[]>([]) // 未调整的照片列表
+  const [showBatchCoverConfirmDialog, setShowBatchCoverConfirmDialog] = useState(false)
+  const [batchCoverAcknowledgeInput, setBatchCoverAcknowledgeInput] = useState('')
 
   // 虚拟滚动相关（列数与 grid-cols-3 md:4 lg:5 xl:6 一致，避免只占半屏）
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -943,15 +945,9 @@ function UploadPageContent() {
     setBatchCropMode(mode)
   }
 
-  // 执行批量操作（在点击完成按钮时调用）
-  const executeBatchCrop = async () => {
-    // 未选中或未选择模式时，直接退出批量模式，避免用户交互流程卡住
-    if (selectedIds.length === 0 || !batchCropMode) {
-      setIsBatchMode(false)
-      clearSelection()
-      setBatchCropMode(null)
-      return
-    }
+  /** 实际执行批量裁剪并同步后端（满版需先在弹窗中输入「我了解」确认） */
+  const applyBatchCropToSelection = async () => {
+    if (selectedIds.length === 0 || !batchCropMode) return
     const targetIds = selectedIds
     const mode = batchCropMode
 
@@ -1102,6 +1098,31 @@ function UploadPageContent() {
     } finally {
       setApiLoading(false, '')
     }
+  }
+
+  const BATCH_COVER_ACK_PHRASE = '我了解'
+
+  /** 点击「完成」：未选或未选模式则退出批量；满版裁剪先弹窗确认 */
+  const handleBatchFinishClick = () => {
+    if (selectedIds.length === 0 || !batchCropMode) {
+      setIsBatchMode(false)
+      clearSelection()
+      setBatchCropMode(null)
+      return
+    }
+    if (batchCropMode === 'cover') {
+      setBatchCoverAcknowledgeInput('')
+      setShowBatchCoverConfirmDialog(true)
+      return
+    }
+    void applyBatchCropToSelection()
+  }
+
+  const confirmBatchCoverAndApply = () => {
+    if (batchCoverAcknowledgeInput.trim() !== BATCH_COVER_ACK_PHRASE) return
+    setShowBatchCoverConfirmDialog(false)
+    setBatchCoverAcknowledgeInput('')
+    void applyBatchCropToSelection()
   }
 
   const totalPrintCount = images.reduce((sum, img) => sum + img.printCount, 0)
@@ -1511,7 +1532,7 @@ function UploadPageContent() {
               </div>
 
               <button
-                onClick={executeBatchCrop}
+                onClick={handleBatchFinishClick}
                 className="w-full py-3 md:py-2.5 rounded-full font-medium text-sm md:text-xs bg-[#ff4d6d] text-white"
               >
                 完成
@@ -1613,6 +1634,70 @@ function UploadPageContent() {
                 className="flex-1 py-3 bg-[#ff4d6d] text-white rounded-full font-medium hover:bg-[#ff3d5d] transition-colors"
               >
                 去调整
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量满版裁剪确认：须输入「我了解」 */}
+      {showBatchCoverConfirmDialog && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowBatchCoverConfirmDialog(false)
+            setBatchCoverAcknowledgeInput('')
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">确认批量满版裁剪</h3>
+            <div className="text-sm text-gray-600 leading-relaxed space-y-3">
+              <p>
+                批量满版裁剪后，所选照片的裁剪位置都会<strong className="text-gray-900">按相纸比例默认居中重置</strong>；
+                若您曾在单张编辑里拖动过裁切框，这些调整<strong className="text-gray-900">不会保留</strong>。
+              </p>
+              <p>
+                请务必确认构图是否合适。<strong className="text-gray-900">图片比例与相纸差距较大</strong>的照片更容易出现
+                <strong className="text-gray-900">裁手裁脚</strong>等废片；重要内容贴边、带日期水印等情况请谨慎选择满版。建议您手动逐个确认每张照片的裁剪位置更保险。
+              </p>
+              <p className="text-[#ff4d6d] font-medium">
+                请在下方输入「{BATCH_COVER_ACK_PHRASE}」以确认已知上述风险，然后再应用批量满版裁剪。
+              </p>
+            </div>
+            <label className="block mt-4 text-xs text-gray-500 mb-1">输入确认</label>
+            <input
+              type="text"
+              value={batchCoverAcknowledgeInput}
+              onChange={(e) => setBatchCoverAcknowledgeInput(e.target.value)}
+              placeholder={`请输入：${BATCH_COVER_ACK_PHRASE}`}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#ff4d6d] focus:outline-none text-base"
+              autoComplete="off"
+            />
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBatchCoverConfirmDialog(false)
+                  setBatchCoverAcknowledgeInput('')
+                }}
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmBatchCoverAndApply}
+                disabled={batchCoverAcknowledgeInput.trim() !== BATCH_COVER_ACK_PHRASE}
+                className={`flex-1 py-3 rounded-full font-medium transition-colors ${
+                  batchCoverAcknowledgeInput.trim() === BATCH_COVER_ACK_PHRASE
+                    ? 'bg-[#ff4d6d] text-white hover:bg-[#ff3d5d]'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                确认应用
               </button>
             </div>
           </div>
