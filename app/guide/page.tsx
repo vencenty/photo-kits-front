@@ -133,6 +133,20 @@ function GuidePageContent() {
           </p>
         </div>
 
+        {/* 传图最佳实践（置于三种冲印样式对比之前） */}
+        <section className="mb-8">
+          <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow">
+            <Image
+              src="/images/传图最佳实践.png"
+              alt="上传最佳实践：先整理相册；每次最多选 30 张分批上传；确认无误后再锁单。分批上传可避免中断，保障照片安全。"
+              width={1086}
+              height={1448}
+              className="w-full h-auto rounded-lg"
+              sizes="(max-width: 768px) 100vw, 896px"
+            />
+          </div>
+        </section>
+
         {/* 三种冲印样式对比 - 帮助客户理解差异 */}
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2 md:text-lg">
