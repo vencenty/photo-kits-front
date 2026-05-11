@@ -535,18 +535,20 @@ export interface UpdatePhotoParams {
 
 /**
  * 更新照片
- * 后端路由: PUT /api/order/photo
+ * 与服务端 routes.go 一致：PUT /v/order/photo/update（单条更新接口不在 /v1 前缀下）
+ * JSON Body：photoId、quantity、cropMode、cropInfo、outputUrl（见 server UpdatePhotoRequest）
  * 发给服务端的 outputUrl 会转为 bucket 源站地址
  */
 export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message: string }> {
-  const body: UpdatePhotoParams = {
-    ...params,
+  const { listThumbUrl: _omit, ...rest } = params
+  const body: Omit<UpdatePhotoParams, 'listThumbUrl'> = {
+    ...rest,
     outputUrl: params.outputUrl ? toBucketUrl(params.outputUrl) : params.outputUrl,
     cropInfo: params.cropInfo?.originalUrl
       ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
       : params.cropInfo,
   }
-  return request<{ message: string }>('/v1/order/photo/update', {
+  return request<{ message: string }>('/v/order/photo/update', {
     method: 'PUT',
     body: JSON.stringify(body),
   })

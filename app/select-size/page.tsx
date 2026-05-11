@@ -9,6 +9,9 @@ import { addSpec, deleteSpec, getOrderDetail, SpecInfo } from '@/lib/api'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
+/** 添加规格弹窗中不展示的尺寸（仍保留在全局 SIZE_OPTIONS 供历史订单等使用） */
+const ADD_MODAL_HIDDEN_SIZE_IDS = new Set(['square5inch', 'square6inch'])
+
 // 已添加的规格项（包含数据库 ID）
 interface AddedSize {
   dbId: number        // 数据库 ID，用于删除
@@ -42,14 +45,23 @@ export default function SelectSizePage() {
   const clearImages = useStore((state) => state.clearImages)
   const setApiLoading = useStore((state) => state.setApiLoading)
 
+  const addModalSizeOptions = useMemo(
+    () => SIZE_OPTIONS.filter((s) => !ADD_MODAL_HIDDEN_SIZE_IDS.has(s.id)),
+    []
+  )
+
   // 计算当前哪些尺寸应该被禁用（基于已选择的相纸）
   const disabledSizes = useMemo(() => {
     if (!selectedPaper) return new Set<string>()
     const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
     if (!paper) return new Set<string>()
-    // 返回不在 supportedSizes 中的尺寸ID
-    return new Set(SIZE_OPTIONS.filter(s => !paper.supportedSizes.includes(s.id)).map(s => s.id))
-  }, [selectedPaper])
+    // 返回不在 supportedSizes 中的尺寸ID（仅针对弹窗内可见尺寸）
+    return new Set(
+      addModalSizeOptions
+        .filter((s) => !paper.supportedSizes.includes(s.id))
+        .map((s) => s.id)
+    )
+  }, [selectedPaper, addModalSizeOptions])
 
   // 计算当前哪些相纸应该被禁用（基于已选择的尺寸）
   const disabledPapers = useMemo(() => {

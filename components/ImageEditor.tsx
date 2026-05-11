@@ -346,7 +346,7 @@ export default function ImageEditor({
           <span className="text-blue-400">{getModeHint()}</span>
         </div>
         {mode === 'cover' && (
-          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色边框外的画面在冲印时会被裁掉，红色边框内侧约 2mm 为警戒区域，请不要把人物的脸或重要部分紧贴画面边缘。</p>
+          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色边框外的画面在冲印时会被裁掉，红色边框内侧约 2mm 为被裁切区域，满版的照片四周一定存在裁切，如果照片内容不希望有任何裁切的，一定要选择留白。</p>
         )}
       </div>
 

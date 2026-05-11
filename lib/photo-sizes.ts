@@ -73,14 +73,14 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "ratio": 76/102,
     // 使用默认配置：四周留白 + 满版裁剪
   },
-  { 
-    "id": "square5inch", 
-    "name": "5寸正方形", 
-    "width": 127, 
-    "height": 127, 
-    "ratio": 127/127,
-    // 使用默认配置：四周留白 + 满版裁剪
-  },
+  // { 
+  //   "id": "square5inch", 
+  //   "name": "5寸正方形", 
+  //   "width": 127, 
+  //   "height": 127, 
+  //   "ratio": 127/127,
+  //   // 使用默认配置：四周留白 + 满版裁剪
+  // },
   { 
     "id": "5inch", 
     "name": "5寸", 
@@ -105,14 +105,14 @@ export const SIZE_OPTIONS: SizeOption[] = [
     "ratio": 102/152,
     // 使用默认配置：四周留白 + 满版裁剪
   },
-  { 
-    "id": "square6inch", 
-    "name": "6寸正方形", 
-    "width": 152, 
-    "height": 152, 
-    "ratio": 152/152,
-    // 使用默认配置：四周留白 + 满版裁剪
-  },
+  // { 
+  //   "id": "square6inch", 
+  //   "name": "6寸正方形", 
+  //   "width": 152, 
+  //   "height": 152, 
+  //   "ratio": 152/152,
+  //   // 使用默认配置：四周留白 + 满版裁剪
+  // },
   { 
     "id": "large6inch", 
     "name": "大6寸", 
