@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Loader2, User, Crop, ImageIcon, Frame } from 'lucide-react'
+import { ArrowLeft, Loader2, User, Crop, ImageIcon, Frame, AlertTriangle } from 'lucide-react'
 import { updateOrder, getOrderDetail } from '@/lib/api'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
@@ -129,7 +129,7 @@ function GuidePageContent() {
           />
           
           <p className="mt-2 text-xs text-gray-400 md:text-sm">
-            💡 提示：要和淘宝收货人姓名一致哦～
+            💡 提示：要和下单的收货人姓名一致哦～
           </p>
         </div>
 
@@ -169,57 +169,23 @@ function GuidePageContent() {
               </p>
             </div>
 
-            {/* 打印整图 */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow hover:border-pink-200 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <ImageIcon className="w-4 h-4 text-blue-600" />
-                </span>
-                <span className="font-medium text-gray-800">打印整图</span>
-              </div>
-              <div 
-                className="relative w-full rounded-lg overflow-hidden bg-white flex items-center justify-center"
-                style={{ aspectRatio: '89/127' }}
-              >
-                <Image
-                  src="/images/767ca761813e48ef1d6c58a23490d297.jpg"
-                  alt="打印整图示例"
-                  fill
-                  className="object-contain"
-                  sizes="(max-width: 768px) 100vw, 33vw"
-                />
-              </div>
-              <p className="mt-3 text-xs text-gray-600 md:text-sm">
-                图片完整显示，上下或左右可能留白。不裁切任何内容。
-              </p>
             </div>
 
-            {/* 四周留白 */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow hover:border-pink-200 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
-                  <Frame className="w-4 h-4 text-amber-600" />
-                </span>
-                <span className="font-medium text-gray-800">四周留白</span>
-              </div>
-              <div 
-                className="relative w-full rounded-lg overflow-hidden bg-white flex items-center justify-center"
-                style={{ aspectRatio: '89/127' }}
-              >
-                {/* 四周留白：图片缩放至 90%，四周自然形成白边 */}
-                <div className="relative w-[90%] h-[90%]">
-                  <Image
-                    src="/images/767ca761813e48ef1d6c58a23490d297.jpg"
-                    alt="四周留白示例"
-                    fill
-                    className="object-contain"
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                  />
-                </div>
-              </div>
-              <p className="mt-3 text-xs text-gray-600 md:text-sm">
-                完整显示图片，四周留白边。文艺风格，无任何裁剪。
-              </p>
+          {/* 满版裁切说明 */}
+          <div className="mt-8 pt-8 border-t border-gray-200">
+            <h3 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2 md:text-lg">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              哪些照片不适合做「满版」？
+            </h3>
+            <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm border border-gray-100 overflow-hidden desktop-shadow">
+              <Image
+                src="/images/裁切说明.png"
+                alt="裁切说明：右下角日期、四周边框、人物贴边等不宜满版；满版四周约 2～3mm 裁切，建议选择留白保全图像"
+                width={1086}
+                height={1448}
+                className="w-full h-auto rounded-lg"
+                sizes="(max-width: 768px) 100vw, 896px"
+              />
             </div>
           </div>
 

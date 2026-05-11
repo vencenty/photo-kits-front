@@ -329,7 +329,7 @@ export default function ImageEditor({
   const getModeHint = () => {
     switch (mode) {
       case 'cover':
-        return '满版裁剪模式：可拖拽移动图片位置'
+        return '满版裁剪模式：照片不存在白边，四周存在出血线'
       case 'full':
         return '打印整图模式：图片完整显示'
       case 'lomo':
@@ -346,7 +346,7 @@ export default function ImageEditor({
           <span className="text-blue-400">{getModeHint()}</span>
         </div>
         {mode === 'cover' && (
-          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色边框外的画面在冲印时会被裁掉，红色边框内侧约 2mm 为被裁切区域，满版的照片四周一定存在裁切，如果照片内容不希望有任何裁切的，一定要选择留白。</p>
+          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色虚线区域为图像裁切区域参考，并非绝对精准，照片内容不希望有任何裁切的，一定要选择留白样式</p>
         )}
       </div>
 
