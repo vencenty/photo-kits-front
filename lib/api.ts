@@ -238,6 +238,18 @@ export async function getOssSignature(): Promise<OssSignature> {
   return signature
 }
 
+// ==================== SKU 列表（公开） ====================
+
+/**
+ * 公开 SKU 列表（相纸字典 + 尺寸字典 + SKU 组合），由 photo-sizes.ts 调用
+ * 后端：/api/v1/sku/list
+ */
+export async function getSkuList(): Promise<import('./photo-sizes').SkuListResponse> {
+  return request<import('./photo-sizes').SkuListResponse>('/v1/sku/list', {
+    silent: true,
+  })
+}
+
 /**
  * 上传选项
  */

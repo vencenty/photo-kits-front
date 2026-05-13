@@ -296,7 +296,7 @@ export default function SelectSizePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-app">
       {/* Header */}
       <div className="bg-white sticky top-0 z-10 shadow-sm desktop-nav">
         <div className="desktop-container flex items-center px-4 py-3">
@@ -357,7 +357,7 @@ export default function SelectSizePage() {
         {!isOrderLocked && (
           <button
             onClick={() => setShowAddModal(true)}
-            className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-[#ff4d6d] hover:bg-pink-50 transition-colors active:scale-[0.98] md:py-4 desktop-hover"
+            className="w-full mb-4 py-3.5 bg-white rounded-xl border-2 border-dashed border-[#ff4d6d]/40 flex items-center justify-center gap-2 text-primary-600 hover:bg-pink-50 transition-colors active:scale-[0.98] md:py-4 desktop-hover"
           >
             <Plus className="w-5 h-5 md:w-6 md:h-6" />
             <span className="font-medium md:text-base">添加规格</span>
@@ -367,7 +367,7 @@ export default function SelectSizePage() {
         {/* 加载中 */}
         {isLoading && (
           <div className="py-20 text-center">
-            <Loader2 className="w-10 h-10 mx-auto mb-4 text-[#ff4d6d] animate-spin" />
+            <Loader2 className="w-10 h-10 mx-auto mb-4 text-primary-600 animate-spin" />
             <p className="text-gray-400 md:text-lg">加载中...</p>
           </div>
         )}
@@ -394,7 +394,7 @@ export default function SelectSizePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-base font-bold text-gray-800 md:text-lg">{size.paperName}</span>
-                      <span className="text-lg font-bold text-[#ff4d6d] md:text-xl">{size.sizeName}</span>
+                      <span className="text-lg font-bold text-primary-600 md:text-xl">{size.sizeName}</span>
                     </div>
                     <div className="text-xs text-gray-400 md:text-sm">
                       {size.width}×{size.height}mm
@@ -540,7 +540,7 @@ export default function SelectSizePage() {
                 disabled={!selectedPaper || !selectedSize || isAdding}
                 className={`text-sm font-medium flex items-center gap-1 md:text-base ${
                   selectedPaper && selectedSize && !isAdding
-                    ? 'text-[#ff4d6d]'
+                    ? 'text-primary-600'
                     : 'text-gray-300'
                 } desktop-hover`}
               >
@@ -618,7 +618,7 @@ export default function SelectSizePage() {
                 <div className="mt-6 p-4 bg-gradient-to-r from-pink-50 to-orange-50 rounded-xl border border-pink-100">
                   <p className="text-sm text-gray-600 md:text-base">
                     当前选择：
-                    <span className="font-bold text-[#ff4d6d]">
+                    <span className="font-bold text-primary-600">
                       {' '}{PAPER_TYPES.find(p => p.id === selectedPaper)?.name}{' '}
                       {SIZE_OPTIONS.find(s => s.id === selectedSize)?.name}
                     </span>
