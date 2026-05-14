@@ -51,7 +51,11 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
       ? image.isLandscape && !isPortraitByDimensions // 竖图强制不旋转
       : image.isLandscape
 
-  const previewUrl = buildOssCropUrl(originalUrl, image.cropInfo, {
+  // 批量预览为 full/lomo 时不能用旧的 image.cropInfo（常为 cover），否则会沿用 OSS crop 参数
+  const cropInfoForPreview =
+    previewCropMode === 'full' || previewCropMode === 'lomo' ? undefined : image.cropInfo
+
+  const previewUrl = buildOssCropUrl(originalUrl, cropInfoForPreview, {
     isLandscape: effectiveIsLandscape,
     shortWidth: 300, // 列表页缩略图短边宽度
     quality: 70,

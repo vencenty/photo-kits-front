@@ -1024,7 +1024,7 @@ function UploadPageContent() {
           outputUrl,
         })
       } else if (mode === 'full' || mode === 'lomo') {
-        // full/lomo 模式：不裁切，使用原图
+        // full/lomo：不裁切，outputUrl 不带 OSS crop（仅满版才带 crop；原图 URL 上可能残留旧 crop，由 buildOssCropUrl 剥掉）
         simpleCropInfo = sourceWidth && sourceHeight ? {
           offsetX: 0,
           offsetY: 0,
@@ -1035,8 +1035,7 @@ function UploadPageContent() {
           styleType: mode,
         } : undefined
 
-        // 生成提交给服务端的 outputUrl（不带 rotate）
-        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {})
+        outputUrl = buildOssCropUrl(originalUrl, undefined, {})
 
         photosWithCropInfo.push({
           photoId: id,
@@ -1078,7 +1077,7 @@ function UploadPageContent() {
     }
   }
 
-  const BATCH_COVER_ACK_PHRASE = '我了解'
+  const BATCH_COVER_ACK_PHRASE = '确认'
 
   /** 点击「完成」：未选或未选模式则退出批量；满版裁剪先弹窗确认 */
   const handleBatchFinishClick = () => {

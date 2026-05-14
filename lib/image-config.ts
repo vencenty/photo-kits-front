@@ -286,6 +286,17 @@ export function getPreviewImageUrl(url: string, cropInfo: SimpleCropInfo, isLand
   })
 }
 
+/**
+ * 去掉 URL 上的 x-oss-process 查询参数（保留其它 query）。
+ * 满版以外的样式不应带 OSS crop；从 cover 切到 full/lomo 时原 URL 可能仍带旧 crop，需先剥掉。
+ */
+export function stripOssImageProcessFromUrl(url: string): string {
+  if (!url || !url.includes('x-oss-process=')) return url
+  let out = url.replace(/[?&]x-oss-process=[^&]+/, '')
+  out = out.replace(/\?$/, '').replace(/\?&/, '?').replace(/&&/, '&')
+  return out
+}
+
 // ==================== 类型重新导出（保持向后兼容） ====================
 
 // 从 types.ts 重新导出，不再重复定义
@@ -332,18 +343,14 @@ export function buildOssCropUrl(
   const { isLandscape, shortWidth, quality, format, interlace } = options || {}
   const params: string[] = []
 
-  // 如果有cropInfo，处理裁剪参数
-  if (cropInfo) {
-    const { offsetX, offsetY, cropWidth, cropHeight, styleType } = cropInfo
-
-    // cover 模式需要裁剪
-    if (styleType === 'cover') {
-      const x = Math.round(offsetX)
-      const y = Math.round(offsetY)
-      const w = Math.round(cropWidth)
-      const h = Math.round(cropHeight)
-      params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
-    }
+  // 只有满版（cover）才拼接 OSS crop；full / lomo 不应带裁剪参数
+  if (cropInfo && cropInfo.styleType === 'cover') {
+    const { offsetX, offsetY, cropWidth, cropHeight } = cropInfo
+    const x = Math.round(offsetX)
+    const y = Math.round(offsetY)
+    const w = Math.round(cropWidth)
+    const h = Math.round(cropHeight)
+    params.push(`crop,x_${x},y_${y},w_${w},h_${h}`)
   }
 
   // 无论是否有cropInfo，都增加这些基础处理参数
@@ -375,9 +382,9 @@ export function buildOssCropUrl(
     params.push('rotate,90')
   }
 
-  // 如果没有参数，直接返回原 URL
+  // 没有新的处理链时：非 OSS 原样返回；OSS 则去掉旧 x-oss-process（避免从 cover 切走后仍带 crop）
   if (params.length === 0) {
-    return originalUrl
+    return stripOssImageProcessFromUrl(originalUrl)
   }
 
   // 移除已有的 x-oss-process 参数，避免冲突
