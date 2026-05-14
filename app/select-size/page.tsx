@@ -3,14 +3,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } from 'lucide-react'
-import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, getPhotoSizeById, isValidPaperSizeCombination } from '@/lib/photo-sizes'
+import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, isValidPaperSizeCombination } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
 import { addSpec, deleteSpec, getOrderDetail, SpecInfo } from '@/lib/api'
-import { GlobalLoading } from '@/components/GlobalLoading'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
-
-/** 添加规格弹窗中不展示的尺寸（仍保留在全局 SIZE_OPTIONS 供历史订单等使用） */
-const ADD_MODAL_HIDDEN_SIZE_IDS = new Set(['square5inch', 'square6inch'])
 
 // 已添加的规格项（包含数据库 ID）
 interface AddedSize {
@@ -43,25 +39,16 @@ export default function SelectSizePage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
-  const setApiLoading = useStore((state) => state.setApiLoading)
 
-  const addModalSizeOptions = useMemo(
-    () => SIZE_OPTIONS.filter((s) => !ADD_MODAL_HIDDEN_SIZE_IDS.has(s.id)),
-    []
-  )
-
-  // 计算当前哪些尺寸应该被禁用（基于已选择的相纸）
   const disabledSizes = useMemo(() => {
     if (!selectedPaper) return new Set<string>()
     const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
     if (!paper) return new Set<string>()
-    // 返回不在 supportedSizes 中的尺寸ID（仅针对弹窗内可见尺寸）
     return new Set(
-      addModalSizeOptions
-        .filter((s) => !paper.supportedSizes.includes(s.id))
+      SIZE_OPTIONS.filter((s) => !paper.supportedSizes.includes(s.id))
         .map((s) => s.id)
     )
-  }, [selectedPaper, addModalSizeOptions])
+  }, [selectedPaper])
 
   // 计算当前哪些相纸应该被禁用（基于已选择的尺寸）
   const disabledPapers = useMemo(() => {
@@ -108,8 +95,6 @@ export default function SelectSizePage() {
 
     setIsLoading(true)
     try {
-      setApiLoading(true, '加载规格列表...')
-      
       // 只请求 orderDetail 接口（后端会自动创建订单 + 返回 specs 列表）
       const orderDetail = await getOrderDetail(orderNumber, false)
       setReceiverName(orderDetail.receiverName || '')
@@ -137,7 +122,6 @@ export default function SelectSizePage() {
       showToastMessage('加载规格失败，请重试')
     } finally {
       setIsLoading(false)
-      setApiLoading(false, '')
     }
   }, [orderNumber])
 
@@ -184,7 +168,6 @@ export default function SelectSizePage() {
 
     setIsAdding(true)
     try {
-      setApiLoading(true, '添加规格中...')
       // 调用后端 API 添加规格
       const result = await addSpec(orderNumber, {
         sessionId: fullSizeId,
@@ -220,7 +203,6 @@ export default function SelectSizePage() {
       setShowAddModal(false)
       setSelectedPaper(null)
       setSelectedSize(null)
-      setApiLoading(false, '')
     }
   }
 
@@ -277,7 +259,6 @@ export default function SelectSizePage() {
 
     setIsDeleting(size.id)
     try {
-      setApiLoading(true, '删除规格中...')
       // 调用后端 API 删除规格
       await deleteSpec(orderNumber, size.dbId)
 
@@ -291,7 +272,6 @@ export default function SelectSizePage() {
       showToastMessage('删除失败，请重试')
     } finally {
       setIsDeleting(null)
-      setApiLoading(false, '')
     }
   }
 
@@ -636,9 +616,6 @@ export default function SelectSizePage() {
           </div>
         </div>
       )}
-
-      {/* 全局 Loading */}
-      <GlobalLoading />
     </div>
   )
 }

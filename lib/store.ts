@@ -40,11 +40,6 @@ interface StoreState {
   uploadProgress: number
   setUploadProgress: (progress: number) => void
   setIsUploading: (isUploading: boolean) => void
-  
-  // 全局 API Loading 状态
-  apiLoading: boolean
-  apiLoadingMessage: string
-  setApiLoading: (loading: boolean, message?: string) => void
 }
 
 export const useStore = create<StoreState>()(
@@ -140,11 +135,6 @@ export const useStore = create<StoreState>()(
       uploadProgress: 0,
       setUploadProgress: (progress) => set({ uploadProgress: progress }),
       setIsUploading: (isUploading) => set({ isUploading }),
-      
-      // 全局 API Loading 状态
-      apiLoading: false,
-      apiLoadingMessage: '',
-      setApiLoading: (loading, message = '') => set({ apiLoading: loading, apiLoadingMessage: message }),
     }),
     {
       name: 'photo-upload-storage',
@@ -165,6 +155,17 @@ export const useStore = create<StoreState>()(
       },
       // 版本控制，如果数据结构变化可以增加版本号清除旧缓存
       version: 1,
+      // 只合并已持久化字段，忽略旧缓存里可能存在的 apiLoading 等已废弃键
+      merge: (persistedState, currentState) => {
+        const p = (persistedState ?? {}) as Partial<
+          Pick<StoreState, 'currentSession' | 'lastFetchTime'>
+        >
+        return {
+          ...currentState,
+          ...(p.currentSession !== undefined ? { currentSession: p.currentSession } : {}),
+          ...(p.lastFetchTime !== undefined ? { lastFetchTime: p.lastFetchTime } : {}),
+        }
+      },
     }
   )
 )

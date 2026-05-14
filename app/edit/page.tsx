@@ -6,7 +6,6 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
-import { GlobalLoading } from '@/components/GlobalLoading'
 import { updatePhoto, getPhotoDetail, listPhotos } from '@/lib/api'
 import { mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import { buildOssCropUrl } from '@/lib/image-config'
@@ -19,7 +18,6 @@ function EditPageContent() {
   const filter = searchParams.get('filter') // 🎯 读取过滤参数：'unadjusted' 表示只浏览未调整的图片
 
   const currentSession = useStore((state) => state.currentSession)
-  const setApiLoading = useStore((state) => state.setApiLoading)
   // 🚀 乐观更新：获取 store 方法
   const updateImage = useStore((state) => state.updateImage)
   const forceRefetch = useStore((state) => state.forceRefetch)
@@ -339,7 +337,6 @@ function EditPageContent() {
     console.log('  - 输出URL:', saveData.outputUrl)
 
     try {
-      setApiLoading(true, '保存编辑中...')
 
       // 1️⃣ 保存到后端
       await updatePhoto({
@@ -429,8 +426,6 @@ function EditPageContent() {
     } catch (error) {
       console.error('保存编辑状态失败:', error)
       toast.error('保存失败，请重试')
-    } finally {
-      setApiLoading(false)
     }
   }
 
@@ -508,9 +503,6 @@ function EditPageContent() {
         allImages={images}
         currentIndex={currentIndex}
       />
-
-      {/* 全局 Loading */}
-      <GlobalLoading />
     </div>
   )
 }

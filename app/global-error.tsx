@@ -46,7 +46,18 @@ export default function GlobalError({
               {error.message || '应用发生错误，请刷新页面重试'}
             </p>
             <button
-              onClick={() => reset()}
+              type="button"
+              onClick={() => {
+                try {
+                  reset()
+                } catch {
+                  /* ignore */
+                }
+                // 根级 Global Error 时 reset 未必能恢复整树，整页刷新最可靠
+                if (typeof window !== 'undefined') {
+                  window.location.reload()
+                }
+              }}
               style={{
                 width: '100%',
                 padding: '12px 16px',
@@ -59,7 +70,7 @@ export default function GlobalError({
                 cursor: 'pointer',
               }}
             >
-              重试
+              重试（刷新页面）
             </button>
           </div>
         </div>

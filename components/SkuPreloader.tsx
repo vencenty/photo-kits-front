@@ -14,13 +14,14 @@ import { preloadSkus } from '@/lib/photo-sizes'
  *  - 在数据 ready 之前**短暂阻塞** children 渲染，保证 select-size / upload 等
  *    页面在 mount 时就能拿到正确的 SKU 数据
  *  - 设有 800ms 兜底超时：如果远端慢或失败，自动放行并使用本地兜底常量
- *  - 服务端渲染（SSR）阶段直接渲染 children，不阻塞 HTML 输出
+ *  - SSR 与客户端首帧均不渲染 children（一致），挂载后再放行，避免 hydration 错误
  */
 const TIMEOUT_MS = 800
 
 export function SkuPreloader({ children }: { children: React.ReactNode }) {
-  // 服务端默认 true（不阻塞 SSR HTML），客户端首屏初始 false（阻塞至 preload 完成 / 超时）
-  const [ready, setReady] = useState<boolean>(typeof window === 'undefined')
+  // 必须与 SSR 首帧一致：若用 typeof window === 'undefined'，服务端为 true、客户端为 false，
+  // 会导致子树 HTML 不一致 → hydration 报错并落到 global-error。
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     let cancelled = false

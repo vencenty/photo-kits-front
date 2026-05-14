@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
-import { GlobalLoading } from '@/components/GlobalLoading'
 import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
 import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
@@ -65,7 +64,6 @@ export default function SuccessPage() {
   const clearSession = useStore((state) => state.clearSession)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
-  const setApiLoading = useStore((state) => state.setApiLoading)
   
   const [orderDetail, setOrderDetail] = useState<OrderDetailState | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
@@ -100,7 +98,6 @@ export default function SuccessPage() {
     }
     let cancelled = false
     setOrderDetail(null)
-    setApiLoading(true, '加载订单详情...')
     getOrderDetail(orderNumber, false)
       .then((res) => {
         if (cancelled) return
@@ -125,13 +122,10 @@ export default function SuccessPage() {
       .catch((error) => {
         if (!cancelled) console.error('加载订单详情失败:', error)
       })
-      .finally(() => {
-        if (!cancelled) setApiLoading(false, '')
-      })
     return () => {
       cancelled = true
     }
-  }, [orderNumber, setApiLoading])
+  }, [orderNumber])
 
   // 点击规格跳转到上传页面
   // 注意：不再依赖 getPhotoSizeById 的结果，避免因历史数据或新尺寸未配置导致「点击无反应」
@@ -174,7 +168,6 @@ export default function SuccessPage() {
     setBindRelatedInput('')
     setShowBindInConfirm(false)
     try {
-      setApiLoading(true, '加载订单信息...')
       const detail = await getOrderDetail(orderNumber, false)
       setOrderDetail((prev) =>
         prev ? { ...prev, relatedOrderNo: detail.relatedOrderNo ?? null } : null
@@ -183,8 +176,6 @@ export default function SuccessPage() {
     } catch (e) {
       console.error('获取订单详情失败', e)
       alert('获取订单信息失败，请重试')
-    } finally {
-      setApiLoading(false, '')
     }
   }
 
@@ -197,7 +188,6 @@ export default function SuccessPage() {
     setIsLocking(true)
     setSubmitError('')
     try {
-      setApiLoading(true, '提交订单中...')
       const relatedNo = needBind ? bindRelatedInput.trim() : (orderDetail?.relatedOrderNo ?? undefined)
       await submitOrderForProduction({
         orderSn: orderNumber,
@@ -239,7 +229,6 @@ export default function SuccessPage() {
       }
     } finally {
       setIsLocking(false)
-      setApiLoading(false, '')
     }
   }
 
@@ -253,7 +242,6 @@ export default function SuccessPage() {
 
     setIsLocking(true)
     try {
-      setApiLoading(true, '锁单中...')
       await lockOrder(orderNumber)
       setOrderDetail((prev) => (prev ? { ...prev, status: 2 } : null)) // 状态2表示客户已确认/锁单
       alert('锁单成功！订单已确认，可以开始制作了。')
@@ -262,7 +250,6 @@ export default function SuccessPage() {
       alert('锁单失败，请重试')
     } finally {
       setIsLocking(false)
-      setApiLoading(false, '')
     }
   }
 
@@ -457,9 +444,6 @@ export default function SuccessPage() {
           </p>
         </div>
       </div>
-
-      {/* 全局 Loading */}
-      <GlobalLoading />
     </div>
 
       {/* 确认提交订单弹窗（统一二次确认，需绑定时展示淘宝订单号输入） */}

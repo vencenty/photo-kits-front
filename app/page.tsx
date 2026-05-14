@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, Search, Loader2 } from 'lucide-react'
-import { GlobalLoading } from '@/components/GlobalLoading'
 import { getOrderDetail } from '@/lib/api'
+import { normalizeOrderOrPhoneInput } from '@/lib/utils'
 
 export default function Home() {
   const [orderNumber, setOrderNumber] = useState('')
@@ -13,9 +13,9 @@ export default function Home() {
   const router = useRouter()
 
   const handleQuery = async () => {
-    const trimmedOrder = orderNumber.trim()
+    const trimmedOrder = normalizeOrderOrPhoneInput(orderNumber)
     if (!trimmedOrder) {
-      setError('请输入订单编号')
+      setError('请输入订单编号或手机号')
       return
     }
 
@@ -26,7 +26,7 @@ export default function Home() {
       // 查询订单详情，判断是否已查看引导页（过期逻辑由后端 + 全局错误处理统一控制）
       const orderDetail = await getOrderDetail(trimmedOrder, false)
 
-      // 保存订单号到 sessionStorage
+      // 保存订单号到 sessionStorage（与请求体一致，避免带空格导致后续接口失败）
       sessionStorage.setItem('pending-order-number', trimmedOrder)
       
       // 根据 guideViewed 决定跳转页面
@@ -35,7 +35,7 @@ export default function Home() {
         router.push('/select-size')
       } else {
         // 未查看引导页，跳转到 guide 页面
-        router.push(`/guide?orderNo=${trimmedOrder}`)
+        router.push(`/guide?orderNo=${encodeURIComponent(trimmedOrder)}`)
       }
     } catch (err) {
       console.error('查询订单失败:', err)
@@ -44,12 +44,6 @@ export default function Home() {
       setError(message)
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleQuery()
     }
   }
 
@@ -79,7 +73,9 @@ export default function Home() {
                   setOrderNumber(e.target.value)
                   setError('')
                 }}
-                onKeyPress={handleKeyPress}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleQuery()
+                }}
                 placeholder="请输入订单编号或手机号"
                 className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent transition-all md:py-4 md:text-base"
                 disabled={isLoading}
@@ -93,6 +89,7 @@ export default function Home() {
           
           {/* 查询按钮 */}
           <button
+            type="button"
             onClick={handleQuery}
             disabled={isLoading}
             className="w-full mt-4 py-3 gradient-primary text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 md:py-4 md:text-base desktop-hover"
@@ -116,9 +113,6 @@ export default function Home() {
         </div>
 
       </div>
-
-      {/* 全局 Loading */}
-      <GlobalLoading />
     </div>
   )
 }

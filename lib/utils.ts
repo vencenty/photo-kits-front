@@ -317,6 +317,32 @@ export function mapCropModeFromServer(cropMode: string): CropMode {
   return cropMode as CropMode
 }
 
+// ==================== 订单号 / 手机号输入 ====================
+
+/**
+ * 规范首页及订单接口使用的「订单号 / 手机号」字符串，与后端一致：仅 11 位手机号或 19 位数字订单号。
+ * 去除首尾空白、全角空格、中间空格/换行、常见横线；支持 +86 / 86 前缀的国内手机号粘贴。
+ */
+export function normalizeOrderOrPhoneInput(raw: string): string {
+  let s = raw.trim().replace(/\u3000/g, '')
+  s = s.replace(/[\s\-–—]/g, '')
+  if (s.startsWith('+86')) {
+    s = s.slice(3)
+  } else if (/^86(1\d{10})$/.test(s)) {
+    s = s.slice(2)
+  }
+  // 全角数字 → 半角（从短信/IM 粘贴常见）
+  s = s.replace(/[\uFF10-\uFF19]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30)
+  )
+  return s
+}
+
+/** 是否为后端允许的订单号或手机号（规范化后） */
+export function isValidOrderSnOrPhone(s: string): boolean {
+  return /^\d{11}$/.test(s) || /^\d{19}$/.test(s)
+}
+
 // ==================== 类型别名（兼容旧代码） ====================
 
 /** @deprecated 请从 @/lib/types 导入 */

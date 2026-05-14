@@ -334,7 +334,6 @@ export function getCropConfigForSize(fullSizeId: string): CropStyleConfig {
   if (!fullSizeId) return DEFAULT_CROP_CONFIG
   return CROP_CONFIG_MAP[fullSizeId] || DEFAULT_CROP_CONFIG
 }
-
 /**
  * 旧的 PHOTO_SIZES 兼容（保留用于向后兼容）
  */
@@ -351,3 +350,4 @@ export const PHOTO_SIZES: PhotoSize[] = [
     recommended: true,
   },
 ]
+

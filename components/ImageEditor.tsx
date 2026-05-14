@@ -346,7 +346,7 @@ export default function ImageEditor({
           <span className="text-blue-400">{getModeHint()}</span>
         </div>
         {mode === 'cover' && (
-          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色虚线区域为图像裁切区域参考，并非绝对精准，照片内容不希望有任何裁切的，一定要选择留白样式</p>
+          <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色虚线区域为图像裁切区域参考，并非绝对精准，照片内容不希望有任何裁切的，一定要选择四周留白样式</p>
         )}
       </div>
 

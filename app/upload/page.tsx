@@ -12,7 +12,6 @@ import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
-import { GlobalLoading } from '@/components/GlobalLoading'
 import {
   getOssSignature,
   uploadToOss,
@@ -71,7 +70,6 @@ function UploadPageContent() {
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
   const allImages = useStore((state) => state.images)
-  const setApiLoading = useStore((state) => state.setApiLoading)
   // 过滤当前 session 的图片（有 thumbnailUrl 或 originalUrl）
   const images = allImages.filter(img => 
     (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
@@ -352,8 +350,6 @@ function UploadPageContent() {
       setIsLoadingPhotos(true)
 
       try {
-        setApiLoading(true, '加载照片列表...')
-        
         // 检查订单状态（是否锁单等；过期逻辑交给全局错误处理）
         try {
           const orderDetail = await getOrderDetail(orderSn)
@@ -493,7 +489,6 @@ function UploadPageContent() {
         console.error('从服务器加载照片失败:', error)
       } finally {
         setIsLoadingPhotos(false)
-        setApiLoading(false, '')
       }
     }
 
@@ -573,7 +568,6 @@ function UploadPageContent() {
     // 🎯 全局上传中弹层：从这里开始到所有图片上传完毕才关闭
     const totalCount = validFiles.length
     let completedCount = 0
-    setApiLoading(true, `正在上传照片（0/${totalCount}），请稍候...`)
     setIsUploading(true)
     const orderSn = getOrderSn()
     const specId = currentSession.sizeId
@@ -595,7 +589,6 @@ function UploadPageContent() {
         console.error('获取 OSS 签名失败:', error)
         setIsUploading(false)
         alert('获取上传签名失败，请重试')
-        setApiLoading(false, '')
         return
       }
     }
@@ -604,7 +597,6 @@ function UploadPageContent() {
     if (!signature) {
       setIsUploading(false)
       setUploadProgress('')
-      setApiLoading(false, '')
       return
     }
 
@@ -732,7 +724,6 @@ function UploadPageContent() {
       } finally {
         // 更新已完成数量，并刷新全局提示文案
         completedCount += 1
-        setApiLoading(true, `正在上传照片（${completedCount}/${totalCount}），请稍候...`)
       }
     }
 
@@ -774,7 +765,6 @@ function UploadPageContent() {
 
     setIsUploading(false)
     setUploadProgress('')
-    setApiLoading(false, '')
 
     // 重置 input
     if (fileInputRef.current) {
@@ -803,12 +793,9 @@ function UploadPageContent() {
     deleteImage(id)
     // 后台异步删除，不阻塞 UI
     try {
-      setApiLoading(true, '删除照片中...')
       await deletePhotoFromOrder(orderSn, id)
     } catch (error) {
       console.error('删除照片失败:', error)
-    } finally {
-      setApiLoading(false, '')
     }
   }
 
@@ -826,15 +813,12 @@ function UploadPageContent() {
       
       // 同步到后端
       try {
-        setApiLoading(true, '更新数量中...')
         await updatePhoto({
           photoId: id,
           quantity: newCount,
         })
       } catch (error) {
         console.error('更新照片数量失败:', error)
-      } finally {
-        setApiLoading(false, '')
       }
     }
   }
@@ -903,7 +887,6 @@ function UploadPageContent() {
     }
     if (confirm(`确定要删除选中的 ${selectedIds.length} 张图片吗？`)) {
       try {
-        setApiLoading(true, `删除 ${selectedIds.length} 张照片...`)
         // 🚀 优化：使用批量删除接口，一条 SQL 删除所有照片
         await deletePhotoFromOrder(orderSn, selectedIds)
         
@@ -917,8 +900,6 @@ function UploadPageContent() {
       } catch (error) {
         console.error('批量删除照片失败:', error)
         alert('批量删除失败，请重试')
-      } finally {
-        setApiLoading(false, '')
       }
     }
   }
@@ -1078,7 +1059,6 @@ function UploadPageContent() {
 
     // 使用批量 API 同步到后端（传递计算好的 cropInfo 和 outputUrl）
     try {
-      setApiLoading(true, `批量更新 ${targetIds.length} 张照片...`)
       const result = await batchUpdatePhotos({
         photoIds: targetIds,
         cropMode: mapCropModeToServer(mode),
@@ -1095,8 +1075,6 @@ function UploadPageContent() {
       forceRefetch()
     } catch (error) {
       console.error('批量更新照片裁剪模式失败:', error)
-    } finally {
-      setApiLoading(false, '')
     }
   }
 
@@ -1704,8 +1682,6 @@ function UploadPageContent() {
         </div>
       )}
 
-      {/* 全局 Loading */}
-      <GlobalLoading />
     </div>
   )
 }

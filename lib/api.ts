@@ -14,6 +14,7 @@ import {
   type ApiErrorResponse,
 } from './error-handler'
 import { OSS_PROXY_DOMAIN, toCdnUrl, toBucketUrl } from './url'
+import { isValidOrderSnOrPhone, normalizeOrderOrPhoneInput } from './utils'
 
 // API 基础配置
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
@@ -424,11 +425,15 @@ export interface OrderDetailResponse {
  * @param includePhotos 是否包含照片列表，默认 false（列表页不需要）
  */
 export async function getOrderDetail(orderNo: string, includePhotos: boolean = false): Promise<OrderDetailResponse> {
+  const normalized = normalizeOrderOrPhoneInput(orderNo)
+  if (!isValidOrderSnOrPhone(normalized)) {
+    throw new Error('请输入 11 位手机号或 19 位淘宝订单号（请勿在中间加空格或横线）')
+  }
   // POST /v1/order/init：请求体与 OrderDetail 入参语义一致（orderSn + includePhotos）
   return request<OrderDetailResponse>('/v1/order/init', {
     method: 'POST',
     body: JSON.stringify({
-      orderNo,
+      orderNo: normalized,
       ...(includePhotos ? { includePhotos: true } : {}),
     }),
   })
