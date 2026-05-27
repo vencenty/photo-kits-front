@@ -15,6 +15,12 @@ import {
 } from './error-handler'
 import { OSS_PROXY_DOMAIN, toCdnUrl, toBucketUrl } from './url'
 import { isValidOrderSnOrPhone, normalizeOrderOrPhoneInput } from './utils'
+import {
+  getActiveOrderNo,
+  setActiveOrderNo,
+  ORDER_NO_HEADER,
+  ORDER_CONTEXT_SKIP_PREFIXES,
+} from './order-context'
 
 // API 基础配置
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
@@ -34,14 +40,22 @@ interface RequestConfig extends RequestInit {
   params?: Record<string, string>
   // 是否静默处理错误（不显示 toast）
   silent?: boolean
+  /** 跳过自动注入 X-Order-No（如 init、Admin 接口） */
+  skipOrderContext?: boolean
+}
+
+function shouldInjectOrderNo(url: string, skipOrderContext?: boolean): boolean {
+  if (skipOrderContext || typeof window === 'undefined') return false
+  if (ORDER_CONTEXT_SKIP_PREFIXES.some((prefix) => url.startsWith(prefix))) return false
+  return !!getActiveOrderNo()
 }
 
 /**
  * 统一请求函数
- * 自动处理错误并显示 toast 提示
+ * 自动处理错误并显示 toast 提示；已 init 的订单自动注入 X-Order-No Header
  */
 async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
-  const { params, silent = false, ...init } = config
+  const { params, silent = false, skipOrderContext = false, ...init } = config
 
   // 构建完整 URL
   let fullUrl = `${API_BASE_URL}${url}`
@@ -51,9 +65,13 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
   }
 
   // 默认请求头
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...init.headers,
+    ...(init.headers as Record<string, string> | undefined),
+  }
+
+  if (shouldInjectOrderNo(url, skipOrderContext)) {
+    headers[ORDER_NO_HEADER] = getActiveOrderNo()
   }
 
   try {
@@ -255,8 +273,8 @@ export async function getSkuList(): Promise<import('./photo-sizes').SkuListRespo
  * 上传选项
  */
 export interface UploadOptions {
-  /** 订单号 */
-  orderSn?: string
+  /** 订单号（OSS 路径用） */
+  orderNo?: string
   /** 规格ID（使用纯英文/数字，避免中文路径在 Safari 等浏览器中的兼容问题） */
   specId?: string
 }
@@ -295,10 +313,9 @@ export async function uploadToOss(
   const baseDir = signature.dir || 'uploads'
   let key = baseDir
   
-  if (options?.orderSn) {
-    // 清理订单号中的特殊字符（只保留字母、数字、下划线、横杠）
-    const safeOrderSn = options.orderSn.replace(/[^\w-]/g, '_')
-    key = `${key}/${safeOrderSn}`
+  if (options?.orderNo) {
+    const safeOrderNo = options.orderNo.replace(/[^\w-]/g, '_')
+    key = `${key}/${safeOrderNo}`
     
     if (options?.specId) {
       // 清理规格ID中的特殊字符（只保留字母、数字、下划线、横杠）
@@ -314,7 +331,7 @@ export async function uploadToOss(
     key, 
     fileSize: file.size,
     fileName: file.name,
-    orderSn: options?.orderSn,
+    orderNo: options?.orderNo,
     specId: options?.specId
   })
 
@@ -369,10 +386,10 @@ export interface OrderInfo {
 /**
  * 创建订单
  */
-export async function createOrder(orderNo: string): Promise<OrderInfo> {
+export async function createOrder(): Promise<OrderInfo> {
   return request<OrderInfo>('/v1/order/create', {
     method: 'POST',
-    body: JSON.stringify({ orderNo }),
+    body: JSON.stringify({}),
   })
 }
 
@@ -383,25 +400,20 @@ export interface UpdateOrderParams {
 
 /**
  * 更新订单信息（收货人、关联订单号、引导页状态）
- * 后端路由: PUT /api/order/:orderNo/update
- * @param orderNo 订单号
- * @param params 可选：receiverName 收货人；relatedOrderNo 19 位淘宝订单号（11 位手机号时绑定）
  */
-export async function updateOrder(orderNo: string, params: UpdateOrderParams): Promise<{
+export async function updateOrder(params: UpdateOrderParams): Promise<{
   success: boolean
   receiverName: string
   guideViewed: number
 }> {
-  // v1：POST /v1/order/update，且 orderNo 可能按 path tag 解析；因此同时放到 query + body
   return request(`/v1/order/update`, {
     method: 'POST',
-    body: JSON.stringify({ orderNo, ...params }),
+    body: JSON.stringify(params),
   })
 }
 
 export interface OrderDetailResponse {
-  orderId: string
-  orderSn: string
+  orderNo: string
   relatedOrderNo?: string // 关联的淘宝订单号（11 位手机号时用户绑定后回显）
   size: string
   style: string
@@ -419,24 +431,34 @@ export interface OrderDetailResponse {
 }
 
 /**
- * 获取订单详情
- * 后端路由: POST /v1/order/init
- * @param orderSn 订单号
- * @param includePhotos 是否包含照片列表，默认 false（列表页不需要）
+ * 获取订单详情（init）
+ * init 为特殊接口：body 需携带 orderNo、includePhotos；Header 同步带 X-Order-No 供中间件鉴权
+ * @param orderNo 可选；不传时使用 localStorage 中的活跃订单号
+ * @param includePhotos 是否包含照片列表，默认 false
  */
-export async function getOrderDetail(orderNo: string, includePhotos: boolean = false): Promise<OrderDetailResponse> {
-  const normalized = normalizeOrderOrPhoneInput(orderNo)
+export async function getOrderDetail(
+  orderNo?: string,
+  includePhotos: boolean = false
+): Promise<OrderDetailResponse> {
+  const normalized = normalizeOrderOrPhoneInput(orderNo ?? getActiveOrderNo())
   if (!isValidOrderSnOrPhone(normalized)) {
     throw new Error('请输入 11 位手机号或 19 位淘宝订单号（请勿在中间加空格或横线）')
   }
-  // POST /v1/order/init：请求体与 OrderDetail 入参语义一致（orderSn + includePhotos）
-  return request<OrderDetailResponse>('/v1/order/init', {
+
+  const data = await request<OrderDetailResponse>('/v1/order/init', {
     method: 'POST',
+    skipOrderContext: true,
+    headers: {
+      [ORDER_NO_HEADER]: normalized,
+    },
     body: JSON.stringify({
       orderNo: normalized,
       ...(includePhotos ? { includePhotos: true } : {}),
     }),
   })
+
+  setActiveOrderNo(data.orderNo || normalized)
+  return data
 }
 
 /**
@@ -445,7 +467,7 @@ export async function getOrderDetail(orderNo: string, includePhotos: boolean = f
 export interface PhotoDetailResponse {
   photo: PhotoDetail
   orderStatus: number // 订单状态：0-待上传 1-已提交 2-生产中 3-已发货 4-已完成 5-已取消
-  orderSn: string // 订单号
+  orderNo: string
 }
 
 /**
@@ -470,26 +492,21 @@ export interface AddSpecParams {
 
 /**
  * 添加规格
- * 后端路由: POST /api/order/:orderNo/spec
  */
-export async function addSpec(orderNo: string, params: AddSpecParams): Promise<SpecInfo> {
-  // v1：POST /v1/order/spec/create
-  // 后端 v1 路由没有 path param，因此这里同时把 `orderNo` 放到 query 与 body。
+export async function addSpec(params: AddSpecParams): Promise<SpecInfo> {
   return request<SpecInfo>('/v1/order/spec/create', {
     method: 'POST',
-    body: JSON.stringify({ orderNo, ...params }),
+    body: JSON.stringify(params),
   })
 }
 
 /**
  * 删除规格
- * 后端路由: DELETE /api/order/:orderNo/spec/:id
  */
-export async function deleteSpec(orderNo: string, specId: number): Promise<{ code: number; message: string }> {
-  // v1：POST /v1/order/spec/delete
+export async function deleteSpec(specId: number): Promise<{ code: number; message: string }> {
   return request<{ code: number; message: string }>('/v1/order/spec/delete', {
     method: 'POST',
-    body: JSON.stringify({ orderNo, id: specId }),
+    body: JSON.stringify({ id: specId }),
   })
 }
 
@@ -499,17 +516,14 @@ export interface ListSpecsResponse {
 
 /**
  * 获取规格列表
- * 后端路由: GET /api/order/:orderNo/specs
  */
-export async function listSpecs(orderNo: string): Promise<ListSpecsResponse> {
-  // v1：GET /v1/order/spec/list
-  return request<ListSpecsResponse>('/v1/order/spec/list', { params: { orderNo } })
+export async function listSpecs(): Promise<ListSpecsResponse> {
+  return request<ListSpecsResponse>('/v1/order/spec/list')
 }
 
 // ==================== 照片相关 ====================
 
 export interface AddPhotoParams {
-  orderSn: string
   specId: string
   photoId: string
   url: string
@@ -615,27 +629,22 @@ export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promis
 
 /**
  * 删除照片（支持单个或批量删除）
- * 后端路由: DELETE /api/order/photo
- * orderSn 必传，用于锁单校验；单个删除传 photoIds: [id]，批量删除传 photoIds: [id1, id2, ...]
  */
 export async function deletePhotoFromOrder(
-  orderSn: string,
   photoIdOrIds: string | string[]
 ): Promise<{ code: number; message: string }> {
   const photoIds = Array.isArray(photoIdOrIds) ? photoIdOrIds : [photoIdOrIds]
   return request<{ code: number; message: string }>('/v1/order/photo/delete', {
     method: 'POST',
-    body: JSON.stringify({ orderSn, photoIds }),
+    body: JSON.stringify({ photoIds }),
   })
 }
 
 /**
  * 获取照片列表
- * 后端路由: GET /api/order/photos
  */
-export async function listPhotos(orderSn?: string, specId?: string): Promise<{ photos: PhotoDetail[] }> {
+export async function listPhotos(specId?: string): Promise<{ photos: PhotoDetail[] }> {
   const params: Record<string, string> = {}
-  if (orderSn) params.orderSn = orderSn
   if (specId) params.specId = specId
   return request<{ photos: PhotoDetail[] }>('/v1/order/photo/list', { params })
 }
@@ -643,7 +652,6 @@ export async function listPhotos(orderSn?: string, specId?: string): Promise<{ p
 // ==================== 订单提交相关 ====================
 
 export interface SubmitOrderParams {
-  orderSn: string
   receiverName?: string
   size?: string
   style?: string
@@ -668,27 +676,25 @@ export interface SubmitOrderParams {
 
 /**
  * 提交订单状态更新
- * 后端路由: PUT /api/order/:orderNo/submit
  */
-export async function submitOrderStatus(orderNo: string): Promise<{ message: string }> {
+export async function submitOrderStatus(): Promise<{ message: string }> {
   return request<{ message: string }>('/v1/order/submit', {
     method: 'POST',
-    body: JSON.stringify({ orderSn: orderNo }),
+    body: JSON.stringify({}),
   })
 }
 
 /**
  * 提交订单制作（新接口）
- * 功能：将订单状态改为已提交，创建审核记录
- * 后端路由: POST /api/order/submit
  */
 export interface SubmitOrderForProductionParams {
-  orderSn: string
   receiverName?: string
-  relatedOrderNo?: string // 关联的淘宝订单号（当 orderSn 为 11 位手机号时必填）
+  relatedOrderNo?: string // 关联的淘宝订单号（当 orderNo 为 11 位手机号时必填）
 }
 
-export async function submitOrderForProduction(params: SubmitOrderForProductionParams): Promise<{ message: string }> {
+export async function submitOrderForProduction(
+  params: SubmitOrderForProductionParams = {}
+): Promise<{ message: string }> {
   return request<{ message: string }>('/v1/order/submit', {
     method: 'POST',
     body: JSON.stringify(params),
@@ -697,18 +703,16 @@ export async function submitOrderForProduction(params: SubmitOrderForProductionP
 
 /**
  * 锁单（客户确认，状态改为生产中/客户已确认）
- * 后端路由: PUT /api/order/:orderNo/lock
- * 注意：使用状态2（生产中）表示客户已确认/锁单
  */
-export async function lockOrder(orderNo: string): Promise<{ message: string }> {
-  return submitOrderStatus(orderNo)
+export async function lockOrder(): Promise<{ message: string }> {
+  return submitOrderStatus()
 }
 
 // ==================== Admin API ====================
 
 export interface AdminOrderListItem {
   id: number
-  orderSn: string
+  orderNo: string
   receiver: string
   totalQuantity: number
   status: number
@@ -722,7 +726,7 @@ export interface AdminOrderListRequest {
   page?: number
   pageSize?: number
   status?: number
-  orderSn?: string
+  orderNo?: string
 }
 
 export interface AdminOrderListResponse {
@@ -734,7 +738,7 @@ export interface AdminOrderListResponse {
 
 export interface AdminOrderDetailResponse {
   id: number
-  orderSn: string
+  orderNo: string
   receiver: string
   totalQuantity: number
   status: number
@@ -758,11 +762,12 @@ export interface AdminOrderDeleteResponse {
 export async function getAdminOrderList(params: AdminOrderListRequest = {}): Promise<AdminOrderListResponse> {
   return request<AdminOrderListResponse>('/api/admin/order/list', {
     method: 'GET',
+    skipOrderContext: true,
     params: {
       page: String(params.page || 1),
       pageSize: String(params.pageSize || 20),
       ...(params.status !== undefined && { status: String(params.status) }),
-      ...(params.orderSn && { orderSn: params.orderSn }),
+      ...(params.orderNo && { orderNo: params.orderNo }),
     },
   })
 }
@@ -770,17 +775,19 @@ export async function getAdminOrderList(params: AdminOrderListRequest = {}): Pro
 /**
  * Admin 订单详情
  */
-export async function getAdminOrderDetail(orderSn: string): Promise<AdminOrderDetailResponse> {
-  return request<AdminOrderDetailResponse>(`/api/admin/order/detail/${orderSn}`, {
+export async function getAdminOrderDetail(orderNo: string): Promise<AdminOrderDetailResponse> {
+  return request<AdminOrderDetailResponse>(`/api/admin/order/detail/${orderNo}`, {
     method: 'GET',
+    skipOrderContext: true,
   })
 }
 
 /**
  * Admin 删除订单
  */
-export async function deleteAdminOrder(orderSn: string): Promise<AdminOrderDeleteResponse> {
-  return request<AdminOrderDeleteResponse>(`/api/admin/order/delete/${orderSn}`, {
+export async function deleteAdminOrder(orderNo: string): Promise<AdminOrderDeleteResponse> {
+  return request<AdminOrderDeleteResponse>(`/api/admin/order/delete/${orderNo}`, {
     method: 'DELETE',
+    skipOrderContext: true,
   })
 }

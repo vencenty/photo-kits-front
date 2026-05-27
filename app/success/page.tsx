@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
 import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
+import { setActiveOrderNo } from '@/lib/order-context'
 import type { SpecInfo } from '@/lib/api'
 import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
@@ -82,11 +83,15 @@ export default function SuccessPage() {
   useEffect(() => {
     if (currentSession?.orderNo) {
       setOrderNumber(currentSession.orderNo)
+      setActiveOrderNo(currentSession.orderNo)
       return
     }
     if (currentSession?.id) {
       const parts = currentSession.id.split('-')
-      if (parts.length > 1) setOrderNumber(parts[0])
+      if (parts.length > 1) {
+        setOrderNumber(parts[0])
+        setActiveOrderNo(parts[0])
+      }
     }
   }, [currentSession])
 
@@ -98,7 +103,7 @@ export default function SuccessPage() {
     }
     let cancelled = false
     setOrderDetail(null)
-    getOrderDetail(orderNumber, false)
+    getOrderDetail(undefined, false)
       .then((res) => {
         if (cancelled) return
         const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
@@ -168,7 +173,7 @@ export default function SuccessPage() {
     setBindRelatedInput('')
     setShowBindInConfirm(false)
     try {
-      const detail = await getOrderDetail(orderNumber, false)
+      const detail = await getOrderDetail()
       setOrderDetail((prev) =>
         prev ? { ...prev, relatedOrderNo: detail.relatedOrderNo ?? null } : null
       )
@@ -190,11 +195,10 @@ export default function SuccessPage() {
     try {
       const relatedNo = needBind ? bindRelatedInput.trim() : (orderDetail?.relatedOrderNo ?? undefined)
       await submitOrderForProduction({
-        orderSn: orderNumber,
         receiverName: '',
         ...(relatedNo ? { relatedOrderNo: relatedNo } : {}),
       })
-      const res = await getOrderDetail(orderNumber, false)
+      const res = await getOrderDetail()
       const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
         id: spec.sessionId,
         sizeId: spec.sizeId,
@@ -242,7 +246,7 @@ export default function SuccessPage() {
 
     setIsLocking(true)
     try {
-      await lockOrder(orderNumber)
+      await lockOrder()
       setOrderDetail((prev) => (prev ? { ...prev, status: 2 } : null)) // 状态2表示客户已确认/锁单
       alert('锁单成功！订单已确认，可以开始制作了。')
     } catch (error) {

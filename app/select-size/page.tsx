@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } fro
 import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, isValidPaperSizeCombination } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
 import { addSpec, deleteSpec, getOrderDetail, SpecInfo } from '@/lib/api'
+import { getActiveOrderNo, setActiveOrderNo } from '@/lib/order-context'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 // 已添加的规格项（包含数据库 ID）
@@ -73,19 +74,11 @@ export default function SelectSizePage() {
     }
   }, [selectedPaper])
 
-  // 获取从查询页传来的订单号（优先从 sessionStorage，其次从 localStorage）
+  // 从 order-context 恢复活跃订单号
   useEffect(() => {
-    const pendingOrder = sessionStorage.getItem('pending-order-number')
-    if (pendingOrder) {
-      setOrderNumber(pendingOrder)
-      // 同时保存到 localStorage，支持刷新后恢复
-      localStorage.setItem('current-order-number', pendingOrder)
-    } else {
-      // 刷新时从 localStorage 恢复
-      const savedOrder = localStorage.getItem('current-order-number')
-      if (savedOrder) {
-        setOrderNumber(savedOrder)
-      }
+    const activeOrder = getActiveOrderNo()
+    if (activeOrder) {
+      setOrderNumber(activeOrder)
     }
   }, [])
 
@@ -96,7 +89,7 @@ export default function SelectSizePage() {
     setIsLoading(true)
     try {
       // 只请求 orderDetail 接口（后端会自动创建订单 + 返回 specs 列表）
-      const orderDetail = await getOrderDetail(orderNumber, false)
+      const orderDetail = await getOrderDetail(undefined, false)
       setReceiverName(orderDetail.receiverName || '')
       setIsOrderLocked(checkOrderLocked(orderDetail.status))
       
@@ -169,7 +162,7 @@ export default function SelectSizePage() {
     setIsAdding(true)
     try {
       // 调用后端 API 添加规格
-      const result = await addSpec(orderNumber, {
+      const result = await addSpec({
         sessionId: fullSizeId,
         paperType: selectedPaper,
         paperName: paper.name,
@@ -209,7 +202,10 @@ export default function SelectSizePage() {
   // 选择规格进入上传
   // 不再依赖 getPhotoSizeById 校验，直接使用服务端返回的规格数据，避免因历史数据或新尺寸未配置导致无法点击进入
   const handleSelectSize = (size: AddedSize) => {
-    const currentOrderNo = orderNumber || `ORDER-${Date.now()}`
+    const currentOrderNo = orderNumber || getActiveOrderNo() || `ORDER-${Date.now()}`
+    if (orderNumber) {
+      setActiveOrderNo(orderNumber)
+    }
     const sessionId = `${currentOrderNo}-${size.id}`
 
     // 构建 session 用于上传页面
@@ -260,7 +256,7 @@ export default function SelectSizePage() {
     setIsDeleting(size.id)
     try {
       // 调用后端 API 删除规格
-      await deleteSpec(orderNumber, size.dbId)
+      await deleteSpec(size.dbId)
 
       // 更新列表
       setAddedSizes(addedSizes.filter(s => s.id !== size.id))

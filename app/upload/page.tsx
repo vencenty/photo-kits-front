@@ -23,6 +23,7 @@ import {
   getOrderDetail,
   OssSignature
 } from '@/lib/api'
+import { getActiveOrderNo } from '@/lib/order-context'
 
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
@@ -275,16 +276,14 @@ function UploadPageContent() {
     }
   }, [hasHydrated, currentSession, sizeId, images.length, isLoadingPhotos, rowVirtualizer, rowCount])
 
-  // 获取订单号
-  const getOrderSn = useCallback(() => {
-    if (!currentSession) return ''
-    // 优先使用 orderNo 字段
+  // 获取订单号（session → order-context）
+  const getOrderNo = useCallback(() => {
+    if (!currentSession) return getActiveOrderNo()
     if (currentSession.orderNo) {
       return currentSession.orderNo
     }
-    // 兼容旧版本：从 sessionId 解析（格式: orderSn-specId）
     const parts = currentSession.id.split('-')
-    return parts[0] || ''
+    return parts[0] || getActiveOrderNo()
   }, [currentSession])
 
   useEffect(() => {
@@ -313,10 +312,10 @@ function UploadPageContent() {
       // 如果已加载过，直接返回
       if (loadedRef.current) return
       
-      const orderSn = getOrderSn()
+      const orderNo = getOrderNo()
       const specId = currentSession.sizeId
       
-      if (!orderSn) {
+      if (!orderNo && !getActiveOrderNo()) {
         setIsLoadingPhotos(false)
         return
       }
@@ -332,7 +331,7 @@ function UploadPageContent() {
         setIsLoadingPhotos(false)
         
         // 后台静默更新订单状态（不影响用户体验；过期逻辑交给全局错误处理）
-        getOrderDetail(orderSn)
+        getOrderDetail()
           .then(orderDetail => {
             setIsOrderLocked(checkOrderLocked(orderDetail.status))
           })
@@ -352,14 +351,14 @@ function UploadPageContent() {
       try {
         // 检查订单状态（是否锁单等；过期逻辑交给全局错误处理）
         try {
-          const orderDetail = await getOrderDetail(orderSn)
+          const orderDetail = await getOrderDetail()
           // 使用常量检查订单是否已锁定
           setIsOrderLocked(checkOrderLocked(orderDetail.status))
         } catch (error) {
           console.error('获取订单状态失败:', error)
         }
         
-        const result = await listPhotos(orderSn, specId)
+        const result = await listPhotos(specId)
         
         // 更新最后获取时间
         setLastFetchTime(Date.now())
@@ -569,7 +568,7 @@ function UploadPageContent() {
     const totalCount = validFiles.length
     let completedCount = 0
     setIsUploading(true)
-    const orderSn = getOrderSn()
+    const orderNo = getOrderNo()
     const specId = currentSession.sizeId
 
     // 获取 OSS 签名（带缓存）
@@ -633,7 +632,7 @@ function UploadPageContent() {
         try {
           // signature 在上层已校验非空，使用非空断言
           ossUrl = await uploadToOss(currentFile, signature!, {
-            orderSn: orderSn,
+            orderNo: orderNo,
             specId: specId, // 使用规格ID（纯英文/数字）
           })
           console.log('图片上传成功:', ossUrl)
@@ -684,7 +683,6 @@ function UploadPageContent() {
         if (ossUrl) {
           try {
             await addPhotoToOrder({
-              orderSn: orderSn,
               specId: specId,
               photoId: photoId,
               url: ossUrl,
@@ -784,8 +782,7 @@ function UploadPageContent() {
       alert('订单已锁单，无法删除照片。如需修改，请联系客服。')
       return
     }
-    const orderSn = getOrderSn()
-    if (!orderSn) {
+    if (!getActiveOrderNo() && !getOrderNo()) {
       alert('订单号不存在，无法删除')
       return
     }
@@ -793,7 +790,7 @@ function UploadPageContent() {
     deleteImage(id)
     // 后台异步删除，不阻塞 UI
     try {
-      await deletePhotoFromOrder(orderSn, id)
+      await deletePhotoFromOrder(id)
     } catch (error) {
       console.error('删除照片失败:', error)
     }
@@ -880,15 +877,14 @@ function UploadPageContent() {
 
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return
-    const orderSn = getOrderSn()
-    if (!orderSn) {
+    if (!getActiveOrderNo() && !getOrderNo()) {
       alert('订单号不存在，无法删除')
       return
     }
     if (confirm(`确定要删除选中的 ${selectedIds.length} 张图片吗？`)) {
       try {
         // 🚀 优化：使用批量删除接口，一条 SQL 删除所有照片
-        await deletePhotoFromOrder(orderSn, selectedIds)
+        await deletePhotoFromOrder(selectedIds)
         
         // 批量从本地 store 删除
         for (const id of selectedIds) {

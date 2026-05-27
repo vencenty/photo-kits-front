@@ -199,13 +199,10 @@ function EditPageContent() {
 
     const loadImagesList = async () => {
       try {
-        const orderSn = currentSession.orderNo || currentSession.id.split('-')[0]
         const specId = currentSession.sizeId
-        
-        if (!orderSn) return
 
         console.log('🔄 编辑页刷新后，从后端加载图片列表...')
-        const result = await listPhotos(orderSn, specId)
+        const result = await listPhotos(specId)
         
         if (result.photos && result.photos.length > 0) {
           // 获取当前已有的图片（避免重复）

@@ -26,9 +26,6 @@ export default function Home() {
       // 查询订单详情，判断是否已查看引导页（过期逻辑由后端 + 全局错误处理统一控制）
       const orderDetail = await getOrderDetail(trimmedOrder, false)
 
-      // 保存订单号到 sessionStorage（与请求体一致，避免带空格导致后续接口失败）
-      sessionStorage.setItem('pending-order-number', trimmedOrder)
-      
       // 根据 guideViewed 决定跳转页面
       if (orderDetail.guideViewed === 1) {
         // 已查看过引导页，直接跳转到 select-size

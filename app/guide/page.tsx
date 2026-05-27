@@ -48,14 +48,9 @@ function GuidePageContent() {
 
     setIsSubmitting(true)
     try {
-      await updateOrder(orderNo, { receiverName: receiverName.trim() })
-      
-      // 保存到 sessionStorage 和 localStorage
-      sessionStorage.setItem('pending-order-number', orderNo)
-      localStorage.setItem('current-order-number', orderNo)
-      
-      // 跳转到 select-size 页面
-      router.push(`/select-size?orderNo=${orderNo}`)
+      await updateOrder({ receiverName: receiverName.trim() })
+
+      router.push('/select-size')
     } catch (error) {
       console.error('更新订单失败:', error)
       alert('更新失败，请重试')
