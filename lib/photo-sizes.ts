@@ -1,4 +1,5 @@
 import { PhotoSize } from './store'
+import { BusinessError } from './error-handler'
 
 /**
  * 相纸类型配置
@@ -115,7 +116,8 @@ export function isSkusLoaded(): boolean {
  * 从远端预加载 SKU 数据并覆盖本地常量。
  * - 启动时由 layout 调用一次
  * - 多次调用安全（共享同一个 promise）
- * - 任何错误都 swallow 掉（保留本地兜底）
+ * - 业务错误（如 10025 规格为空）：toast 提示，不使用本地兜底
+ * - 网络/系统错误：保留本地兜底常量，便于离线开发
  */
 export async function preloadSkus(): Promise<void> {
   if (_loaded) return
@@ -129,9 +131,16 @@ export async function preloadSkus(): Promise<void> {
       applySkuData(data)
       _loaded = true
     } catch (err) {
-      // 静默：保留兜底常量
-      // eslint-disable-next-line no-console
-      console.warn('[photo-sizes] preloadSkus failed, fallback used:', err)
+      if (err instanceof BusinessError) {
+        // request() 已 toast；服务端明确拒绝时不用兜底，避免展示错误店铺的规格
+        PAPER_TYPES = []
+        SIZE_OPTIONS = []
+        CROP_CONFIG_MAP = {}
+        _loaded = false
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn('[photo-sizes] preloadSkus failed, fallback used:', err)
+      }
     } finally {
       _loadingPromise = null
     }

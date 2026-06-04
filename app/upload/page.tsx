@@ -786,11 +786,16 @@ function UploadPageContent() {
       alert('订单号不存在，无法删除')
       return
     }
-    // 直接删除，不弹确认框
-    deleteImage(id)
-    // 后台异步删除，不阻塞 UI
+
+    const image = images.find((img) => img.id === id)
+    const syncedToServer = image?.uploadStatus?.backendSynced
+
     try {
-      await deletePhotoFromOrder(id)
+      // 已同步到服务端的照片须等接口成功后再删本地，避免 API 失败 UI 仍消失
+      if (syncedToServer) {
+        await deletePhotoFromOrder(id)
+      }
+      deleteImage(id)
     } catch (error) {
       console.error('删除照片失败:', error)
     }

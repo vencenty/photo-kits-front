@@ -9,6 +9,12 @@ export interface ApiErrorResponse {
   msg: string
 }
 
+/** SKU 相关业务错误码（与 server/internal/ecode 保持一致） */
+export const SKU_ERROR = {
+  /** 暂无可用的相纸规格（相纸/尺寸/SKU 未配置或未启用） */
+  CATALOG_EMPTY: 10025,
+} as const
+
 /** 订单相关业务错误码（与 server/internal/errors 保持一致） */
 export const ORDER_ERROR = {
   /** 需要绑定关联订单号（11 位手机号时必填 19 位淘宝订单号） */

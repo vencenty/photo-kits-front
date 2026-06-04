@@ -21,6 +21,7 @@ import {
   ORDER_NO_HEADER,
   ORDER_CONTEXT_SKIP_PREFIXES,
 } from './order-context'
+import { getShopHeaders } from './shop-context'
 
 // API 基础配置
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
@@ -64,9 +65,10 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
     fullUrl += `?${searchParams.toString()}`
   }
 
-  // 默认请求头
+  // 默认请求头（含店铺上下文）
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...getShopHeaders(),
     ...(init.headers as Record<string, string> | undefined),
   }
 
@@ -248,13 +250,42 @@ export interface OssSignature {
 
 // ==================== OSS 相关 ====================
 
+/** 客户端签名缓存 TTL（服务端默认 30 分钟，此处仅用于合并并发/重复请求） */
+const OSS_SIGNATURE_TTL_MS = 5 * 60 * 1000
+
+let ossSignatureCache: { data: OssSignature; expireAt: number } | null = null
+let ossSignatureInflight: Promise<OssSignature> | null = null
+
 /**
- * 获取 OSS 上传签名（每次都从服务端获取，不使用缓存）
- * 避免使用过期或无效的签名导致上传失败
+ * 获取 OSS 上传签名
+ * 合并并发与短时间内的重复请求（如 React Strict Mode 双挂载、页面预取 + 上传）
  */
 export async function getOssSignature(): Promise<OssSignature> {
-  const signature = await request<OssSignature>('/v1/oss/signature')
-  return signature
+  const now = Date.now()
+  if (ossSignatureCache && now < ossSignatureCache.expireAt) {
+    return ossSignatureCache.data
+  }
+
+  if (ossSignatureInflight) {
+    return ossSignatureInflight
+  }
+
+  ossSignatureInflight = request<OssSignature>('/v1/oss/signature')
+    .then((signature) => {
+      ossSignatureCache = { data: signature, expireAt: Date.now() + OSS_SIGNATURE_TTL_MS }
+      return signature
+    })
+    .finally(() => {
+      ossSignatureInflight = null
+    })
+
+  return ossSignatureInflight
+}
+
+/** 上传失败等场景可主动清缓存，强制下次重新拉签名 */
+export function clearOssSignatureCache(): void {
+  ossSignatureCache = null
+  ossSignatureInflight = null
 }
 
 // ==================== SKU 列表（公开） ====================
@@ -264,9 +295,7 @@ export async function getOssSignature(): Promise<OssSignature> {
  * 后端：/api/v1/sku/list
  */
 export async function getSkuList(): Promise<import('./photo-sizes').SkuListResponse> {
-  return request<import('./photo-sizes').SkuListResponse>('/v1/sku/list', {
-    silent: true,
-  })
+  return request<import('./photo-sizes').SkuListResponse>('/v1/sku/list')
 }
 
 /**
