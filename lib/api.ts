@@ -195,14 +195,14 @@ import type { CropInfo } from './types'
 
 export interface SpecInfo {
   id: number
-  sessionId: string
-  paperType: string
+  skuId: number
+  paperTypeId: number
   paperName: string
-  sizeId: string
+  photoSizeId: number
   sizeName: string
   canvasWidth: number
   canvasHeight: number
-  photoCount: number  // 实时统计的照片数量
+  photoCount: number
   photos?: PhotoInfo[]
 }
 
@@ -224,7 +224,7 @@ export interface PhotoDetail {
   url: string
   quantity: number
   spec: string
-  specId: string
+  specId: number
   originalWidth: number
   originalHeight: number
   isLandscape: boolean
@@ -288,24 +288,12 @@ export function clearOssSignatureCache(): void {
   ossSignatureInflight = null
 }
 
-// ==================== SKU 列表（公开） ====================
-
-/**
- * 公开 SKU 列表（相纸字典 + 尺寸字典 + SKU 组合），由 photo-sizes.ts 调用
- * 后端：/api/v1/sku/list
- */
-export async function getSkuList(): Promise<import('./photo-sizes').SkuListResponse> {
-  return request<import('./photo-sizes').SkuListResponse>('/v1/sku/list')
-}
-
-/**
- * 上传选项
- */
+// ==================== OSS 上传 ====================
 export interface UploadOptions {
   /** 订单号（OSS 路径用） */
   orderNo?: string
-  /** 规格ID（使用纯英文/数字，避免中文路径在 Safari 等浏览器中的兼容问题） */
-  specId?: string
+  /** 规格 ID（order_specs.id，用于 OSS 路径） */
+  specId?: number | string
 }
 
 /**
@@ -346,9 +334,8 @@ export async function uploadToOss(
     const safeOrderNo = options.orderNo.replace(/[^\w-]/g, '_')
     key = `${key}/${safeOrderNo}`
     
-    if (options?.specId) {
-      // 清理规格ID中的特殊字符（只保留字母、数字、下划线、横杠）
-      const safeSpecId = options.specId.replace(/[^\w-]/g, '_')
+    if (options?.specId !== undefined && options.specId !== '') {
+      const safeSpecId = String(options.specId).replace(/[^\w-]/g, '_')
       key = `${key}/${safeSpecId}`
     }
   }
@@ -510,17 +497,11 @@ export async function getPhotoDetail(photoId: string): Promise<PhotoDetailRespon
 // ==================== 规格相关 ====================
 
 export interface AddSpecParams {
-  sessionId: string
-  paperType: string
-  paperName: string
-  sizeId: string
-  sizeName: string
-  canvasWidth: number
-  canvasHeight: number
+  skuId: number
 }
 
 /**
- * 添加规格
+ * 添加规格（仅传 skuId，返回 order_specs.id）
  */
 export async function addSpec(params: AddSpecParams): Promise<SpecInfo> {
   return request<SpecInfo>('/v1/order/spec/create', {
@@ -553,7 +534,7 @@ export async function listSpecs(): Promise<ListSpecsResponse> {
 // ==================== 照片相关 ====================
 
 export interface AddPhotoParams {
-  specId: string
+  specId: number
   photoId: string
   url: string
   filename: string
@@ -672,10 +653,55 @@ export async function deletePhotoFromOrder(
 /**
  * 获取照片列表
  */
-export async function listPhotos(specId?: string): Promise<{ photos: PhotoDetail[] }> {
+export async function listPhotos(specId?: number): Promise<{ photos: PhotoDetail[] }> {
   const params: Record<string, string> = {}
-  if (specId) params.specId = specId
+  if (specId) params.specId = String(specId)
   return request<{ photos: PhotoDetail[] }>('/v1/order/photo/list', { params })
+}
+
+// ==================== 公开 SKU 目录 ====================
+
+export interface PublicPaperType {
+  id: number
+  name: string
+  description: string
+  supportedSizeIds: number[]
+  sortOrder: number
+}
+
+export interface PublicPhotoSize {
+  id: number
+  name: string
+  width: number
+  height: number
+  aspectRatio: number
+  sortOrder: number
+}
+
+export interface PublicSkuItem {
+  id: number
+  paperTypeId: number
+  photoSizeId: number
+  paperName: string
+  paperDescription: string
+  sizeName: string
+  width: number
+  height: number
+  aspectRatio: number
+  cropDefaultMode: string
+  cropAvailableModes: string[]
+  unitPrice: number
+  sortOrder: number
+}
+
+export interface PublicSkuListResponse {
+  paperTypes: PublicPaperType[]
+  sizes: PublicPhotoSize[]
+  skus: PublicSkuItem[]
+}
+
+export async function getPublicSkuList(): Promise<PublicSkuListResponse> {
+  return request<PublicSkuListResponse>('/v1/sku/list')
 }
 
 // ==================== 订单提交相关 ====================

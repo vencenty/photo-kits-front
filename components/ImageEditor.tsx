@@ -4,24 +4,24 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2, Crop, Image as ImageIcon, Frame } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
-import { getCropConfigForSize } from '@/lib/photo-sizes'
-import { useImagePreload } from '@/lib/use-image-preload'
 import { getPhotoDetail } from '@/lib/api'
+import type { CropMode, SimpleCropInfo } from '@/lib/types'
 import { mapCropModeFromServer, calculateCoverCropSize } from '@/lib/utils'
-import type { SimpleCropInfo } from '@/lib/types'
+import { useImagePreload } from '@/lib/use-image-preload'
 import {
   CoverModeEditor,
   FullModeEditor,
   LomoModeEditor,
 } from './editor'
 
-type EditMode = 'cover' | 'full' | 'lomo'
+type EditMode = CropMode
 
 interface ImageEditorProps {
   image: ImageType
   canvasWidth: number
   canvasHeight: number
-  sizeId?: string
+  cropDefaultMode?: CropMode
+  cropAvailableModes?: CropMode[]
   onSave: (saveData: SaveData) => void
   onCancel: () => void
   onPrevious?: () => void
@@ -41,7 +41,8 @@ export default function ImageEditor({
   image: photoData,
   canvasWidth,
   canvasHeight,
-  sizeId,
+  cropDefaultMode,
+  cropAvailableModes,
   onSave,
   onCancel,
   onPrevious,
@@ -66,12 +67,10 @@ export default function ImageEditor({
   }
 
   // 使用 useMemo 缓存 cropConfig，避免 useEffect 依赖问题
-  const cropConfig = useMemo(() =>
-    sizeId
-      ? getCropConfigForSize(sizeId)
-      : { defaultMode: 'cover' as EditMode, availableModes: ['cover', 'full', 'lomo'] as EditMode[] },
-    [sizeId]
-  )
+  const cropConfig = useMemo(() => ({
+    defaultMode: (cropDefaultMode || 'cover') as EditMode,
+    availableModes: (cropAvailableModes?.length ? cropAvailableModes : ['cover', 'full', 'lomo']) as EditMode[],
+  }), [cropDefaultMode, cropAvailableModes])
 
   const [mode, setMode] = useState<EditMode>(
     photoData.cropMode && cropConfig.availableModes.includes(photoData.cropMode)

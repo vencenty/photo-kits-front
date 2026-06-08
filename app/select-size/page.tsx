@@ -3,22 +3,27 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } from 'lucide-react'
-import { PAPER_TYPES, SIZE_OPTIONS, generateSizeId, isValidPaperSizeCombination } from '@/lib/photo-sizes'
 import { useStore, Session } from '@/lib/store'
-import { addSpec, deleteSpec, getOrderDetail, SpecInfo } from '@/lib/api'
+import {
+  addSpec,
+  deleteSpec,
+  getOrderDetail,
+  type SpecInfo,
+} from '@/lib/api'
+import { preloadCatalog, skuKey, type PublicSkuListResponse } from '@/lib/catalog'
 import { getActiveOrderNo, setActiveOrderNo } from '@/lib/order-context'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
+import type { CropMode } from '@/lib/types'
 
-// 已添加的规格项（包含数据库 ID）
 interface AddedSize {
-  dbId: number        // 数据库 ID，用于删除
-  id: string          // sessionId
-  paperId: string
+  specId: number
+  skuId: number
   paperName: string
-  sizeId: string
   sizeName: string
   width: number
   height: number
+  cropDefaultMode: CropMode
+  cropAvailableModes: CropMode[]
   imageCount: number
   totalPrintCount: number
 }
@@ -26,193 +31,174 @@ interface AddedSize {
 export default function SelectSizePage() {
   const router = useRouter()
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
-  const [receiverName, setReceiverName] = useState<string>('') // 收货人信息
-  const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁定
+  const [receiverName, setReceiverName] = useState<string>('')
+  const [isOrderLocked, setIsOrderLocked] = useState(false)
   const [addedSizes, setAddedSizes] = useState<AddedSize[]>([])
+  const [catalog, setCatalog] = useState<PublicSkuListResponse | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [pendingDeleteSize, setPendingDeleteSize] = useState<AddedSize | null>(null)
-  const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
-  const [selectedSize, setSelectedSize] = useState<string | null>(null)
+  const [selectedPaperId, setSelectedPaperId] = useState<number | null>(null)
+  const [selectedSizeId, setSelectedSizeId] = useState<number | null>(null)
   const [showToast, setShowToast] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
-  const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState<number | null>(null)
   const setCurrentSession = useStore((state) => state.setCurrentSession)
   const clearImages = useStore((state) => state.clearImages)
 
-  const disabledSizes = useMemo(() => {
-    if (!selectedPaper) return new Set<string>()
-    const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
-    if (!paper) return new Set<string>()
+  const skuByKey = useMemo(() => {
+    const map = new Map<string, PublicSkuListResponse['skus'][number]>()
+    catalog?.skus.forEach((sku) => {
+      map.set(skuKey(sku.paperTypeId, sku.photoSizeId), sku)
+    })
+    return map
+  }, [catalog])
+
+  const disabledSizeIds = useMemo(() => {
+    if (!selectedPaperId || !catalog) return new Set<number>()
+    const paper = catalog.paperTypes.find((p) => p.id === selectedPaperId)
+    if (!paper) return new Set<number>()
+    const enabled = new Set(paper.supportedSizeIds)
+    return new Set(catalog.sizes.filter((s) => !enabled.has(s.id)).map((s) => s.id))
+  }, [selectedPaperId, catalog])
+
+  const disabledPaperIds = useMemo(() => {
+    if (!selectedSizeId || !catalog) return new Set<number>()
     return new Set(
-      SIZE_OPTIONS.filter((s) => !paper.supportedSizes.includes(s.id))
-        .map((s) => s.id)
+      catalog.paperTypes
+        .filter((p) => !p.supportedSizeIds.includes(selectedSizeId))
+        .map((p) => p.id),
     )
-  }, [selectedPaper])
+  }, [selectedSizeId, catalog])
 
-  // 计算当前哪些相纸应该被禁用（基于已选择的尺寸）
-  const disabledPapers = useMemo(() => {
-    if (!selectedSize) return new Set<string>()
-    // 返回不支持该尺寸的相纸ID
-    return new Set(PAPER_TYPES.filter(p => !p.supportedSizes.includes(selectedSize)).map(p => p.id))
-  }, [selectedSize])
+  const handleSelectPaper = useCallback(
+    (paperTypeId: number) => {
+      setSelectedPaperId(paperTypeId)
+      if (selectedSizeId && !skuByKey.has(skuKey(paperTypeId, selectedSizeId))) {
+        setSelectedSizeId(null)
+      }
+    },
+    [selectedSizeId, skuByKey],
+  )
 
-  // 选择相纸时，如果当前尺寸不兼容，自动清除
-  const handleSelectPaper = useCallback((paperId: string) => {
-    setSelectedPaper(paperId)
-    if (selectedSize && !isValidPaperSizeCombination(paperId, selectedSize)) {
-      setSelectedSize(null)
-    }
-  }, [selectedSize])
+  const handleSizeOptionClick = useCallback(
+    (photoSizeId: number) => {
+      setSelectedSizeId(photoSizeId)
+      if (selectedPaperId && !skuByKey.has(skuKey(selectedPaperId, photoSizeId))) {
+        setSelectedPaperId(null)
+      }
+    },
+    [selectedPaperId, skuByKey],
+  )
 
-  // 选择尺寸选项时，如果当前相纸不兼容，自动清除
-  const handleSizeOptionClick = useCallback((sizeId: string) => {
-    setSelectedSize(sizeId)
-    if (selectedPaper && !isValidPaperSizeCombination(selectedPaper, sizeId)) {
-      setSelectedPaper(null)
-    }
-  }, [selectedPaper])
-
-  // 从 order-context 恢复活跃订单号
-  useEffect(() => {
-    const activeOrder = getActiveOrderNo()
-    if (activeOrder) {
-      setOrderNumber(activeOrder)
-    }
-  }, [])
-
-  // 从服务端加载已添加的规格
-  const loadSpecs = useCallback(async () => {
-    if (!orderNumber) return
-
-    setIsLoading(true)
-    try {
-      // 只请求 orderDetail 接口（后端会自动创建订单 + 返回 specs 列表）
-      const orderDetail = await getOrderDetail(undefined, false)
-      setReceiverName(orderDetail.receiverName || '')
-      setIsOrderLocked(checkOrderLocked(orderDetail.status))
-      
-      // specs 已包含在 orderDetail 返回中，包括实时统计的 photoCount
-      const specs = orderDetail.specs || []
-      
-      // 从后端数据构建 AddedSize 列表
-      const sizes: AddedSize[] = specs.map((spec: SpecInfo) => ({
-        dbId: spec.id,
-        id: spec.sessionId,
-        paperId: spec.paperType,
+  const specToAddedSize = useCallback(
+    (spec: SpecInfo): AddedSize => {
+      const sku = catalog?.skus.find((s) => s.id === spec.skuId)
+      return {
+        specId: spec.id,
+        skuId: spec.skuId,
         paperName: spec.paperName,
-        sizeId: spec.sizeId,
         sizeName: spec.sizeName,
         width: spec.canvasWidth,
         height: spec.canvasHeight,
+        cropDefaultMode: (sku?.cropDefaultMode || 'lomo') as CropMode,
+        cropAvailableModes: (sku?.cropAvailableModes || ['cover', 'lomo', 'full']) as CropMode[],
         imageCount: spec.photoCount || 0,
-        totalPrintCount: spec.photoCount || 0, // 使用 photoCount 显示
-      }))
-      setAddedSizes(sizes)
+        totalPrintCount: spec.photoCount || 0,
+      }
+    },
+    [catalog],
+  )
+
+  useEffect(() => {
+    const activeOrder = getActiveOrderNo()
+    if (activeOrder) setOrderNumber(activeOrder)
+  }, [])
+
+  useEffect(() => {
+    preloadCatalog()
+      .then(setCatalog)
+      .catch((err) => console.error('加载 SKU 目录失败:', err))
+  }, [])
+
+  const loadSpecs = useCallback(async () => {
+    if (!orderNumber) return
+    setIsLoading(true)
+    try {
+      const orderDetail = await getOrderDetail(undefined, false)
+      setReceiverName(orderDetail.receiverName || '')
+      setIsOrderLocked(checkOrderLocked(orderDetail.status))
+      const specs = orderDetail.specs || []
+      setAddedSizes(specs.map(specToAddedSize))
     } catch (error) {
       console.error('加载规格失败:', error)
       showToastMessage('加载规格失败，请重试')
     } finally {
       setIsLoading(false)
     }
-  }, [orderNumber])
+  }, [orderNumber, specToAddedSize])
 
-  // 加载规格
   useEffect(() => {
-    if (orderNumber) {
-      loadSpecs()
-    }
+    if (orderNumber) loadSpecs()
   }, [orderNumber, loadSpecs])
 
-  // 显示 toast 提示
+  useEffect(() => {
+    if (catalog && orderNumber) loadSpecs()
+  }, [catalog])
+
   const showToastMessage = (message: string) => {
     setShowToast(message)
     setTimeout(() => setShowToast(null), 2500)
   }
 
-  // 添加新规格
   const handleAddSize = async () => {
-    if (!selectedPaper || !selectedSize || !orderNumber) return
-
-    // 检查订单是否已锁定
+    if (!selectedPaperId || !selectedSizeId || !orderNumber) return
     if (isOrderLocked) {
       showToastMessage('订单已锁定，无法添加规格')
       setShowAddModal(false)
       return
     }
 
-    const paper = PAPER_TYPES.find(p => p.id === selectedPaper)
-    const size = SIZE_OPTIONS.find(s => s.id === selectedSize)
-    if (!paper || !size) return
+    const sku = skuByKey.get(skuKey(selectedPaperId, selectedSizeId))
+    if (!sku) {
+      showToastMessage('该组合不可售')
+      return
+    }
 
-    const fullSizeId = generateSizeId(selectedPaper, selectedSize)
-    
-    // 检查是否已存在
-    const exists = addedSizes.some(s => s.id === fullSizeId)
-    
-    if (exists) {
-      showToastMessage(`${paper.name} ${size.name} 规格已存在`)
+    if (addedSizes.some((s) => s.skuId === sku.id)) {
+      showToastMessage(`${sku.paperName} ${sku.sizeName} 规格已存在`)
       setShowAddModal(false)
-      setSelectedPaper(null)
-      setSelectedSize(null)
+      setSelectedPaperId(null)
+      setSelectedSizeId(null)
       return
     }
 
     setIsAdding(true)
     try {
-      // 调用后端 API 添加规格
-      const result = await addSpec({
-        sessionId: fullSizeId,
-        paperType: selectedPaper,
-        paperName: paper.name,
-        sizeId: selectedSize,
-        sizeName: size.name,
-        canvasWidth: size.width,
-        canvasHeight: size.height,
-      })
-
-      // 添加到列表（使用后端返回的数据）
-      const newSize: AddedSize = {
-        dbId: result.id,
-        id: fullSizeId,
-        paperId: selectedPaper,
-        paperName: paper.name,
-        sizeId: selectedSize,
-        sizeName: size.name,
-        width: size.width,
-        height: size.height,
-        imageCount: 0,
-        totalPrintCount: 0,
-      }
-
-      setAddedSizes([...addedSizes, newSize])
-      showToastMessage(`已添加 ${paper.name} ${size.name}`)
+      const result = await addSpec({ skuId: sku.id })
+      const newSize = specToAddedSize(result)
+      setAddedSizes((prev) => [...prev, newSize])
+      showToastMessage(`已添加 ${sku.paperName} ${sku.sizeName}`)
     } catch (error) {
       console.error('添加规格失败:', error)
       showToastMessage('添加失败，请重试')
     } finally {
       setIsAdding(false)
       setShowAddModal(false)
-      setSelectedPaper(null)
-      setSelectedSize(null)
+      setSelectedPaperId(null)
+      setSelectedSizeId(null)
     }
   }
 
-  // 选择规格进入上传
-  // 不再依赖 getPhotoSizeById 校验，直接使用服务端返回的规格数据，避免因历史数据或新尺寸未配置导致无法点击进入
   const handleSelectSize = (size: AddedSize) => {
     const currentOrderNo = orderNumber || getActiveOrderNo() || `ORDER-${Date.now()}`
-    if (orderNumber) {
-      setActiveOrderNo(orderNumber)
-    }
-    const sessionId = `${currentOrderNo}-${size.id}`
+    if (orderNumber) setActiveOrderNo(orderNumber)
 
-    // 构建 session 用于上传页面
     const session: Session = {
-      id: sessionId,
+      specId: size.specId,
+      skuId: size.skuId,
       orderNo: currentOrderNo,
-      sizeId: size.id,
       sizeName: `${size.paperName} ${size.sizeName}`,
       targetCount: 0,
       currentCount: size.imageCount,
@@ -220,46 +206,34 @@ export default function SelectSizePage() {
       canvasHeight: size.height,
       unit: '毫米',
       ratio: size.width / size.height,
+      cropDefaultMode: size.cropDefaultMode,
+      cropAvailableModes: size.cropAvailableModes,
       createdAt: new Date().toISOString(),
     }
 
     setCurrentSession(session)
     clearImages()
-
-    router.push(`/upload?sizeId=${size.id}`)
+    router.push(`/upload?specId=${size.specId}`)
   }
 
-  // 删除规格
   const handleDeleteSize = async (size: AddedSize, e: React.MouseEvent) => {
     e.stopPropagation()
-    
     if (!orderNumber) return
-
-    // 检查订单是否已锁定
     if (isOrderLocked) {
       showToastMessage('订单已锁定，无法删除规格')
       return
     }
-
-    // 使用自定义弹出层确认（不使用 alert/confirm）
     setPendingDeleteSize(size)
     setShowDeleteConfirm(true)
   }
 
-  // 确认删除
   const confirmDeleteSize = async () => {
-    if (!orderNumber) return
-    if (!pendingDeleteSize) return
-
+    if (!orderNumber || !pendingDeleteSize) return
     const size = pendingDeleteSize
-
-    setIsDeleting(size.id)
+    setIsDeleting(size.specId)
     try {
-      // 调用后端 API 删除规格
-      await deleteSpec(size.dbId)
-
-      // 更新列表
-      setAddedSizes(addedSizes.filter(s => s.id !== size.id))
+      await deleteSpec(size.specId)
+      setAddedSizes((prev) => prev.filter((s) => s.specId !== size.specId))
       showToastMessage('已删除规格')
       setShowDeleteConfirm(false)
       setPendingDeleteSize(null)
@@ -361,7 +335,7 @@ export default function SelectSizePage() {
           <div className="space-y-3">
             {addedSizes.map((size) => (
               <div
-                key={size.id}
+                key={size.specId}
                 className="bg-white rounded-xl overflow-hidden shadow-sm active:bg-gray-50 transition-colors desktop-shadow desktop-hover"
                 onClick={() => handleSelectSize(size)}
               >
@@ -395,10 +369,10 @@ export default function SelectSizePage() {
                     {!isOrderLocked && (
                       <button
                         onClick={(e) => handleDeleteSize(size, e)}
-                        disabled={isDeleting === size.id}
+                        disabled={isDeleting === size.specId}
                         className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50 md:w-8 md:h-8 desktop-hover"
                       >
-                        {isDeleting === size.id ? (
+                        {isDeleting === size.specId ? (
                           <Loader2 className="w-4 h-4 animate-spin md:w-5 md:h-5" />
                         ) : (
                           <X className="w-4 h-4 md:w-5 md:h-5" />
@@ -479,11 +453,11 @@ export default function SelectSizePage() {
               </button>
               <button
                 type="button"
-                disabled={isDeleting === pendingDeleteSize.id}
+                disabled={isDeleting === pendingDeleteSize.specId}
                 onClick={confirmDeleteSize}
                 className="flex-1 h-11 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2 desktop-hover"
               >
-                {isDeleting === pendingDeleteSize.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isDeleting === pendingDeleteSize.specId && <Loader2 className="w-4 h-4 animate-spin" />}
                 确认删除
               </button>
             </div>
@@ -503,8 +477,8 @@ export default function SelectSizePage() {
               <button
                 onClick={() => {
                   setShowAddModal(false)
-                  setSelectedPaper(null)
-                  setSelectedSize(null)
+                  setSelectedPaperId(null)
+                  setSelectedSizeId(null)
                 }}
                 className="text-gray-500 text-sm md:text-base desktop-hover"
               >
@@ -513,9 +487,9 @@ export default function SelectSizePage() {
               <h3 className="font-semibold md:text-lg">添加规格</h3>
               <button
                 onClick={handleAddSize}
-                disabled={!selectedPaper || !selectedSize || isAdding}
+                disabled={!selectedPaperId || !selectedSizeId || isAdding}
                 className={`text-sm font-medium flex items-center gap-1 md:text-base ${
-                  selectedPaper && selectedSize && !isAdding
+                  selectedPaperId && selectedSizeId && !isAdding
                     ? 'text-primary-600'
                     : 'text-gray-300'
                 } desktop-hover`}
@@ -530,15 +504,15 @@ export default function SelectSizePage() {
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-gray-700 mb-3 md:text-base">选择相纸</h4>
                 <div className="flex flex-wrap gap-2">
-                  {PAPER_TYPES.map((paper) => {
-                    const isDisabled = disabledPapers.has(paper.id)
+                  {(catalog?.paperTypes || []).map((paper) => {
+                    const isDisabled = disabledPaperIds.has(paper.id)
                     return (
                       <button
                         key={paper.id}
                         onClick={() => !isDisabled && handleSelectPaper(paper.id)}
                         disabled={isDisabled}
                         className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all md:px-5 md:py-3 md:text-base ${
-                          selectedPaper === paper.id
+                          selectedPaperId === paper.id
                             ? 'bg-[#ff4d6d] text-white shadow-sm'
                             : isDisabled
                               ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
@@ -550,9 +524,9 @@ export default function SelectSizePage() {
                     )
                   })}
                 </div>
-                {selectedPaper && (
+                {selectedPaperId && (
                   <p className="mt-2 text-xs text-gray-500 md:text-sm">
-                    {PAPER_TYPES.find(p => p.id === selectedPaper)?.description}
+                    {catalog?.paperTypes.find((p) => p.id === selectedPaperId)?.description}
                   </p>
                 )}
               </div>
@@ -561,15 +535,15 @@ export default function SelectSizePage() {
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3 md:text-base">选择尺寸</h4>
                 <div className="grid grid-cols-4 gap-2 md:grid-cols-6 md:gap-3">
-                  {SIZE_OPTIONS.map((size) => {
-                    const isDisabled = disabledSizes.has(size.id)
+                  {(catalog?.sizes || []).map((size) => {
+                    const isDisabled = disabledSizeIds.has(size.id)
                     return (
                       <button
                         key={size.id}
                         onClick={() => !isDisabled && handleSizeOptionClick(size.id)}
                         disabled={isDisabled}
                         className={`py-3 rounded-lg text-sm font-medium transition-all md:py-4 md:text-base ${
-                          selectedSize === size.id
+                          selectedSizeId === size.id
                             ? 'bg-[#ff4d6d] text-white shadow-sm'
                             : isDisabled
                               ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
@@ -581,27 +555,27 @@ export default function SelectSizePage() {
                     )
                   })}
                 </div>
-                {selectedSize && (
+                {selectedSizeId && (
                   <p className="mt-2 text-xs text-gray-500 md:text-sm">
-                    尺寸：{SIZE_OPTIONS.find(s => s.id === selectedSize)?.width}×
-                    {SIZE_OPTIONS.find(s => s.id === selectedSize)?.height}mm
+                    尺寸：{catalog?.sizes.find((s) => s.id === selectedSizeId)?.width}×
+                    {catalog?.sizes.find((s) => s.id === selectedSizeId)?.height}mm
                   </p>
                 )}
               </div>
 
               {/* 当前选择预览 */}
-              {selectedPaper && selectedSize && (
+              {selectedPaperId && selectedSizeId && (
                 <div className="mt-6 p-4 bg-gradient-to-r from-pink-50 to-orange-50 rounded-xl border border-pink-100">
                   <p className="text-sm text-gray-600 md:text-base">
                     当前选择：
                     <span className="font-bold text-primary-600">
-                      {' '}{PAPER_TYPES.find(p => p.id === selectedPaper)?.name}{' '}
-                      {SIZE_OPTIONS.find(s => s.id === selectedSize)?.name}
+                      {' '}{catalog?.paperTypes.find((p) => p.id === selectedPaperId)?.name}{' '}
+                      {catalog?.sizes.find((s) => s.id === selectedSizeId)?.name}
                     </span>
                   </p>
                   <p className="text-xs text-gray-400 mt-1 md:text-sm">
-                    {SIZE_OPTIONS.find(s => s.id === selectedSize)?.width}×
-                    {SIZE_OPTIONS.find(s => s.id === selectedSize)?.height}mm
+                    {catalog?.sizes.find((s) => s.id === selectedSizeId)?.width}×
+                    {catalog?.sizes.find((s) => s.id === selectedSizeId)?.height}mm
                   </p>
                 </div>
               )}

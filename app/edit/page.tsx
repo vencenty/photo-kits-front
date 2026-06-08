@@ -37,7 +37,7 @@ function EditPageContent() {
   const images = useMemo(() => {
     // 过滤当前 session 的图片
     const sessionImages = allImages.filter(img => 
-      (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
+      (img.thumbnailUrl || img.originalUrl) && img.specId === currentSession?.specId
     )
     
     // 如果 filter=unadjusted，只返回未调整的图片
@@ -47,7 +47,7 @@ function EditPageContent() {
     
     // 默认返回所有图片
     return sessionImages
-  }, [allImages, currentSession?.id, filter])
+  }, [allImages, currentSession?.specId, filter])
 
   // 🚀 优化：使用 currentImageId 而不是 imageId 来计算位置
   const currentIndex = images.findIndex(img => img.id === (currentImageId || imageId))
@@ -141,7 +141,7 @@ function EditPageContent() {
         // 转换服务端数据为前端格式
         const photoData: Image = {
           id: response.photo.photoId,
-          sessionId: currentSession.id, // 从当前会话获取
+          specId: currentSession.specId, // 从当前会话获取
           originalUrl: response.photo.url,
           thumbnailUrl: response.photo.url, // 暂时使用相同 URL
           filename: `photo-${response.photo.photoId}`, // 构造文件名
@@ -172,14 +172,14 @@ function EditPageContent() {
         // 如果订单已锁定，直接跳转回列表页
         if (locked) {
           alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
-          router.push(`/upload?sizeId=${currentSession?.sizeId}`)
+          router.push(`/upload?specId=${currentSession?.specId}`)
           return
         }
 
       } catch (error) {
         console.error('获取图片详情失败:', error)
         // 出错时跳转回列表页
-        router.push(`/upload?sizeId=${currentSession?.sizeId}`)
+        router.push(`/upload?specId=${currentSession?.specId}`)
       } finally {
         setIsLoading(false)
       }
@@ -199,7 +199,7 @@ function EditPageContent() {
 
     const loadImagesList = async () => {
       try {
-        const specId = currentSession.sizeId
+        const specId = currentSession.specId
 
         console.log('🔄 编辑页刷新后，从后端加载图片列表...')
         const result = await listPhotos(specId)
@@ -208,7 +208,7 @@ function EditPageContent() {
           // 获取当前已有的图片（避免重复）
           const existingImagesMap = new Map(
             images
-              .filter(img => img.sessionId === currentSession.id)
+              .filter(img => img.specId === currentSession.specId)
               .map(img => [img.id, img])
           )
 
@@ -254,7 +254,7 @@ function EditPageContent() {
 
             const imageData: Image = {
               id: photo.photoId,
-              sessionId: currentSession.id,
+              specId: currentSession.specId,
               originalUrl: photo.url,
               thumbnailUrl: photo.url,
               filename: `photo-${photo.photoId}`,
@@ -385,7 +385,7 @@ function EditPageContent() {
       if (filter === 'unadjusted') {
         // 获取当前 session 的所有图片
         const sessionImages = allImages.filter(img => 
-          (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
+          (img.thumbnailUrl || img.originalUrl) && img.specId === currentSession?.specId
         )
         
         // 获取所有未调整的图片（排除当前刚保存的）
@@ -400,7 +400,7 @@ function EditPageContent() {
             duration: 2000,
           })
           setTimeout(() => {
-            router.push(`/upload?sizeId=${currentSession?.sizeId}`)
+            router.push(`/upload?specId=${currentSession?.specId}`)
           }, 2000)
           return // 提前返回，避免显示下面的提示
         } else {
@@ -476,7 +476,7 @@ function EditPageContent() {
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 to-transparent">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center md:py-6">
           <button
-            onClick={() => router.push(`/upload?sizeId=${currentSession?.sizeId}`)}
+            onClick={() => router.push(`/upload?specId=${currentSession?.specId}`)}
             className="mr-4 p-2 hover:bg-white/10 rounded-full transition-colors desktop-hover"
           >
             <ArrowLeft className="w-6 h-6 md:w-7 md:h-7 text-white" />
@@ -490,9 +490,10 @@ function EditPageContent() {
         image={image}
         canvasWidth={currentSession.canvasWidth}
         canvasHeight={currentSession.canvasHeight}
-        sizeId={currentSession.sizeId}
+        cropDefaultMode={currentSession.cropDefaultMode}
+        cropAvailableModes={currentSession.cropAvailableModes}
         onSave={handleSave}
-        onCancel={() => router.push(`/upload?sizeId=${currentSession?.sizeId}`)}
+        onCancel={() => router.push(`/upload?specId=${currentSession?.specId}`)}
         onPrevious={handlePrevious}
         onNext={handleNext}
         hasPrevious={hasPrevious}

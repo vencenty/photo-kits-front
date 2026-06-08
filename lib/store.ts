@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { CropInfo, EditState, Image, Session, PhotoSize, SimpleCropInfo } from './types'
+import type { CropInfo, EditState, Image, Session, SimpleCropInfo } from './types'
 
 // 重新导出类型以保持向后兼容
-export type { CropInfo, EditState, Image, Session, PhotoSize, SimpleCropInfo }
+export type { CropInfo, EditState, Image, Session, SimpleCropInfo }
 
 interface StoreState {
   // Hydration 状态（用于解决刷新后跳转问题）
@@ -154,7 +154,7 @@ export const useStore = create<StoreState>()(
         state?.setHasHydrated(true)
       },
       // 版本控制，如果数据结构变化可以增加版本号清除旧缓存
-      version: 1,
+      version: 3,
       // 只合并已持久化字段，忽略旧缓存里可能存在的 apiLoading 等已废弃键
       merge: (persistedState, currentState) => {
         const p = (persistedState ?? {}) as Partial<

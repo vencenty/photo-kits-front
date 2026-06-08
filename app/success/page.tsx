@@ -7,7 +7,6 @@ import { useStore, Session } from '@/lib/store'
 import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
 import { setActiveOrderNo } from '@/lib/order-context'
 import type { SpecInfo } from '@/lib/api'
-import { getPhotoSizeById } from '@/lib/photo-sizes'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import { BusinessError, ORDER_ERROR } from '@/lib/error-handler'
 
@@ -40,8 +39,8 @@ const shimmerStyle = `
 `
 
 interface SizeSummary {
-  id: string
-  sizeId: string
+  specId: number
+  skuId: number
   paperName: string
   sizeName: string
   totalPrintCount: number
@@ -84,14 +83,6 @@ export default function SuccessPage() {
     if (currentSession?.orderNo) {
       setOrderNumber(currentSession.orderNo)
       setActiveOrderNo(currentSession.orderNo)
-      return
-    }
-    if (currentSession?.id) {
-      const parts = currentSession.id.split('-')
-      if (parts.length > 1) {
-        setOrderNumber(parts[0])
-        setActiveOrderNo(parts[0])
-      }
     }
   }, [currentSession])
 
@@ -107,8 +98,8 @@ export default function SuccessPage() {
       .then((res) => {
         if (cancelled) return
         const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
-          id: spec.sessionId,
-          sizeId: spec.sizeId,
+          specId: spec.id,
+          skuId: spec.skuId,
           paperName: spec.paperName,
           sizeName: spec.sizeName,
           totalPrintCount: spec.photoCount || 0,
@@ -132,17 +123,14 @@ export default function SuccessPage() {
     }
   }, [orderNumber])
 
-  // 点击规格跳转到上传页面
-  // 注意：不再依赖 getPhotoSizeById 的结果，避免因历史数据或新尺寸未配置导致「点击无反应」
+  // 点击规格跳转到上传页面（规格信息来自订单快照，不依赖本地目录缓存）
   const handleSelectSize = useCallback((size: SizeSummary) => {
     const currentOrderNo = orderNumber || `ORDER-${Date.now()}`
-    const sessionId = `${currentOrderNo}-${size.id}`
 
-    // 构建 session 用于上传页面
     const session: Session = {
-      id: sessionId,
+      specId: size.specId,
+      skuId: size.skuId,
       orderNo: currentOrderNo,
-      sizeId: size.id,
       sizeName: `${size.paperName} ${size.sizeName}`,
       targetCount: 0,
       currentCount: size.imageCount,
@@ -155,8 +143,7 @@ export default function SuccessPage() {
 
     setCurrentSession(session)
     clearImages()
-
-    router.push(`/upload?sizeId=${size.id}`)
+    router.push(`/upload?specId=${size.specId}`)
   }, [orderNumber, setCurrentSession, clearImages, router])
 
   // 点击「锁定订单，确认制作」：先请求订单详情，若无 relatedOrderNo 则弹窗内先展示绑定淘宝订单号，再提交
@@ -200,8 +187,8 @@ export default function SuccessPage() {
       })
       const res = await getOrderDetail()
       const sizes: SizeSummary[] = (res.specs || []).map((spec: SpecInfo) => ({
-        id: spec.sessionId,
-        sizeId: spec.sizeId,
+        specId: spec.id,
+        skuId: spec.skuId,
         paperName: spec.paperName,
         sizeName: spec.sizeName,
         totalPrintCount: spec.photoCount || 0,
@@ -258,8 +245,8 @@ export default function SuccessPage() {
   }
 
   const handleViewImages = () => {
-    if (currentSession?.sizeId) {
-      router.push(`/upload/${currentSession.sizeId}`)
+    if (currentSession?.specId) {
+      router.push(`/upload?specId=${currentSession.specId}`)
     }
   }
 
@@ -355,10 +342,10 @@ export default function SuccessPage() {
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {allSizes.map((size) => {
-                    const isCurrentSize = currentSession?.sizeId === size.id
+                    const isCurrentSize = currentSession?.specId === size.specId
                     return (
                       <button
-                        key={size.id}
+                        key={size.specId}
                         onClick={() => handleSelectSize(size)}
                         className={`w-full bg-white border rounded-lg p-3 md:p-4 transition-all active:scale-[0.98] text-left desktop-shadow desktop-hover ${
                           isCurrentSize

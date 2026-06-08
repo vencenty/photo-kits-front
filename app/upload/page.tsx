@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
-import { getPhotoSizeById, getCropConfigForSize } from '@/lib/photo-sizes'
 import { buildOssCropUrl } from '@/lib/image-config'
 import { CropInfo } from '@/lib/api'
 import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg, calculateCoverCropSize } from '@/lib/utils'
@@ -57,7 +56,8 @@ function useColumns() {
 function UploadPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const sizeId = searchParams.get('sizeId') as string
+  const specIdParam = searchParams.get('specId')
+  const routeSpecId = specIdParam ? Number(specIdParam) : NaN
   const fileInputRef = useRef<HTMLInputElement>(null)
   // const [showSubmitModal, setShowSubmitModal] = useState(false) // 已废弃：不再使用弹框
   const [isUploading, setIsUploading] = useState(false)
@@ -71,16 +71,19 @@ function UploadPageContent() {
   const currentSession = useStore((state) => state.currentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
   const allImages = useStore((state) => state.images)
-  // 过滤当前 session 的图片（有 thumbnailUrl 或 originalUrl）
-  const images = allImages.filter(img => 
-    (img.thumbnailUrl || img.originalUrl) && img.sessionId === currentSession?.id
+  const images = useMemo(
+    () => allImages.filter((img) => (img.thumbnailUrl || img.originalUrl) && img.specId === currentSession?.specId),
+    [allImages, currentSession?.specId]
   )
+  const imagesById = useMemo(() => new Map(images.map((img) => [img.id, img])), [images])
+  const imageIndexById = useMemo(() => new Map(images.map((img, index) => [img.id, index])), [images])
   const addImages = useStore((state) => state.addImages)
   const updateImage = useStore((state) => state.updateImage)
   const updateImages = useStore((state) => state.updateImages)
   const deleteImage = useStore((state) => state.deleteImage)
   const clearImages = useStore((state) => state.clearImages)
   const selectedIds = useStore((state) => state.selectedIds)
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const toggleSelection = useStore((state) => state.toggleSelection)
   const clearSelection = useStore((state) => state.clearSelection)
   const selectAll = useStore((state) => state.selectAll)
@@ -107,16 +110,28 @@ function UploadPageContent() {
   const ROW_GAP = 16 // gap-y-4，卡片行与行之间的垂直间距
   const MAX_CONCURRENT_UPLOADS = 5 // ⚙️ 最大并发上传数量
 
-  // 获取相纸尺寸配置
-  const photoSize = getPhotoSizeById(sizeId)
-  // 计算相纸比例
   const paperRatio = currentSession ? currentSession.canvasWidth / currentSession.canvasHeight : 1.43
-  
-  // 获取当前尺寸的裁剪样式配置
-  const cropConfig = sizeId ? getCropConfigForSize(sizeId) : { defaultMode: 'cover' as CropMode, availableModes: ['cover', 'full', 'lomo'] as CropMode[] }
+
+  const cropConfig = useMemo(() => {
+    if (currentSession?.cropDefaultMode && currentSession?.cropAvailableModes?.length) {
+      return {
+        defaultMode: currentSession.cropDefaultMode,
+        availableModes: currentSession.cropAvailableModes,
+      }
+    }
+    return { defaultMode: 'cover' as CropMode, availableModes: ['cover', 'full', 'lomo'] as CropMode[] }
+  }, [currentSession])
+
+  const rowImagesList = useMemo(() => {
+    const rows: ImageType[][] = []
+    for (let index = 0; index < images.length; index += columns) {
+      rows.push(images.slice(index, index + columns))
+    }
+    return rows
+  }, [images, columns])
 
   // 计算行数
-  const rowCount = Math.ceil(images.length / columns)
+  const rowCount = rowImagesList.length
 
   // 动态计算行高（基于容器宽度和相纸比例）
   const getRowHeight = useCallback((index: number) => {
@@ -203,7 +218,7 @@ function UploadPageContent() {
     if (!hasHydrated || !currentSession || images.length === 0 || isLoadingPhotos) return
     if (!scrollContainerRef.current || !rowVirtualizer) return
     
-    const scrollKey = `upload-list-scroll-${currentSession.id || sizeId}`
+    const scrollKey = `upload-list-scroll-${currentSession.specId || specIdParam}`
     const savedData = sessionStorage.getItem(scrollKey)
     
     if (savedData) {
@@ -274,27 +289,19 @@ function UploadPageContent() {
         setIsRestoringScroll(false)
       }
     }
-  }, [hasHydrated, currentSession, sizeId, images.length, isLoadingPhotos, rowVirtualizer, rowCount])
+  }, [hasHydrated, currentSession, routeSpecId, images.length, isLoadingPhotos, rowVirtualizer, rowCount])
 
-  // 获取订单号（session → order-context）
   const getOrderNo = useCallback(() => {
     if (!currentSession) return getActiveOrderNo()
-    if (currentSession.orderNo) {
-      return currentSession.orderNo
-    }
-    const parts = currentSession.id.split('-')
-    return parts[0] || getActiveOrderNo()
+    return currentSession.orderNo || getActiveOrderNo()
   }, [currentSession])
 
   useEffect(() => {
-    // 等待 hydration 完成后再判断
     if (!hasHydrated) return
-    
-    // 如果没有 session，跳转回首页查询订单
-    if (!currentSession || currentSession.sizeId !== sizeId) {
+    if (!currentSession || currentSession.specId !== routeSpecId) {
       router.push('/')
     }
-  }, [currentSession, sizeId, router, hasHydrated])
+  }, [currentSession, routeSpecId, router, hasHydrated])
 
   // 从后端加载已上传的照片 - 智能缓存版本
   // 🎯 关键：添加 lastFetchTime 到依赖，当 forceRefetch() 被调用时触发重新加载
@@ -313,7 +320,7 @@ function UploadPageContent() {
       if (loadedRef.current) return
       
       const orderNo = getOrderNo()
-      const specId = currentSession.sizeId
+      const specId = currentSession.specId
       
       if (!orderNo && !getActiveOrderNo()) {
         setIsLoadingPhotos(false)
@@ -367,7 +374,7 @@ function UploadPageContent() {
           // 获取当前 session 已有的图片
           const existingImagesMap = new Map(
             allImages
-              .filter(img => img.sessionId === currentSession.id)
+              .filter(img => img.specId === currentSession.specId)
               .map(img => [img.id, img])
           )
 
@@ -452,7 +459,7 @@ function UploadPageContent() {
 
               newImages.push({
                 id: photo.photoId,
-                sessionId: currentSession.id,
+                specId: currentSession.specId,
                 originalUrl: photo.url,
                 thumbnailUrl: photo.url,
                 filename: photo.photoId,
@@ -569,7 +576,7 @@ function UploadPageContent() {
     let completedCount = 0
     setIsUploading(true)
     const orderNo = getOrderNo()
-    const specId = currentSession.sizeId
+    const specId = currentSession.specId
 
     // 获取 OSS 签名（带缓存）
     let signature = ossSignature
@@ -658,7 +665,7 @@ function UploadPageContent() {
         const image: ImageType = {
           cropMode: cropConfig.defaultMode, // 使用配置的默认裁剪模式
           id: photoId,
-          sessionId: currentSession.id,
+          specId: currentSession.specId,
           originalUrl: ossUrl || dataUrl, // OSS URL 或本地缩略图
           thumbnailUrl: dataUrl, // 始终使用压缩后的缩略图显示
           filename: currentFile.name,
@@ -770,11 +777,18 @@ function UploadPageContent() {
     }
   }
 
+  const hasUnfinishedUploads = useMemo(
+    () => images.some((img) => {
+      const status = img.uploadStatus
+      return !status || !status.ossUploaded || !status.backendSynced
+    }),
+    [images]
+  )
+
+  const totalPrintCount = useMemo(() => images.reduce((sum, img) => sum + img.printCount, 0), [images])
+  const unadjustedCandidates = useMemo(() => images.filter((img) => !img.isAdjusted), [images])
+
   // 检查是否有未完成上传的图片
-  const hasUnfinishedUploads = images.some(img => {
-    const status = img.uploadStatus
-    return !status || !status.ossUploaded || !status.backendSynced
-  })
 
   const handleDelete = async (id: string) => {
     // 检查订单是否已锁单
@@ -787,7 +801,7 @@ function UploadPageContent() {
       return
     }
 
-    const image = images.find((img) => img.id === id)
+    const image = imagesById.get(id)
     const syncedToServer = image?.uploadStatus?.backendSynced
 
     try {
@@ -808,7 +822,7 @@ function UploadPageContent() {
       return
     }
     
-    const image = images.find((img) => img.id === id)
+    const image = imagesById.get(id)
     if (image) {
       const newCount = Math.max(1, image.printCount + delta)
       updateImage(id, { printCount: newCount })
@@ -832,9 +846,9 @@ function UploadPageContent() {
       return
     }
     // 检查图片是否已完成上传
-    const image = images.find((img) => img.id === id)
+    const image = imagesById.get(id)
     if (!image) return
-    
+
     const status = image.uploadStatus
     if (!status || !status.ossUploaded || !status.backendSynced) {
       alert('照片尚未上传完成，请等待上传完成后再编辑')
@@ -842,7 +856,7 @@ function UploadPageContent() {
     }
     
     // 🎯 虚拟列表最佳实践：保存图片索引
-    const imageIndex = images.findIndex((img) => img.id === id)
+    const imageIndex = imageIndexById.get(id) ?? -1
     if (imageIndex === -1) return
     
     // 计算该图片所在的行索引（与当前响应式列数一致）
@@ -857,7 +871,7 @@ function UploadPageContent() {
     
     console.log('💾 保存编辑位置:', scrollData)
     sessionStorage.setItem(
-      `upload-list-scroll-${currentSession?.id || sizeId}`,
+      `upload-list-scroll-${currentSession?.specId || routeSpecId}`,
       JSON.stringify(scrollData)
     )
     
@@ -865,7 +879,7 @@ function UploadPageContent() {
     // 这样即使刷新页面，编辑页也能获取到数据（sessionStorage 在标签页关闭前一直存在）
     const imageData = {
       id: image.id,
-      sessionId: image.sessionId,
+      specId: image.specId,
       originalUrl: image.originalUrl,
       thumbnailUrl: image.thumbnailUrl,
       filename: image.filename,
@@ -941,7 +955,7 @@ function UploadPageContent() {
     const photosWithCropInfo: { photoId: string; cropInfo?: CropInfo; outputUrl?: string }[] = []
 
     const updates = targetIds.map((id) => {
-      const img = images.find(i => i.id === id)
+      const img = imagesById.get(id)
       if (!img) return null
 
       const newEditState: EditState = {
@@ -1103,7 +1117,6 @@ function UploadPageContent() {
     void applyBatchCropToSelection()
   }
 
-  const totalPrintCount = images.reduce((sum, img) => sum + img.printCount, 0)
   const canSubmit = images.length > 0
 
   const handleSubmit = () => {
@@ -1123,9 +1136,8 @@ function UploadPageContent() {
     if (!currentSession) return
     
     // 🎯 检测未调整的照片
-    const unadjusted = images.filter(img => !img.isAdjusted)
-    if (unadjusted.length > 0) {
-      setUnadjustedImages(unadjusted)
+    if (unadjustedCandidates.length > 0) {
+      setUnadjustedImages(unadjustedCandidates)
       setShowUnadjustedDialog(true)
       return
     }
@@ -1136,7 +1148,7 @@ function UploadPageContent() {
     // 更新本地订单状态（可选）
     const savedOrders = localStorage.getItem('photo-orders')
     const orders = savedOrders ? JSON.parse(savedOrders) : {}
-    orders[currentSession.id] = {
+    orders[currentSession.specId] = {
       ...currentSession,
       currentCount: totalPrintCount,
       status: 'uploaded', // 状态改为已上传，尚未最终提交
@@ -1248,9 +1260,8 @@ function UploadPageContent() {
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const startIndex = virtualRow.index * columns
-                const rowImages = images.slice(startIndex, startIndex + columns)
-                
+                const rowImages = rowImagesList[virtualRow.index] || []
+
                 return (
                   <div
                     key={virtualRow.key}
@@ -1274,7 +1285,7 @@ function UploadPageContent() {
                           isBatchMode && !isOrderLocked ? 'cursor-pointer' : ''
                         }`}
                         style={{
-                          ...(selectedIds.includes(image.id) && isBatchMode 
+                          ...(selectedIdSet.has(image.id) && isBatchMode
                             ? { 
                                 outline: '2px solid #ff4d6d',
                                 outlineOffset: '2px' // outline与元素之间的间距
@@ -1292,10 +1303,10 @@ function UploadPageContent() {
                           style={{ paddingBottom: `${(1 / paperRatio) * 100}%` }}
                         >
                   <PhotoPreviewCard
-                    key={`${image.id}-${image.cropMode}-${isBatchMode && selectedIds.includes(image.id) ? batchCropMode : ''}`}
+                    key={image.id}
                     image={image}
                     aspectRatio={paperRatio}
-                    previewCropMode={isBatchMode && selectedIds.includes(image.id) && batchCropMode ? batchCropMode : undefined}
+                    previewCropMode={isBatchMode && selectedIdSet.has(image.id) && batchCropMode ? batchCropMode : undefined}
                     onClick={
                       isBatchMode
                         ? undefined // 批量模式下，由外层 div 处理点击，避免重复触发
@@ -1320,10 +1331,10 @@ function UploadPageContent() {
                           {isBatchMode && (
                             <div 
                               className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center z-10 pointer-events-none ${
-                                selectedIds.includes(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
+                                selectedIdSet.has(image.id) ? 'bg-[#ff4d6d]' : 'bg-gray-400/80'
                               }`}
                             >
-                              {selectedIds.includes(image.id) && (
+                              {selectedIdSet.has(image.id) && (
                                 <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                 </svg>

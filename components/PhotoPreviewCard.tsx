@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { getListThumbnailUrl, buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
 
 type CropMode = 'cover' | 'full' | 'lomo'
 
@@ -17,12 +17,6 @@ interface PhotoPreviewCardProps {
 
 export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick }: PhotoPreviewCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [isClient, setIsClient] = useState(false)
-
-  // 客户端渲染检测
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
 
   // 如果没有 thumbnailUrl，显示占位符
   if (!image.thumbnailUrl && !image.originalUrl) {
@@ -73,6 +67,8 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
           src={previewUrl}
           alt={image.filename || '照片'}
           className="w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
         />
       )
     } else if (displayMode === 'full') {
@@ -83,6 +79,8 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
             src={previewUrl}
             alt={image.filename || '照片'}
             className="w-full h-full object-contain"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       )
@@ -102,6 +100,8 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
               src={previewUrl}
               alt={image.filename || '照片'}
               className="max-w-full max-h-full object-contain"
+              loading="lazy"
+              decoding="async"
             />
           </div>
         </div>
@@ -115,7 +115,7 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
       className="absolute inset-0 cursor-pointer"
       onClick={onClick}
     >
-      {isClient && renderImage()}
+      {renderImage()}
 
       {/* 已调整角标 - z-20 确保在删除按钮(z-10)等元素之上 */}
       {image.isAdjusted && (

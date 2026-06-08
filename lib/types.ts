@@ -98,7 +98,7 @@ export interface EditState {
 /** 图片类型 */
 export interface Image {
   id: string
-  sessionId: string
+  specId: number
   originalUrl: string
   thumbnailUrl: string
   filename: string
@@ -120,11 +120,11 @@ export interface Image {
 
 // ==================== 会话相关类型 ====================
 
-/** 会话类型 */
+/** 会话类型（对应当前编辑的 order_specs 行） */
 export interface Session {
-  id: string
+  specId: number
+  skuId: number
   orderNo: string
-  sizeId: string
   sizeName: string
   targetCount: number
   currentCount: number
@@ -132,21 +132,7 @@ export interface Session {
   canvasHeight: number
   unit: string
   ratio: number
+  cropDefaultMode?: CropMode
+  cropAvailableModes?: CropMode[]
   createdAt: string
-}
-
-// ==================== 照片尺寸相关类型 ====================
-
-/** 照片尺寸类型 */
-export interface PhotoSize {
-  id: string
-  name: string
-  width: number
-  height: number
-  unit: string
-  ratio: number
-  icon?: string
-  description?: string
-  recommended?: boolean
-  badge?: string
 }
