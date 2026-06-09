@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { ShopHomeLink } from '@/components/ShopHomeLink'
 
 export default function OrderExpiredPage() {
   return (
@@ -28,12 +28,11 @@ export default function OrderExpiredPage() {
         </div>
 
         <div className="space-y-3">
-          <Link
-            href="/"
+          <ShopHomeLink
             className="block w-full py-3 md:py-4 text-center bg-gradient-to-r from-pink-500 to-orange-400 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 desktop-hover"
           >
             返回首页重新查询
-          </Link>
+          </ShopHomeLink>
           <p className="text-xs md:text-sm text-gray-500 text-center">
             温馨提示：如需再次打印照片，建议重新下单并按照指引上传新的照片文件。
           </p>
@@ -42,4 +41,3 @@ export default function OrderExpiredPage() {
     </div>
   )
 }
-

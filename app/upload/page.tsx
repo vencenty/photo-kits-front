@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
@@ -54,7 +55,7 @@ function useColumns() {
 }
 
 function UploadPageContent() {
-  const router = useRouter()
+  const router = useShopRouter()
   const searchParams = useSearchParams()
   const specIdParam = searchParams.get('specId')
   const routeSpecId = specIdParam ? Number(specIdParam) : NaN

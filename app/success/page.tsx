@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useShopRouter } from '@/lib/useShopRouter'
 import { CheckCircle2, Home, Image, ChevronRight, Loader2 } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
 import { lockOrder, getOrderDetail, submitOrderForProduction } from '@/lib/api'
@@ -59,7 +59,7 @@ interface OrderDetailState {
 }
 
 export default function SuccessPage() {
-  const router = useRouter()
+  const router = useShopRouter()
   const currentSession = useStore((state) => state.currentSession)
   const clearSession = useStore((state) => state.clearSession)
   const setCurrentSession = useStore((state) => state.setCurrentSession)

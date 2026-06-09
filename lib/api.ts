@@ -503,10 +503,14 @@ export interface AddSpecParams {
 /**
  * 添加规格（仅传 skuId，返回 order_specs.id）
  */
-export async function addSpec(params: AddSpecParams): Promise<SpecInfo> {
+export async function addSpec(
+  params: AddSpecParams,
+  options?: { silent?: boolean },
+): Promise<SpecInfo> {
   return request<SpecInfo>('/v1/order/spec/create', {
     method: 'POST',
     body: JSON.stringify(params),
+    silent: options?.silent,
   })
 }
 
@@ -589,7 +593,7 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
       ? { ...params.cropInfo, originalUrl: toBucketUrl(params.cropInfo.originalUrl) }
       : params.cropInfo,
   }
-  return request<{ message: string }>('/v/order/photo/update', {
+  return request<{ message: string }>('/v1/order/photo/update', {
     method: 'PUT',
     body: JSON.stringify(body),
   })
@@ -702,6 +706,20 @@ export interface PublicSkuListResponse {
 
 export async function getPublicSkuList(): Promise<PublicSkuListResponse> {
   return request<PublicSkuListResponse>('/v1/sku/list')
+}
+
+// ==================== 店铺信息 ====================
+
+export interface ShopProfile {
+  shopId: number
+  name: string
+  platform: string
+  platformLabel: string
+  contentHtml?: string
+}
+
+export async function getShopProfile(): Promise<ShopProfile> {
+  return request<ShopProfile>('/v1/shop/profile', { silent: true })
 }
 
 // ==================== 订单提交相关 ====================

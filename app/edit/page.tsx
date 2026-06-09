@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, Suspense, useMemo } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
@@ -12,7 +13,7 @@ import { buildOssCropUrl } from '@/lib/image-config'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 function EditPageContent() {
-  const router = useRouter()
+  const router = useShopRouter()
   const searchParams = useSearchParams()
   const imageId = searchParams.get('imageId') as string
   const filter = searchParams.get('filter') // 🎯 读取过滤参数：'unadjusted' 表示只浏览未调整的图片

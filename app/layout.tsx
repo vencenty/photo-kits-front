@@ -1,8 +1,7 @@
 import './globals.css'
-import { Suspense } from 'react'
 import { Toaster } from 'sonner'
 import { SkuPreloader } from '@/components/SkuPreloader'
-import { ShopUrlSync } from '@/components/ShopUrlSync'
+import { ShopGate } from '@/components/ShopGate'
 
 export default function RootLayout({
   children,
@@ -17,10 +16,9 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
       </head>
       <body>
-        <Suspense fallback={null}>
-          <ShopUrlSync />
-        </Suspense>
-        <SkuPreloader>{children}</SkuPreloader>
+        <ShopGate>
+          <SkuPreloader>{children}</SkuPreloader>
+        </ShopGate>
         <Toaster position="top-center" richColors />
       </body>
     </html>

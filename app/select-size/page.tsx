@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Plus, ImageIcon, ChevronRight, X, Check, Loader2, Edit } from 'lucide-react'
 import { useStore, Session } from '@/lib/store'
 import {
@@ -13,6 +13,7 @@ import {
 import { preloadCatalog, skuKey, type PublicSkuListResponse } from '@/lib/catalog'
 import { getActiveOrderNo, setActiveOrderNo } from '@/lib/order-context'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
+import { BusinessError, NetworkError, SystemError } from '@/lib/error-handler'
 import type { CropMode } from '@/lib/types'
 
 interface AddedSize {
@@ -29,7 +30,7 @@ interface AddedSize {
 }
 
 export default function SelectSizePage() {
-  const router = useRouter()
+  const router = useShopRouter()
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
   const [receiverName, setReceiverName] = useState<string>('')
   const [isOrderLocked, setIsOrderLocked] = useState(false)
@@ -176,13 +177,19 @@ export default function SelectSizePage() {
 
     setIsAdding(true)
     try {
-      const result = await addSpec({ skuId: sku.id })
+      const result = await addSpec({ skuId: sku.id }, { silent: true })
       const newSize = specToAddedSize(result)
       setAddedSizes((prev) => [...prev, newSize])
       showToastMessage(`已添加 ${sku.paperName} ${sku.sizeName}`)
     } catch (error) {
       console.error('添加规格失败:', error)
-      showToastMessage('添加失败，请重试')
+      const message =
+        error instanceof BusinessError || error instanceof SystemError
+          ? error.msg
+          : error instanceof NetworkError
+            ? error.message
+            : '添加失败，请重试'
+      showToastMessage(message)
     } finally {
       setIsAdding(false)
       setShowAddModal(false)

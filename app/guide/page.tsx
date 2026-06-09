@@ -2,13 +2,14 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import Image from 'next/image'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Loader2, User, Crop, ImageIcon, Frame, AlertTriangle } from 'lucide-react'
 import { updateOrder, getOrderDetail } from '@/lib/api'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 
 function GuidePageContent() {
-  const router = useRouter()
+  const router = useShopRouter()
   const searchParams = useSearchParams()
   const orderNo = searchParams.get('orderNo') as string
 

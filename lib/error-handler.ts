@@ -3,6 +3,8 @@
  * 根据服务端返回的错误码进行统一处理
  */
 
+import { withShopQuery } from './shop-context'
+
 // 错误类型定义
 export interface ApiErrorResponse {
   code: number
@@ -123,7 +125,7 @@ const specialErrorHandlers: SpecialErrorHandler[] = [
     code: ORDER_ERROR.ORDER_EXPIRED,
     handler: () => {
       if (typeof window !== 'undefined') {
-        window.location.href = '/order-expired'
+        window.location.href = withShopQuery('/order-expired')
       }
     },
   },

@@ -1,16 +1,23 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useShopRouter } from '@/lib/useShopRouter'
 import { Camera, Search, Loader2 } from 'lucide-react'
-import { getOrderDetail } from '@/lib/api'
+import { getOrderDetail, getShopProfile } from '@/lib/api'
 import { normalizeOrderOrPhoneInput } from '@/lib/utils'
 
 export default function Home() {
   const [orderNumber, setOrderNumber] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const router = useRouter()
+  const [shopName, setShopName] = useState('')
+  const router = useShopRouter()
+
+  useEffect(() => {
+    getShopProfile()
+      .then((data) => setShopName(data.name?.trim() || ''))
+      .catch(() => setShopName(''))
+  }, [])
 
   const handleQuery = async () => {
     const trimmedOrder = normalizeOrderOrPhoneInput(orderNumber)
@@ -23,20 +30,15 @@ export default function Home() {
     setError('')
 
     try {
-      // 查询订单详情，判断是否已查看引导页（过期逻辑由后端 + 全局错误处理统一控制）
       const orderDetail = await getOrderDetail(trimmedOrder, false)
 
-      // 根据 guideViewed 决定跳转页面
       if (orderDetail.guideViewed === 1) {
-        // 已查看过引导页，直接跳转到 select-size
         router.push('/select-size')
       } else {
-        // 未查看引导页，跳转到 guide 页面
         router.push(`/guide?orderNo=${encodeURIComponent(trimmedOrder)}`)
       }
     } catch (err) {
       console.error('查询订单失败:', err)
-      // 查询失败时停留在当前页，展示错误信息
       const message = err instanceof Error ? err.message : '查询订单失败，请检查订单编号后重试'
       setError(message)
     } finally {
@@ -47,16 +49,18 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-pink-50 to-rose-50 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md md:max-w-lg">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8 md:mb-12">
           <div className="w-24 h-24 md:w-32 md:h-32 rounded-full gradient-primary flex items-center justify-center shadow-lg mb-4 relative desktop-hover">
             <div className="absolute inset-0 rounded-full bg-white/20 animate-pulse"></div>
             <Camera className="w-12 h-12 md:w-16 md:h-16 text-white" strokeWidth={2} />
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">传图工具</h1>
+          {shopName ? (
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">{shopName}</h1>
+          ) : (
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">传图工具</h1>
+          )}
         </div>
 
-        {/* 输入框 */}
         <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-4 desktop-shadow">
           <div className="mb-2">
             <label className="block text-sm font-medium text-gray-700 mb-2 md:text-base">
@@ -83,8 +87,7 @@ export default function Home() {
               <p className="mt-2 text-sm text-red-500 md:text-base">{error}</p>
             )}
           </div>
-          
-          {/* 查询按钮 */}
+
           <button
             type="button"
             onClick={handleQuery}
@@ -101,14 +104,12 @@ export default function Home() {
             )}
           </button>
 
-          {/* 说明文字 */}
           <div className="mt-4 p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500 leading-relaxed md:text-sm">
               📌 若使用手机号，可以先传图后下单，最后也需要绑定对应的订单号哦。
             </p>
           </div>
         </div>
-
       </div>
     </div>
   )

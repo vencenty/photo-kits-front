@@ -203,7 +203,7 @@ backgroundImage: {
    - 输出：图片 URL 和 ID
    - 存储到 OSS/S3
 
-3. **编辑状态保存 API** - `PUT /v/order/photo/update`（或批量：`PUT /v1/order/photo/batchUpdate`）
+3. **编辑状态保存 API** - `PUT /v1/order/photo/update`（或批量：`PUT /v1/order/photo/batchUpdate`）
    - 输入：image_id + edit_state
    - 输出：成功状态
 
