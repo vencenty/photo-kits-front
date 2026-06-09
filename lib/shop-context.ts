@@ -1,61 +1,50 @@
 /**
- * 店铺上下文：仅从 URL ?shop_id= 解析，无兜底。
+ * 店铺上下文：仅从 URL ?code= 解析，无兜底。
+ * 请求通过 X-Shop-Code 识别店铺，服务端内部仍用 shop_id。
  */
 
-export const SHOP_ID_HEADER = 'X-Shop-Id'
 export const SHOP_CODE_HEADER = 'X-Shop-Code'
-export const SHOP_ID_QUERY_KEY = 'shop_id'
+export const SHOP_CODE_QUERY_KEY = 'code'
 
-export function isValidShopId(id: string | null | undefined): id is string {
-  const v = id?.trim() ?? ''
-  return /^\d+$/.test(v) && v !== '0'
+export function isValidShopCode(code: string | null | undefined): code is string {
+  const v = code?.trim() ?? ''
+  return v.length >= 3 && v.length <= 32 && /^[a-zA-Z0-9]+$/.test(v)
 }
 
-/** 从 query string 读取 shop_id（SSR 可传入 search） */
-export function readShopIdFromSearch(search: string): string {
-  const v = new URLSearchParams(search).get(SHOP_ID_QUERY_KEY)
-  return isValidShopId(v) ? v.trim() : ''
+/** 从 query string 读取店铺 code（SSR 可传入 search） */
+export function readShopCodeFromSearch(search: string): string {
+  const v = new URLSearchParams(search).get(SHOP_CODE_QUERY_KEY)
+  return isValidShopCode(v) ? v.trim() : ''
 }
 
-export function readShopIdFromUrl(): string {
+export function readShopCodeFromUrl(): string {
   if (typeof window === 'undefined') return ''
-  return readShopIdFromSearch(window.location.search)
+  return readShopCodeFromSearch(window.location.search)
 }
 
-export function hasShopIdInUrl(): boolean {
-  return !!readShopIdFromUrl()
-}
-
-export function getShopId(): string {
-  return readShopIdFromUrl()
+export function hasShopCodeInUrl(): boolean {
+  return !!readShopCodeFromUrl()
 }
 
 export function getShopCode(): string {
-  return process.env.NEXT_PUBLIC_SHOP_CODE?.trim() ?? ''
+  return readShopCodeFromUrl()
 }
 
-/** 为路径追加/覆盖 shop_id 查询参数 */
-export function withShopQuery(path: string, shopId?: string): string {
-  const id = shopId ?? getShopId()
-  if (!id) return path
+/** 为路径追加/覆盖 code 查询参数 */
+export function withShopQuery(path: string, code?: string): string {
+  const shopCode = code ?? getShopCode()
+  if (!shopCode) return path
 
   const qIndex = path.indexOf('?')
   const pathname = qIndex >= 0 ? path.slice(0, qIndex) : path
   const search = qIndex >= 0 ? path.slice(qIndex + 1) : ''
   const params = new URLSearchParams(search)
-  params.set(SHOP_ID_QUERY_KEY, id)
+  params.set(SHOP_CODE_QUERY_KEY, shopCode)
   return `${pathname}?${params.toString()}`
 }
 
 export function getShopHeaders(): Record<string, string> {
-  const shopId = getShopId()
-  const headers: Record<string, string> = {}
-  if (shopId) {
-    headers[SHOP_ID_HEADER] = shopId
-  }
   const code = getShopCode()
-  if (code) {
-    headers[SHOP_CODE_HEADER] = code
-  }
-  return headers
+  if (!code) return {}
+  return { [SHOP_CODE_HEADER]: code }
 }

@@ -4,9 +4,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2, Crop, Image as ImageIcon, Frame } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
-import { getPhotoDetail } from '@/lib/api'
 import type { CropMode, SimpleCropInfo } from '@/lib/types'
-import { mapCropModeFromServer, calculateCoverCropSize } from '@/lib/utils'
+import { calculateCoverCropSize } from '@/lib/utils'
 import { useImagePreload } from '@/lib/use-image-preload'
 import {
   CoverModeEditor,
@@ -80,17 +79,11 @@ export default function ImageEditor({
 
   const imageUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
 
-  // 切图时先按 props 同步状态（无闪烁），再后台用 API 校正，保证与后端一致
-  // 使用 ref 跟踪最新请求，避免竞态条件
-  const fetchIdRef = useRef<string>('')
+  // 切图时按 props 同步裁剪状态（详情由 edit 页统一拉取，此处不再重复请求 detail）
   useEffect(() => {
     const photoId = photoData.id
     if (!photoId || !imageUrl) return
 
-    // 更新当前请求 ID
-    fetchIdRef.current = photoId
-
-    // 立即用 props 设置状态（无闪烁）
     const fromProps =
       photoData.cropMode && cropConfig.availableModes.includes(photoData.cropMode)
         ? photoData.cropMode
@@ -103,50 +96,6 @@ export default function ImageEditor({
       setCoverCropInfo(null)
       setCoverOutputUrl('')
     }
-
-    // 后台请求后端校正
-    getPhotoDetail(photoId)
-      .then((res) => {
-        // 检查是否已被取消或新的请求已开始
-        if (fetchIdRef.current !== photoId) return
-
-        const nextMode = res.photo.cropMode && cropConfig.availableModes.includes(res.photo.cropMode as EditMode)
-          ? (mapCropModeFromServer(res.photo.cropMode) as EditMode)
-          : cropConfig.defaultMode
-        setMode(nextMode)
-
-        if (nextMode === 'cover' && res.photo.cropInfo) {
-          const c = res.photo.cropInfo
-          const cropWidth = c.cropWidth ?? c.sourceWidth
-          const cropHeight = c.cropHeight ?? c.sourceHeight
-          const backendPercent = (c as { croppedAreaPercent?: { x: number; y: number; width: number; height: number } }).croppedAreaPercent
-          const simple: SimpleCropInfo = {
-            offsetX: c.offsetX,
-            offsetY: c.offsetY,
-            cropWidth,
-            cropHeight,
-            sourceWidth: c.sourceWidth,
-            sourceHeight: c.sourceHeight,
-            styleType: (c.styleType || 'cover') as EditMode,
-            croppedAreaPercent: backendPercent ?? (c.sourceWidth && c.sourceHeight
-              ? {
-                  x: (c.offsetX / c.sourceWidth) * 100,
-                  y: (c.offsetY / c.sourceHeight) * 100,
-                  width: (cropWidth / c.sourceWidth) * 100,
-                  height: (cropHeight / c.sourceHeight) * 100,
-                }
-              : undefined),
-          }
-          setCoverCropInfo(simple)
-          setCoverOutputUrl(buildOssCropUrl(imageUrl, simple))
-        } else {
-          setCoverCropInfo(null)
-          setCoverOutputUrl('')
-        }
-      })
-      .catch(() => {
-        // 未同步到后端的照片会 404，上面已用 props 设好，无需再改
-      })
   }, [photoData.id, photoData.cropMode, photoData.cropInfo, photoData.outputUrl, imageUrl, cropConfig])
 
   const sourceSize = useMemo(

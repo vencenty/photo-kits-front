@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useMemo } from 'react'
+import { useEffect, useState, Suspense, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -32,9 +32,100 @@ function EditPageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [isOrderLocked, setIsOrderLocked] = useState(false)
   const [imagesLoaded, setImagesLoaded] = useState(false) // 标记是否已加载图片列表
-  const [currentImageId, setCurrentImageId] = useState<string | null>(imageId) // 🚀 优化：使用状态管理当前图片ID，避免路由跳转
+  const [currentImageId, setCurrentImageId] = useState<string | null>(imageId)
+  const detailFetchIdRef = useRef<string>('')
 
-  // 🎯 根据 filter 参数过滤图片列表（用于导航）
+  const buildImageFromPhoto = useCallback((
+    photo: Awaited<ReturnType<typeof getPhotoDetail>>['photo'],
+    orderStatus?: number,
+  ): Image | null => {
+    if (!currentSession) return null
+
+    const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
+      const cropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover'
+      return cropMode
+    }
+    const initialMode = getInitialMode()
+
+    let simpleCropInfo: SimpleCropInfo | undefined
+    if (photo.cropInfo && currentSession) {
+      let cropWidth = photo.cropInfo.cropWidth || photo.cropInfo.sourceWidth
+      let cropHeight = photo.cropInfo.cropHeight || photo.cropInfo.sourceHeight
+
+      if (!photo.cropInfo.cropWidth || !photo.cropInfo.cropHeight) {
+        if (photo.cropInfo.styleType === 'cover') {
+          const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+          const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
+
+          if (imageAspectRatio > canvasAspectRatio) {
+            cropWidth = photo.cropInfo.sourceHeight * canvasAspectRatio
+            cropHeight = photo.cropInfo.sourceHeight
+          } else {
+            cropWidth = photo.cropInfo.sourceWidth
+            cropHeight = photo.cropInfo.sourceWidth / canvasAspectRatio
+          }
+        }
+      }
+
+      const backendCroppedAreaPercent = (photo.cropInfo as { croppedAreaPercent?: SimpleCropInfo['croppedAreaPercent'] }).croppedAreaPercent
+      const calculatedCroppedAreaPercent = photo.cropInfo.sourceWidth && photo.cropInfo.sourceHeight ? {
+        x: (photo.cropInfo.offsetX / photo.cropInfo.sourceWidth) * 100,
+        y: (photo.cropInfo.offsetY / photo.cropInfo.sourceHeight) * 100,
+        width: (cropWidth / photo.cropInfo.sourceWidth) * 100,
+        height: (cropHeight / photo.cropInfo.sourceHeight) * 100,
+      } : undefined
+
+      simpleCropInfo = {
+        offsetX: photo.cropInfo.offsetX,
+        offsetY: photo.cropInfo.offsetY,
+        cropWidth,
+        cropHeight,
+        sourceWidth: photo.cropInfo.sourceWidth,
+        sourceHeight: photo.cropInfo.sourceHeight,
+        styleType: (photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
+        croppedAreaPercent: backendCroppedAreaPercent || calculatedCroppedAreaPercent,
+      }
+    }
+
+    if (orderStatus !== undefined) {
+      const locked = checkOrderLocked(orderStatus)
+      setIsOrderLocked(locked)
+      if (locked) {
+        alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
+        router.push(`/upload?specId=${currentSession.specId}`)
+        return null
+      }
+    }
+
+    return {
+      id: photo.photoId,
+      specId: currentSession.specId,
+      originalUrl: photo.url,
+      thumbnailUrl: photo.url,
+      filename: `photo-${photo.photoId}`,
+      width: photo.originalWidth,
+      height: photo.originalHeight,
+      printCount: photo.quantity,
+      isLandscape: photo.isLandscape,
+      cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover',
+      editState: {
+        mode: initialMode,
+        scale: 1,
+        x: 0,
+        y: 0,
+        rotation: photo.isLandscape ? 90 : 0,
+        canvasWidth: currentSession.canvasWidth || 127,
+        canvasHeight: currentSession.canvasHeight || 89,
+      },
+      cropInfo: simpleCropInfo,
+      outputUrl: photo.outputUrl || photo.url,
+      isAdjusted: photo.isAdjusted || false,
+    }
+  }, [currentSession, router])
+
+  const isStoreImageReady = useCallback((img: Image | undefined): img is Image => {
+    return !!(img?.originalUrl && img.width && img.height)
+  }, [])
   const images = useMemo(() => {
     // 过滤当前 session 的图片
     const sessionImages = allImages.filter(img => 
@@ -54,140 +145,51 @@ function EditPageContent() {
   const currentIndex = images.findIndex(img => img.id === (currentImageId || imageId))
   const hasPrevious = currentIndex > 0
   const hasNext = currentIndex >= 0 && currentIndex < images.length - 1
-  
-  // 🚀 优化：从 store 中获取当前图片数据，避免每次都从服务端加载
-  const currentImage = useMemo(() => {
-    const targetId = currentImageId || imageId
-    return images.find(img => img.id === targetId) || null
-  }, [images, currentImageId, imageId])
 
-
-  // 🚀 优化：当 currentImageId 变化时，优先从 store 获取，如果没有再从服务端加载
+  // 切换照片：优先 store，缺失时再请求 detail（每张最多一次）
   useEffect(() => {
     const targetImageId = currentImageId || imageId
     if (!targetImageId || !currentSession) return
 
-    // 如果 store 中已有该图片的完整数据，直接使用
-    if (currentImage && currentImage.originalUrl && currentImage.width && currentImage.height) {
-      console.log('✅ 从 store 获取图片数据，跳过服务端请求:', targetImageId)
-      setImage(currentImage)
+    const storeImage = allImages.find(
+      (img) => img.id === targetImageId && img.specId === currentSession.specId,
+    )
+
+    if (isStoreImageReady(storeImage)) {
+      detailFetchIdRef.current = targetImageId
+      setImage(storeImage)
       setIsLoading(false)
       return
     }
 
-    // 否则从服务端加载
+    if (detailFetchIdRef.current === targetImageId) return
+    detailFetchIdRef.current = targetImageId
+
+    let cancelled = false
     const loadPhotoData = async () => {
       try {
         setIsLoading(true)
         const response = await getPhotoDetail(targetImageId)
+        if (cancelled) return
 
-        // 根据cropMode设置初始编辑状态
-        const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
-          // 将后端的cropMode转换为前端的编辑模式
-          const cropMode = response.photo.cropMode ? mapCropModeFromServer(response.photo.cropMode) : 'cover'
-          return cropMode
+        const photoData = buildImageFromPhoto(response.photo, response.orderStatus)
+        if (photoData) {
+          setImage(photoData)
         }
-
-        const initialMode = getInitialMode()
-
-        // 从后端cropInfo创建前端SimpleCropInfo
-        let simpleCropInfo: SimpleCropInfo | undefined
-        if (response.photo.cropInfo && currentSession) {
-          // 优先使用后端保存的cropWidth和cropHeight，如果没有则重新计算
-          let cropWidth = response.photo.cropInfo.cropWidth || response.photo.cropInfo.sourceWidth
-          let cropHeight = response.photo.cropInfo.cropHeight || response.photo.cropInfo.sourceHeight
-
-          // 如果后端没有保存cropWidth/cropHeight，则根据样式类型重新计算
-          if (!response.photo.cropInfo.cropWidth || !response.photo.cropInfo.cropHeight) {
-            if (response.photo.cropInfo.styleType === 'cover') {
-              // cover模式：根据当前session的相纸比例计算裁剪尺寸
-              const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
-              const imageAspectRatio = response.photo.cropInfo.sourceWidth / response.photo.cropInfo.sourceHeight
-
-              if (imageAspectRatio > canvasAspectRatio) {
-                // 图片更宽，裁剪左右
-                cropWidth = response.photo.cropInfo.sourceHeight * canvasAspectRatio
-                cropHeight = response.photo.cropInfo.sourceHeight
-              } else {
-                // 图片更高，裁剪上下
-                cropWidth = response.photo.cropInfo.sourceWidth
-                cropHeight = response.photo.cropInfo.sourceWidth / canvasAspectRatio
-              }
-            }
-            // full和lomo模式使用原图尺寸（已经是默认值了）
-          }
-
-          // 🎯 恢复百分比坐标：优先使用后端保存的，否则从像素坐标反向计算
-          const backendCroppedAreaPercent = (response.photo.cropInfo as any).croppedAreaPercent
-          const calculatedCroppedAreaPercent = response.photo.cropInfo.sourceWidth && response.photo.cropInfo.sourceHeight ? {
-            x: (response.photo.cropInfo.offsetX / response.photo.cropInfo.sourceWidth) * 100,
-            y: (response.photo.cropInfo.offsetY / response.photo.cropInfo.sourceHeight) * 100,
-            width: (cropWidth / response.photo.cropInfo.sourceWidth) * 100,
-            height: (cropHeight / response.photo.cropInfo.sourceHeight) * 100,
-          } : undefined
-
-          simpleCropInfo = {
-            offsetX: response.photo.cropInfo.offsetX,
-            offsetY: response.photo.cropInfo.offsetY,
-            cropWidth: cropWidth,
-            cropHeight: cropHeight,
-            sourceWidth: response.photo.cropInfo.sourceWidth,
-            sourceHeight: response.photo.cropInfo.sourceHeight,
-            styleType: (response.photo.cropInfo.styleType || 'cover') as 'cover' | 'full' | 'lomo',
-            // 🎯 恢复百分比坐标（官方推荐用于恢复裁剪位置）
-            croppedAreaPercent: backendCroppedAreaPercent || calculatedCroppedAreaPercent,
-          }
-        }
-
-        // 转换服务端数据为前端格式
-        const photoData: Image = {
-          id: response.photo.photoId,
-          specId: currentSession.specId, // 从当前会话获取
-          originalUrl: response.photo.url,
-          thumbnailUrl: response.photo.url, // 暂时使用相同 URL
-          filename: `photo-${response.photo.photoId}`, // 构造文件名
-          width: response.photo.originalWidth,
-          height: response.photo.originalHeight,
-          printCount: response.photo.quantity,
-          isLandscape: response.photo.isLandscape,
-          cropMode: response.photo.cropMode ? mapCropModeFromServer(response.photo.cropMode) : 'cover', // 保存后端的cropMode
-          editState: {
-            mode: initialMode,
-            scale: 1,
-            x: 0,
-            y: 0,
-            rotation: response.photo.isLandscape ? 90 : 0,
-            canvasWidth: currentSession?.canvasWidth || 127,
-            canvasHeight: currentSession?.canvasHeight || 89,
-          },
-          cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
-          outputUrl: response.photo.outputUrl || response.photo.url, // 设置默认值：如果不存在outputUrl，则使用原图url
-          isAdjusted: response.photo.isAdjusted || false, // 🎯 设置是否已调整
-        }
-
-        setImage(photoData)
-        // 检查订单状态，设置是否锁单
-        const locked = checkOrderLocked(response.orderStatus)
-        setIsOrderLocked(locked)
-        
-        // 如果订单已锁定，直接跳转回列表页
-        if (locked) {
-          alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
-          router.push(`/upload?specId=${currentSession?.specId}`)
-          return
-        }
-
       } catch (error) {
+        if (cancelled) return
         console.error('获取图片详情失败:', error)
-        // 出错时跳转回列表页
-        router.push(`/upload?specId=${currentSession?.specId}`)
+        router.push(`/upload?specId=${currentSession.specId}`)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
     loadPhotoData()
-  }, [currentImageId, imageId, currentSession, router, currentImage])
+    return () => {
+      cancelled = true
+    }
+  }, [currentImageId, imageId, currentSession?.specId, allImages, buildImageFromPhoto, isStoreImageReady, router])
 
   // 🚀 如果 images 为空（刷新后），从后端加载图片列表
   useEffect(() => {
@@ -431,6 +433,7 @@ function EditPageContent() {
   const handlePrevious = () => {
     if (hasPrevious) {
       const prevImage = images[currentIndex - 1]
+      detailFetchIdRef.current = ''
       // 只更新 URL 参数（用于浏览器历史记录），但不触发页面重新加载
       const url = filter 
         ? `/edit?imageId=${prevImage.id}&filter=${filter}`
@@ -445,6 +448,7 @@ function EditPageContent() {
   const handleNext = () => {
     if (hasNext) {
       const nextImage = images[currentIndex + 1]
+      detailFetchIdRef.current = ''
       // 只更新 URL 参数（用于浏览器历史记录），但不触发页面重新加载
       const url = filter 
         ? `/edit?imageId=${nextImage.id}&filter=${filter}`
@@ -459,9 +463,10 @@ function EditPageContent() {
   // 🚀 优化：当 URL 中的 imageId 变化时（比如直接访问或刷新），同步更新 currentImageId
   useEffect(() => {
     if (imageId && imageId !== currentImageId) {
+      detailFetchIdRef.current = ''
       setCurrentImageId(imageId)
     }
-  }, [imageId])
+  }, [imageId, currentImageId])
 
   if (isLoading || !image || !currentSession) {
     return (

@@ -39,7 +39,7 @@ function GuidePageContent() {
     }
 
     loadOrderInfo()
-  }, [orderNo, router])
+  }, [orderNo])
 
   const handleSubmit = async () => {
     if (!receiverName.trim()) {
