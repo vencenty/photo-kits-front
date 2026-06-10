@@ -3,7 +3,8 @@
 import { useRef } from 'react'
 import { Upload } from 'lucide-react'
 import type { Image as ImageType } from '@/lib/store'
-import { buildOssCropUrl, WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { WHITE_MARGIN_PERCENT } from '@/lib/image-config'
+import { buildListPhotoPreviewUrl } from '@/lib/photo-list-preview'
 
 type CropMode = 'cover' | 'full' | 'lomo'
 
@@ -45,13 +46,10 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
       ? image.isLandscape && !isPortraitByDimensions // 竖图强制不旋转
       : image.isLandscape
 
-  // 批量预览为 full/lomo 时不能用旧的 image.cropInfo（常为 cover），否则会沿用 OSS crop 参数
-  const cropInfoForPreview =
-    previewCropMode === 'full' || previewCropMode === 'lomo' ? undefined : image.cropInfo
-
-  const previewUrl = buildOssCropUrl(originalUrl, cropInfoForPreview, {
+  const previewUrl = buildListPhotoPreviewUrl(image, {
+    previewCropMode,
     isLandscape: effectiveIsLandscape,
-    shortWidth: 300, // 列表页缩略图短边宽度
+    shortWidth: 300,
     quality: 70,
     format: 'jpg',
   })

@@ -413,13 +413,7 @@ export function buildOssCropUrl(
     }
   }
 
-  // 如果 isLandscape 为 true，添加旋转参数（旋转应该在所有操作之后）
-  // 这样列表页展示时，横图会被旋转90度显示为竖图
-  if (isLandscape) {
-    params.push('rotate,90')
-  }
-
-  // 日期水印：crop/resize 之后；字号与边距均按输出图宽高比例计算
+  // 日期水印：crop/resize 之后、rotate 之前；锚在照片原始方向右下角（与保存 outputUrl 一致）
   if (watermark?.text) {
     let outputWidth = watermark.outputWidth
     let outputHeight = watermark.outputHeight
@@ -433,6 +427,11 @@ export function buildOssCropUrl(
       outputWidth,
       outputHeight,
     }))
+  }
+
+  // 列表展示旋转：必须在 watermark 之后，避免水印落在「显示方向」右下角而非照片方向
+  if (isLandscape) {
+    params.push('rotate,90')
   }
 
   // 没有新的处理链时：非 OSS 原样返回；OSS 则去掉旧 x-oss-process（避免从 cover 切走后仍带 crop）

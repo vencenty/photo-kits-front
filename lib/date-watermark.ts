@@ -16,23 +16,31 @@ interface OssImageInfo {
 export const DATE_WATERMARK_MARGIN_RATIO = 0.05
 /** 字号 = 输出图短边 × 此比例（如 0.05 = 短边 5%） */
 export const DATE_WATERMARK_SHORT_EDGE_RATIO = 0.05
+/** 数码相机日期戳黄色（OSS color 参数，不含 #） */
+//export const DATE_WATERMARK_COLOR = 'FFCC00'
+export const DATE_WATERMARK_COLOR = 'FFFFFF'
 
 const DATE_WATERMARK_MIN_SIZE = 10
 
 /**
- * 将 EXIF 日期字符串格式化为简单日期水印文本
- * 例：2023:09:10 10:20:02 → 2023/09/10
+ * 将 EXIF 日期字符串格式化为日期水印文本
+ * 例：2023:09:10 10:20:02 → 2023年9月10日 10:20
  */
 export function formatShootDate(raw: string): string | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
-  const datePart = trimmed.split(/\s+/)[0]
-  const m = datePart.match(/^(\d{4})[:\-/](\d{1,2})[:\-/](\d{1,2})/)
+  const m = trimmed.match(/^(\d{4})[:\-/](\d{1,2})[:\-/](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?/)
   if (!m) return null
   const y = m[1]
-  const mo = m[2].padStart(2, '0')
-  const d = m[3].padStart(2, '0')
-  return `${y}/${mo}/${d}`
+  const mo = Number(m[2])
+  const d = Number(m[3])
+  const dateStr = `${y}年${mo}月${d}日`
+  if (m[4] != null && m[5] != null) {
+    const hh = m[4].padStart(2, '0')
+    const mm = m[5].padStart(2, '0')
+    return `${dateStr} ${hh}:${mm}`
+  }
+  return dateStr
 }
 
 /**
@@ -56,6 +64,27 @@ export async function fetchOssExifDate(originalUrl: string): Promise<string | nu
   } catch {
     return null
   }
+}
+
+/** 从已保存的 outputUrl 解析 OSS 水印文字（列表预览复用编辑页同款水印） */
+export function decodeOssWatermarkText(encoded: string): string | null {
+  try {
+    const b64 = encoded.replace(/-/g, '+').replace(/_/g, '/')
+    const padLen = (4 - (b64.length % 4)) % 4
+    const padded = b64 + '='.repeat(padLen)
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+export function extractWatermarkTextFromOssUrl(url: string): string | null {
+  if (!url || !url.includes('watermark,text_')) return null
+  const match = url.match(/watermark,text_([^/,]+)/)
+  if (!match?.[1]) return null
+  return decodeOssWatermarkText(match[1])
 }
 
 /** OSS 水印文字 URL-safe Base64 编码 */
@@ -151,5 +180,5 @@ export function buildDateWatermarkParam(options: DateWatermarkOptions): string {
   const fontSize = resolveDateWatermarkFontSize(w, h)
   const { x, y } = resolveDateWatermarkOffset(w, h)
   const encoded = encodeOssWatermarkText(options.text)
-  return `watermark,text_${encoded},size_${fontSize},color_FFFFFF,g_se,t_88,x_${x},y_${y},shadow_50`
+  return `watermark,text_${encoded},size_${fontSize},color_${DATE_WATERMARK_COLOR},g_se,t_88,x_${x},y_${y},shadow_50`
 }
