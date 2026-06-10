@@ -27,7 +27,9 @@ interface StoreState {
   lastFetchTime: number | null // 最后一次从服务器加载数据的时间戳
   setLastFetchTime: (time: number) => void
   shouldRefetch: () => boolean // 判断是否需要重新从服务器获取数据
-  forceRefetch: () => void // 强制标记需要刷新（清空缓存时间戳）
+  /** 列表需与后端同步时递增（编辑保存/批量操作后 forceRefetch 触发，上传页消费一次） */
+  photosListVersion: number
+  forceRefetch: () => void
 
   // Selection (批量编辑)
   selectedIds: string[]
@@ -62,15 +64,17 @@ export const useStore = create<StoreState>()(
           const toAdd = newImages.filter((img) => !existingIds.has(img.id))
           if (toAdd.length === 0) return state
           const merged = [...state.images, ...toAdd]
+          const newCount = state.currentSession
+            ? merged.filter((img) => img.specId === state.currentSession!.specId).length
+            : 0
+          // currentCount 未变时不替换 currentSession，避免触发依赖 session 引用的 effect 循环请求
+          if (state.currentSession && state.currentSession.currentCount === newCount) {
+            return { images: merged }
+          }
           return {
             images: merged,
             currentSession: state.currentSession
-              ? {
-                  ...state.currentSession,
-                  currentCount: merged.filter(
-                    (img) => img.specId === state.currentSession!.specId,
-                  ).length,
-                }
+              ? { ...state.currentSession, currentCount: newCount }
               : null,
           }
         }),
@@ -121,8 +125,13 @@ export const useStore = create<StoreState>()(
         const now = Date.now()
         return now - state.lastFetchTime > CACHE_DURATION
       },
-      // 🚀 强制标记需要刷新（清空缓存时间戳）
-      forceRefetch: () => set({ lastFetchTime: null }),
+      photosListVersion: 0,
+      // 强制与后端同步列表（递版本号；上传页按版本拉取一次，避免 lastFetchTime 置空导致 effect 死循环）
+      forceRefetch: () =>
+        set((state) => ({
+          lastFetchTime: null,
+          photosListVersion: state.photosListVersion + 1,
+        })),
 
       // Selection
       selectedIds: [],

@@ -31,6 +31,7 @@ function ShopGateLoading() {
 
 function ShopGateInner({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
+  const shopCode = searchParams.get('code') ?? ''
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
 
   useEffect(() => {
@@ -48,7 +49,7 @@ function ShopGateInner({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [searchParams])
+  }, [shopCode])
 
   if (status === 'loading') {
     return <ShopGateLoading />

@@ -146,12 +146,8 @@ export default function SelectSizePage() {
   }, [orderNumber, specToAddedSize])
 
   useEffect(() => {
-    if (orderNumber) loadSpecs()
-  }, [orderNumber, loadSpecs])
-
-  useEffect(() => {
-    if (catalog && orderNumber) loadSpecs()
-  }, [catalog])
+    if (orderNumber && catalog) loadSpecs()
+  }, [orderNumber, catalog, loadSpecs])
 
   const showToastMessage = (message: string) => {
     setShowToast(message)

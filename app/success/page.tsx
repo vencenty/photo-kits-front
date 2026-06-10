@@ -78,13 +78,15 @@ export default function SuccessPage() {
   // 有订单号且详情未返回时视为加载中（数据一律从接口拿，不依赖 localStorage 缓存）
   const isLoadingSizes = orderNumber !== null && orderDetail === null
 
+  const sessionOrderNo = currentSession?.orderNo
+
   // 订单号只从当前 session 取，不读 localStorage（避免用缓存；详情统一从接口拉）
   useEffect(() => {
-    if (currentSession?.orderNo) {
-      setOrderNumber(currentSession.orderNo)
-      setActiveOrderNo(currentSession.orderNo)
+    if (sessionOrderNo) {
+      setOrderNumber(sessionOrderNo)
+      setActiveOrderNo(sessionOrderNo)
     }
-  }, [currentSession])
+  }, [sessionOrderNo])
 
   // 有订单号时直接拉接口拿订单详情
   useEffect(() => {

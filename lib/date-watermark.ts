@@ -43,6 +43,9 @@ export function formatShootDate(raw: string): string | null {
   return dateStr
 }
 
+/** 同一原图 URL 的 EXIF 请求合并（避免 Strict Mode / 编辑器重挂载时重复打 image/info） */
+const exifDateRequestCache = new Map<string, Promise<string | null>>()
+
 /**
  * 通过阿里云 OSS image/info 获取 EXIF 拍摄日期
  */
@@ -51,19 +54,27 @@ export async function fetchOssExifDate(originalUrl: string): Promise<string | nu
     return null
   }
   const base = stripOssImageProcessFromUrl(originalUrl)
+  const cached = exifDateRequestCache.get(base)
+  if (cached) return cached
+
   const separator = base.includes('?') ? '&' : '?'
   const infoUrl = `${base}${separator}x-oss-process=image/info`
 
-  try {
-    const res = await fetch(infoUrl)
-    if (!res.ok) return null
-    const data = (await res.json()) as OssImageInfo
-    const raw = data.DateTimeOriginal?.value || data.DateTime?.value
-    if (!raw) return null
-    return formatShootDate(raw)
-  } catch {
-    return null
-  }
+  const request = (async () => {
+    try {
+      const res = await fetch(infoUrl)
+      if (!res.ok) return null
+      const data = (await res.json()) as OssImageInfo
+      const raw = data.DateTimeOriginal?.value || data.DateTime?.value
+      if (!raw) return null
+      return formatShootDate(raw)
+    } catch {
+      return null
+    }
+  })()
+
+  exifDateRequestCache.set(base, request)
+  return request
 }
 
 /** 从已保存的 outputUrl 解析 OSS 水印文字（列表预览复用编辑页同款水印） */
@@ -103,6 +114,25 @@ export interface DateWatermarkOptions {
   /** 水印施加时处理结果的宽高（与 OSS 链 crop/resize 之后一致） */
   outputWidth?: number
   outputHeight?: number
+}
+
+/** 满版裁剪：按裁剪框输出尺寸附加水印比例参数（保存用原图 crop 像素，预览用 resolveWatermarkOutputSize 缩放） */
+export function attachCoverWatermarkSize(
+  watermark: DateWatermarkOptions | undefined,
+  cropInfo: SimpleCropInfo,
+  forPreview?: boolean,
+  previewShortEdge?: number,
+): DateWatermarkOptions | undefined {
+  if (!watermark?.text) return undefined
+  const size = resolveWatermarkOutputSize(
+    cropInfo,
+    forPreview ? previewShortEdge : undefined,
+  )
+  return {
+    text: watermark.text,
+    outputWidth: size.width,
+    outputHeight: size.height,
+  }
 }
 
 /** 留白/整图：用原图尺寸参与水印比例计算（不参与 OSS crop） */

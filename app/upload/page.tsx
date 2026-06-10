@@ -67,7 +67,8 @@ function UploadPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingPhotos, setIsLoadingPhotos] = useState(true)
   const [ossSignature, setOssSignature] = useState<OssSignature | null>(null)
-  const loadedRef = useRef(false) // 防止重复加载
+  const photosSyncVersionRef = useRef(-1) // 本页实例已同步到的 photosListVersion
+  const photosFetchInFlightRef = useRef(false)
   const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁单
 
   const currentSession = useStore((state) => state.currentSession)
@@ -99,9 +100,7 @@ function UploadPageContent() {
   const selectAll = useStore((state) => state.selectAll)
   
   // 缓存管理
-  const shouldRefetch = useStore((state) => state.shouldRefetch)
-  const setLastFetchTime = useStore((state) => state.setLastFetchTime)
-  const lastFetchTime = useStore((state) => state.lastFetchTime) // 🎯 监听 lastFetchTime 变化
+  const photosListVersion = useStore((state) => state.photosListVersion)
   const forceRefetch = useStore((state) => state.forceRefetch)
 
   const [isBatchMode, setIsBatchMode] = useState(false)
@@ -313,16 +312,20 @@ function UploadPageContent() {
     }
   }, [currentSession, routeSpecId, router, hasHydrated])
 
-  // 从本地偏好恢复客户选择的日期水印开关
+  const sessionSpecId = currentSession?.specId
+  const sessionOrderNo = currentSession?.orderNo
+
+  // 从本地偏好恢复客户选择的日期水印开关（仅 spec 切换时同步，避免改 session 触发列表重复拉取）
   useEffect(() => {
-    if (!hasHydrated || !currentSession) return
-    const orderNo = currentSession.orderNo || getActiveOrderNo()
+    if (!hasHydrated || !sessionSpecId) return
+    const orderNo = sessionOrderNo || getActiveOrderNo()
     if (!orderNo) return
-    const pref = getSpecWatermarkPref(orderNo, currentSession.specId)
-    if (currentSession.dateWatermarkEnabled !== pref) {
-      setCurrentSession({ ...currentSession, dateWatermarkEnabled: pref })
-    }
-  }, [hasHydrated, currentSession, setCurrentSession])
+    const session = useStore.getState().currentSession
+    if (!session || session.specId !== sessionSpecId) return
+    const pref = getSpecWatermarkPref(orderNo, sessionSpecId)
+    if (session.dateWatermarkEnabled === pref) return
+    setCurrentSession({ ...session, dateWatermarkEnabled: pref })
+  }, [hasHydrated, sessionSpecId, sessionOrderNo, setCurrentSession])
 
   const handleToggleDateWatermark = useCallback(() => {
     if (!currentSession || isOrderLocked) return
@@ -333,58 +336,64 @@ function UploadPageContent() {
     setCurrentSession({ ...currentSession, dateWatermarkEnabled: next })
   }, [currentSession, isOrderLocked, setCurrentSession])
 
-  // 从后端加载已上传的照片 - 智能缓存版本
-  // 🎯 关键：添加 lastFetchTime 到依赖，当 forceRefetch() 被调用时触发重新加载
+  // 从后端加载已上传的照片（按 photosListVersion 消费 forceRefetch，每版本只拉一次）
   useEffect(() => {
     let cancelled = false
 
+    if (!hasHydrated || !sessionSpecId) return
+
+    const session = useStore.getState().currentSession
+    if (!session || session.specId !== sessionSpecId) return
+
+    if (photosFetchInFlightRef.current) return
+    if (photosSyncVersionRef.current === photosListVersion) {
+      setIsLoadingPhotos(false)
+      return
+    }
+    const specId = sessionSpecId
+    const targetVersion = photosListVersion
+
     const loadPhotosFromServer = async () => {
-      if (!currentSession) return
-      
-      // 🎯 关键修复：当 lastFetchTime 为 null（被 forceRefetch 清空）时，强制重新加载
-      const needForceRefetch = lastFetchTime === null
-      if (needForceRefetch && loadedRef.current) {
-        console.log('🔄 检测到 forceRefetch 调用，重置加载状态并重新加载数据')
-        loadedRef.current = false
-      }
-      
-      // 如果已加载过，直接返回
-      if (loadedRef.current) return
-      
-      const orderNo = getOrderNo()
-      const specId = currentSession.specId
+      const orderNo = session.orderNo || getActiveOrderNo()
+      const defaultCropMode =
+        session.cropDefaultMode && session.cropAvailableModes?.length
+          ? session.cropDefaultMode
+          : 'cover'
       
       if (!orderNo && !getActiveOrderNo()) {
         setIsLoadingPhotos(false)
+        photosSyncVersionRef.current = targetVersion
         return
       }
 
-      loadedRef.current = true
+      photosFetchInFlightRef.current = true
       
-      // 🚀 智能缓存：检查是否需要重新获取数据
-      const needRefetch = shouldRefetch()
+      const storeState = useStore.getState()
+      const cachedSpecImageCount = storeState.images.filter(
+        (img) => img.specId === specId && (img.thumbnailUrl || img.originalUrl),
+      ).length
+      const needNetwork = storeState.shouldRefetch()
       
-      // 如果有缓存数据且未过期，直接使用缓存，无需显示 loading
-      if (!needRefetch && images.length > 0) {
-        console.log('📦 使用缓存数据，跳过 API 调用 (图片数:', images.length, ')')
+      // 本地缓存有效：跳过 listPhotos（从编辑页返回且未 forceRefetch 时走此分支）
+      if (!needNetwork && cachedSpecImageCount > 0) {
+        console.log('📦 使用缓存数据，跳过 API 调用 (图片数:', cachedSpecImageCount, ')')
         setIsLoadingPhotos(false)
-        
-        // 后台静默更新订单状态（不影响用户体验；过期逻辑交给全局错误处理）
+        photosSyncVersionRef.current = targetVersion
+
         getOrderDetail()
           .then(orderDetail => {
-            setIsOrderLocked(checkOrderLocked(orderDetail.status))
+            if (!cancelled) setIsOrderLocked(checkOrderLocked(orderDetail.status))
           })
           .catch(error => {
             console.error('获取订单状态失败:', error)
           })
-        
+
+        photosFetchInFlightRef.current = false
         return
       }
       
-      // 需要刷新时打印日志
-      console.log('🔄 需要刷新数据:', needRefetch ? '缓存已过期/被强制刷新' : '首次加载')
+      console.log('🔄 需要刷新数据:', needNetwork ? '缓存失效或 forceRefetch' : '首次加载')
 
-      // 需要从服务器加载数据
       setIsLoadingPhotos(true)
 
       try {
@@ -399,17 +408,17 @@ function UploadPageContent() {
         
         const result = await listPhotos(specId)
         
-        // 更新最后获取时间
-        setLastFetchTime(Date.now())
-        
         if (cancelled) return
+
+        useStore.getState().setLastFetchTime(Date.now())
+        photosSyncVersionRef.current = targetVersion
 
         if (result.photos && result.photos.length > 0) {
           // 合并时用 store 最新快照，避免闭包 allImages 过期导致重复 addImages
           const latestImages = useStore.getState().images
           const existingImagesMap = new Map(
             latestImages
-              .filter(img => img.specId === currentSession.specId)
+              .filter(img => img.specId === session.specId)
               .map(img => [img.id, img])
           )
 
@@ -431,9 +440,9 @@ function UploadPageContent() {
 
               // 如果后端没有保存cropWidth/cropHeight，则根据样式类型重新计算
               if (!photo.cropInfo.cropWidth || !photo.cropInfo.cropHeight) {
-                if (photo.cropInfo.styleType === 'cover' && currentSession) {
+                if (photo.cropInfo.styleType === 'cover') {
                   // cover模式：根据当前session的相纸比例计算裁剪尺寸
-                  const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+                  const canvasAspectRatio = session.canvasWidth / session.canvasHeight
                   const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
 
                   if (imageAspectRatio > canvasAspectRatio) {
@@ -471,7 +480,7 @@ function UploadPageContent() {
                 thumbnailUrl: existingImage.thumbnailUrl || photo.url,
                 printCount: photo.quantity || existingImage.printCount || 1,
                 outputUrl: photo.outputUrl || photo.url, // 保存最终成品URL，如果不存在则使用原图url作为默认值
-                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
+                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : defaultCropMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
                 isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
                 // 从服务器加载的照片，标记为已上传
                 uploadStatus: {
@@ -494,7 +503,7 @@ function UploadPageContent() {
 
               newImages.push({
                 id: photo.photoId,
-                specId: currentSession.specId,
+                specId: session.specId,
                 originalUrl: photo.url,
                 thumbnailUrl: photo.url,
                 filename: photo.photoId,
@@ -502,7 +511,7 @@ function UploadPageContent() {
                 width: photo.originalWidth,
                 height: photo.originalHeight,
                 printCount: photo.quantity || 1,
-                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : cropConfig.defaultMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
+                cropMode: photo.cropMode ? mapCropModeFromServer(photo.cropMode) : defaultCropMode, // 设置从服务端获取的cropMode，否则使用配置的默认模式
                 cropInfo: simpleCropInfo, // 使用从服务端转换的cropInfo
                 isLandscape: photo.isLandscape,
                 isAdjusted: photo.isAdjusted || false, // 🎯 设置是否已调整
@@ -520,12 +529,12 @@ function UploadPageContent() {
 
           // 批量更新已存在的图片
           if (imagesToUpdate.length > 0) {
-            updateImages(imagesToUpdate)
+            useStore.getState().updateImages(imagesToUpdate)
           }
 
           // 添加新图片
           if (newImages.length > 0) {
-            addImages(newImages)
+            useStore.getState().addImages(newImages)
           }
         }
       } catch (error) {
@@ -533,6 +542,7 @@ function UploadPageContent() {
           console.error('从服务器加载照片失败:', error)
         }
       } finally {
+        photosFetchInFlightRef.current = false
         if (!cancelled) {
           setIsLoadingPhotos(false)
         }
@@ -542,9 +552,14 @@ function UploadPageContent() {
     loadPhotosFromServer()
     return () => {
       cancelled = true
-      loadedRef.current = false
+      photosFetchInFlightRef.current = false
     }
-  }, [currentSession, hasHydrated, lastFetchTime]) // 🎯 添加 lastFetchTime，当 forceRefetch() 被调用时触发重新加载
+  }, [hasHydrated, sessionSpecId, photosListVersion])
+
+  // 切换规格时允许重新拉取
+  useEffect(() => {
+    photosSyncVersionRef.current = -1
+  }, [sessionSpecId])
 
   // 初始化获取 OSS 签名（静默预获取，不显示 loading）
   // 🎯 优化：静默获取，不影响用户体验。如果失败或还没完成，上传时会重新获取

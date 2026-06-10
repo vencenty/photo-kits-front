@@ -4,11 +4,9 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2, Crop, Image as ImageIcon, Frame } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
 import { buildOssCropUrl, buildWatermarkedOutputUrl, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
-import { createFullImageCropInfo } from '@/lib/date-watermark'
+import { attachCoverWatermarkSize, createFullImageCropInfo } from '@/lib/date-watermark'
 import {
   fetchOssExifDate,
-  DATE_WATERMARK_MARGIN_RATIO,
-  DATE_WATERMARK_SHORT_EDGE_RATIO,
   type DateWatermarkOptions,
 } from '@/lib/date-watermark'
 import type { CropMode, SimpleCropInfo } from '@/lib/types'
@@ -192,7 +190,8 @@ export default function ImageEditor({
   // EXIF 日期加载后，刷新 cover 模式的 outputUrl（补上水印）
   useEffect(() => {
     if (mode !== 'cover' || !coverCropInfo || !watermark) return
-    setCoverOutputUrl(buildWatermarkedOutputUrl(imageUrl, coverCropInfo, { watermark }))
+    const saveWatermark = attachCoverWatermarkSize(watermark, coverCropInfo)
+    setCoverOutputUrl(buildWatermarkedOutputUrl(imageUrl, coverCropInfo, { watermark: saveWatermark }))
   }, [mode, coverCropInfo, watermark, imageUrl])
 
   // Cover 模式裁剪变化回调
@@ -247,7 +246,9 @@ export default function ImageEditor({
             height: (cropHeight / sourceSize.height) * 100,
           },
         }
-        outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, { watermark })
+        outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, {
+          watermark: attachCoverWatermarkSize(watermark, cropInfo),
+        })
       }
     } else {
       // full 或 lomo 模式（使用整张图片，不需要 croppedAreaPercent）
@@ -317,7 +318,7 @@ export default function ImageEditor({
       case 'full':
         return '打印整图模式：图片完整显示'
       case 'lomo':
-        return '四周留白模式：图片完整显示，四周有等比例白边'
+        return '四周留白模式：图片完整显示，四周有白边'
     }
   }
 
@@ -358,19 +359,6 @@ export default function ImageEditor({
             </div>
           )}
           {renderEditor()}
-          {dateWatermarkEnabled && dateWatermarkText && mode === 'cover' && (
-            <div
-              className="absolute z-20 text-white font-medium pointer-events-none leading-none"
-              style={{
-                right: `${DATE_WATERMARK_MARGIN_RATIO * 100}%`,
-                bottom: `${DATE_WATERMARK_MARGIN_RATIO * 100}%`,
-                fontSize: `${DATE_WATERMARK_SHORT_EDGE_RATIO * 100}cqmin`,
-                textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-              }}
-            >
-              {dateWatermarkText}
-            </div>
-          )}
         </div>
       </div>
 

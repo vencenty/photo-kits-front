@@ -1,33 +1,59 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import Cropper from 'react-easy-crop'
 import type { Area, Point } from 'react-easy-crop'
 import { buildOssCropUrl, buildWatermarkedOutputUrl } from '@/lib/image-config'
-import type { DateWatermarkOptions } from '@/lib/date-watermark'
+import {
+  attachCoverWatermarkSize,
+  DATE_WATERMARK_COLOR,
+  DATE_WATERMARK_MARGIN_RATIO,
+  DATE_WATERMARK_SHORT_EDGE_RATIO,
+  type DateWatermarkOptions,
+} from '@/lib/date-watermark'
 import { calculateCoverCropSize } from '@/lib/utils'
 import type { SimpleCropInfo } from '@/lib/types'
+
+/** 与 cropAreaStyle 的 border 宽度一致，水印落在网格内侧 */
+const CROP_AREA_BORDER_PX = 8
 
 interface CoverModeEditorProps {
   imageUrl: string
   imageId: string
-  sourceWidth: number   // 原图宽度（用于计算真实裁剪坐标）
-  sourceHeight: number  // 原图高度（用于计算真实裁剪坐标）
+  sourceWidth: number
+  sourceHeight: number
   paperAspectRatio: number
   imageCompressOptions: { quality: number; format: string; interlace: number }
   onCropChange: (cropInfo: SimpleCropInfo | null, outputUrl: string) => void
-  /** 初始裁剪信息（用于恢复之前的裁剪位置） */
   initialCropInfo?: SimpleCropInfo | null
-  /** 编辑用缩略图短边尺寸（默认 800px，加载更快） */
   thumbnailShortEdge?: number
-  /** 日期水印（保存 outputUrl 时拼接 OSS watermark） */
   watermark?: DateWatermarkOptions
 }
 
-/**
- * Cover 模式编辑器 - 满版裁剪
- * 使用 react-easy-crop 实现拖拽裁剪
- */
+interface CropAreaLayout {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/** 读取 react-easy-crop 真实裁剪框在容器内的位置（比纯数学推算更准确） */
+function readCropAreaLayout(container: HTMLElement): CropAreaLayout | null {
+  const cropEl = container.querySelector<HTMLElement>('.reactEasyCrop_CropArea')
+  if (!cropEl) return null
+
+  const containerRect = container.getBoundingClientRect()
+  const cropRect = cropEl.getBoundingClientRect()
+  const inset = CROP_AREA_BORDER_PX
+
+  return {
+    left: cropRect.left - containerRect.left + inset,
+    top: cropRect.top - containerRect.top + inset,
+    width: Math.max(0, cropRect.width - inset * 2),
+    height: Math.max(0, cropRect.height - inset * 2),
+  }
+}
+
 export function CoverModeEditor({
   imageUrl,
   imageId,
@@ -37,36 +63,37 @@ export function CoverModeEditor({
   imageCompressOptions,
   onCropChange,
   initialCropInfo,
-  thumbnailShortEdge = 800,  // 默认短边 800px，平衡清晰度和加载速度
+  thumbnailShortEdge = 800,
   watermark,
 }: CoverModeEditorProps) {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
-  const [croppedAreaPercent, setCroppedAreaPercent] = useState<Area | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [cropAreaLayout, setCropAreaLayout] = useState<CropAreaLayout | null>(null)
 
-  // 根据图片方向动态调整裁剪框比例（提前计算，供后面使用）
   const cropAspectRatio = useMemo(() => {
     if (!sourceWidth || !sourceHeight) return paperAspectRatio
     const imageRatio = sourceWidth / sourceHeight
     const isImageLandscape = imageRatio > 1
     const isPaperLandscape = paperAspectRatio > 1
-    // 如果图片和相纸方向不一致，反转相纸比例
     if ((isImageLandscape && !isPaperLandscape) || (!isImageLandscape && isPaperLandscape)) {
       return 1 / paperAspectRatio
     }
     return paperAspectRatio
   }, [sourceWidth, sourceHeight, paperAspectRatio])
 
-  // 用于恢复之前的裁剪位置（官方推荐使用百分比坐标）
-  // 如果没有保存的位置，计算默认居中的百分比坐标
+  const syncCropAreaLayout = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const layout = readCropAreaLayout(el)
+    if (layout) setCropAreaLayout(layout)
+  }, [])
+
   const initialCroppedAreaPercentages = useMemo(() => {
-    // 优先使用保存的百分比坐标
     if (initialCropInfo?.croppedAreaPercent) {
       return initialCropInfo.croppedAreaPercent
     }
-    
-    // 没有保存的位置时，计算默认居中的百分比坐标
+
     if (sourceWidth && sourceHeight) {
       const { cropWidth, cropHeight } = calculateCoverCropSize(sourceWidth, sourceHeight, cropAspectRatio)
       const offsetX = (sourceWidth - cropWidth) / 2
@@ -78,33 +105,52 @@ export function CoverModeEditor({
         height: (cropHeight / sourceHeight) * 100,
       }
     }
-    
+
     return undefined
   }, [initialCropInfo, sourceWidth, sourceHeight, cropAspectRatio])
 
-  // 生成唯一 key，确保在 imageId 或 initialCropInfo 变化时组件重新挂载
   const cropperKey = useMemo(() => {
     if (initialCropInfo?.croppedAreaPercent) {
       const { x, y } = initialCropInfo.croppedAreaPercent
       return `cropper-${imageId}-${x.toFixed(2)}-${y.toFixed(2)}`
     }
-    // 没有保存的位置时，使用 imageId 作为 key，确保切换图片时重新渲染
     return `cropper-${imageId}-center`
   }, [imageId, initialCropInfo])
 
-  const onCropComplete = useCallback((area: Area, areaPixels: Area) => {
-    setCroppedAreaPercent(area)
-    setCroppedAreaPixels(areaPixels)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
 
-    // 🎯 关键：使用百分比坐标计算原图的像素坐标
-    // 这样无论在缩略图还是原图上操作，得到的原图裁剪坐标都是准确的
+    syncCropAreaLayout()
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(syncCropAreaLayout)
+    })
+    observer.observe(el)
+
+    const mutationObserver = new MutationObserver(() => {
+      requestAnimationFrame(syncCropAreaLayout)
+    })
+    mutationObserver.observe(el, { childList: true, subtree: true, attributes: true })
+
+    return () => {
+      observer.disconnect()
+      mutationObserver.disconnect()
+    }
+  }, [syncCropAreaLayout, cropperKey])
+
+  const emitCropChange = useCallback((cropInfo: SimpleCropInfo) => {
+    const saveWatermark = attachCoverWatermarkSize(watermark, cropInfo)
+    const outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, { watermark: saveWatermark })
+    onCropChange(cropInfo, outputUrl)
+  }, [imageUrl, onCropChange, watermark])
+
+  const onCropComplete = useCallback((area: Area, _areaPixels: Area) => {
     const offsetX = Math.round((area.x / 100) * sourceWidth)
     const offsetY = Math.round((area.y / 100) * sourceHeight)
     const cropWidth = Math.round((area.width / 100) * sourceWidth)
     const cropHeight = Math.round((area.height / 100) * sourceHeight)
 
-    // 生成裁剪信息（基于原图尺寸）
-    const cropInfo: SimpleCropInfo = {
+    emitCropChange({
       offsetX,
       offsetY,
       cropWidth,
@@ -113,58 +159,30 @@ export function CoverModeEditor({
       sourceHeight,
       styleType: 'cover',
       croppedAreaPercent: area,
-    }
-    const outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, { watermark })
-    onCropChange(cropInfo, outputUrl)
-  }, [imageUrl, sourceWidth, sourceHeight, onCropChange, watermark])
+    })
+    requestAnimationFrame(syncCropAreaLayout)
+  }, [sourceWidth, sourceHeight, emitCropChange, syncCropAreaLayout])
+
+  const handleCropChange = useCallback((point: Point) => {
+    setCrop(point)
+    requestAnimationFrame(syncCropAreaLayout)
+  }, [syncCropAreaLayout])
 
   const cropperStyle = useMemo(() => ({
     containerStyle: { backgroundColor: 'black' },
     mediaStyle: { backgroundColor: '#ffffff' },
-    cropAreaStyle: { 
-      // 斜线条纹警示边框（斑马线效果）
-      border: '8px solid transparent',
+    cropAreaStyle: {
+      border: `${CROP_AREA_BORDER_PX}px solid transparent`,
       borderImage: `repeating-linear-gradient(
         -45deg,
         #ef4444,
         #ef4444 2px,
          rgba(239, 68, 68, 0.2) 2px,
          rgba(239, 68, 68, 0.2) 4px
-      ) 8`,
+      ) ${CROP_AREA_BORDER_PX}`,
     },
-    // padding: '8px',
   }), [])
 
-  // 获取默认裁剪信息（用于首次保存时还没有拖动的情况）
-  const getDefaultCropInfo = useCallback((): SimpleCropInfo => {
-    if (croppedAreaPixels && croppedAreaPercent) {
-      return {
-        offsetX: Math.round(croppedAreaPixels.x),
-        offsetY: Math.round(croppedAreaPixels.y),
-        cropWidth: Math.round(croppedAreaPixels.width),
-        cropHeight: Math.round(croppedAreaPixels.height),
-        sourceWidth,
-        sourceHeight,
-        styleType: 'cover',
-        croppedAreaPercent,
-      }
-    }
-    // 默认满版裁剪
-    const { cropWidth, cropHeight } = calculateCoverCropSize(sourceWidth, sourceHeight, cropAspectRatio)
-    const offsetX = (sourceWidth - cropWidth) / 2
-    const offsetY = (sourceHeight - cropHeight) / 2
-    return {
-      offsetX: Math.round(offsetX),
-      offsetY: Math.round(offsetY),
-      cropWidth: Math.round(cropWidth),
-      cropHeight: Math.round(cropHeight),
-      sourceWidth,
-      sourceHeight,
-      styleType: 'cover',
-    }
-  }, [croppedAreaPixels, croppedAreaPercent, sourceWidth, sourceHeight, cropAspectRatio])
-
-  // 构建编辑用缩略图 URL（短边缩放 + 质量压缩）
   const thumbnailUrl = useMemo(() => {
     return buildOssCropUrl(imageUrl, undefined, {
       shortWidth: thumbnailShortEdge,
@@ -173,22 +191,50 @@ export function CoverModeEditor({
   }, [imageUrl, thumbnailShortEdge, imageCompressOptions])
 
   return (
-    <Cropper
-      key={cropperKey}
-      image={thumbnailUrl}
-      crop={crop}
-      zoom={zoom}
-      aspect={cropAspectRatio}
-      minZoom={1}
-      maxZoom={1}
-      restrictPosition
-      showGrid
-      objectFit="contain"
-      onCropChange={setCrop}
-      onZoomChange={setZoom}
-      onCropComplete={onCropComplete}
-      style={cropperStyle}
-      initialCroppedAreaPercentages={initialCroppedAreaPercentages}
-    />
+    <div ref={containerRef} className="absolute inset-0">
+      <Cropper
+        key={cropperKey}
+        image={thumbnailUrl}
+        crop={crop}
+        zoom={zoom}
+        aspect={cropAspectRatio}
+        minZoom={1}
+        maxZoom={1}
+        restrictPosition
+        showGrid
+        objectFit="contain"
+        onCropChange={handleCropChange}
+        onZoomChange={setZoom}
+        onCropComplete={onCropComplete}
+        onMediaLoaded={() => requestAnimationFrame(syncCropAreaLayout)}
+        style={cropperStyle}
+        initialCroppedAreaPercentages={initialCroppedAreaPercentages}
+      />
+      {/* 预览水印：固定在裁剪框内侧右下角，比例与留白/OSS 保存一致 */}
+      {watermark?.text && cropAreaLayout && cropAreaLayout.width > 0 && cropAreaLayout.height > 0 && (
+        <div
+          className="absolute pointer-events-none z-[5] [container-type:size]"
+          style={{
+            left: cropAreaLayout.left,
+            top: cropAreaLayout.top,
+            width: cropAreaLayout.width,
+            height: cropAreaLayout.height,
+          }}
+        >
+          <span
+            className="absolute font-medium leading-none whitespace-nowrap"
+            style={{
+              right: `${DATE_WATERMARK_MARGIN_RATIO * 100}%`,
+              bottom: `${DATE_WATERMARK_MARGIN_RATIO * 100}%`,
+              fontSize: `${DATE_WATERMARK_SHORT_EDGE_RATIO * 100}cqmin`,
+              color: `#${DATE_WATERMARK_COLOR}`,
+              textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+            }}
+          >
+            {watermark.text}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }

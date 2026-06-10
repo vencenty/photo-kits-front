@@ -5,12 +5,15 @@ import { useSearchParams } from 'next/navigation'
 import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useStore, type SimpleCropInfo, type Image } from '@/lib/store'
+import { useStore, type SimpleCropInfo, type Image, type Session } from '@/lib/store'
 import ImageEditor from '@/components/ImageEditor'
-import { updatePhoto, getPhotoDetail, listPhotos } from '@/lib/api'
+import { updatePhoto, getPhotoDetail, listPhotos, getOrderDetail } from '@/lib/api'
 import { mapCropModeToServer, mapCropModeFromServer } from '@/lib/utils'
 import { buildOssCropUrl } from '@/lib/image-config'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
+import { setActiveOrderNo } from '@/lib/order-context'
+import { preloadCatalog, getCropConfigForSku } from '@/lib/catalog'
+import { getSpecWatermarkPref } from '@/lib/spec-watermark-prefs'
 
 function EditPageContent() {
   const router = useShopRouter()
@@ -19,28 +22,24 @@ function EditPageContent() {
   const filter = searchParams.get('filter') // 🎯 读取过滤参数：'unadjusted' 表示只浏览未调整的图片
 
   const currentSession = useStore((state) => state.currentSession)
+  const setCurrentSession = useStore((state) => state.setCurrentSession)
   // 🚀 乐观更新：获取 store 方法
   const updateImage = useStore((state) => state.updateImage)
   const forceRefetch = useStore((state) => state.forceRefetch)
   const hasHydrated = useStore((state) => state._hasHydrated)
   // 获取所有图片列表（用于上一张/下一张导航）
   const allImages = useStore((state) => state.images)
-  const addImages = useStore((state) => state.addImages)
-  const updateImages = useStore((state) => state.updateImages)
-
   const [image, setImage] = useState<Image | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isOrderLocked, setIsOrderLocked] = useState(false)
-  const [imagesLoaded, setImagesLoaded] = useState(false) // 标记是否已加载图片列表
   const [currentImageId, setCurrentImageId] = useState<string | null>(imageId)
-  const detailFetchIdRef = useRef<string>('')
+  const loadGenerationRef = useRef(0)
+  const listFetchedSpecRef = useRef<number | null>(null)
 
   const buildImageFromPhoto = useCallback((
     photo: Awaited<ReturnType<typeof getPhotoDetail>>['photo'],
+    session: Session,
     orderStatus?: number,
   ): Image | null => {
-    if (!currentSession) return null
-
     const getInitialMode = (): 'cover' | 'full' | 'lomo' => {
       const cropMode = photo.cropMode ? mapCropModeFromServer(photo.cropMode) : 'cover'
       return cropMode
@@ -48,13 +47,13 @@ function EditPageContent() {
     const initialMode = getInitialMode()
 
     let simpleCropInfo: SimpleCropInfo | undefined
-    if (photo.cropInfo && currentSession) {
+    if (photo.cropInfo) {
       let cropWidth = photo.cropInfo.cropWidth || photo.cropInfo.sourceWidth
       let cropHeight = photo.cropInfo.cropHeight || photo.cropInfo.sourceHeight
 
       if (!photo.cropInfo.cropWidth || !photo.cropInfo.cropHeight) {
         if (photo.cropInfo.styleType === 'cover') {
-          const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+          const canvasAspectRatio = session.canvasWidth / session.canvasHeight
           const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
 
           if (imageAspectRatio > canvasAspectRatio) {
@@ -92,14 +91,14 @@ function EditPageContent() {
       setIsOrderLocked(locked)
       if (locked) {
         alert('订单已锁单，无法编辑照片。如需修改，请联系客服。')
-        router.push(`/upload?specId=${currentSession.specId}`)
+        router.push(`/upload?specId=${session.specId}`)
         return null
       }
     }
 
     return {
       id: photo.photoId,
-      specId: currentSession.specId,
+      specId: session.specId,
       originalUrl: photo.url,
       thumbnailUrl: photo.url,
       filename: `photo-${photo.photoId}`,
@@ -114,14 +113,14 @@ function EditPageContent() {
         x: 0,
         y: 0,
         rotation: photo.isLandscape ? 90 : 0,
-        canvasWidth: currentSession.canvasWidth || 127,
-        canvasHeight: currentSession.canvasHeight || 89,
+        canvasWidth: session.canvasWidth || 127,
+        canvasHeight: session.canvasHeight || 89,
       },
       cropInfo: simpleCropInfo,
       outputUrl: photo.outputUrl || photo.url,
       isAdjusted: photo.isAdjusted || false,
     }
-  }, [currentSession, router])
+  }, [router])
 
   const isStoreImageReady = useCallback((img: Image | undefined): img is Image => {
     return !!(img?.originalUrl && img.width && img.height)
@@ -146,42 +145,113 @@ function EditPageContent() {
   const hasPrevious = currentIndex > 0
   const hasNext = currentIndex >= 0 && currentIndex < images.length - 1
 
-  // 切换照片：优先 store，缺失时再请求 detail（每张最多一次）
+  const sessionSpecId = currentSession?.specId
+
+  // 刷新 / 直链进入：无 session 时根据照片详情恢复规格上下文
   useEffect(() => {
+    if (!hasHydrated || !imageId) return
+    if (useStore.getState().currentSession) return
+
+    let cancelled = false
+
+    const restoreSession = async () => {
+      try {
+        const detail = await getPhotoDetail(imageId)
+        if (cancelled) return
+
+        setActiveOrderNo(detail.orderNo)
+        await preloadCatalog().catch(() => null)
+
+        const order = await getOrderDetail(undefined, false)
+        if (cancelled) return
+
+        const spec = order.specs?.find((s) => s.id === detail.photo.specId)
+        if (!spec) {
+          router.push('/')
+          return
+        }
+
+        const crop = getCropConfigForSku(spec.skuId)
+        setCurrentSession({
+          specId: spec.id,
+          skuId: spec.skuId,
+          orderNo: detail.orderNo,
+          sizeName: `${spec.paperName} ${spec.sizeName}`,
+          targetCount: 0,
+          currentCount: spec.photoCount || 0,
+          canvasWidth: spec.canvasWidth,
+          canvasHeight: spec.canvasHeight,
+          unit: '毫米',
+          ratio: spec.canvasWidth / spec.canvasHeight,
+          cropDefaultMode: crop.defaultMode,
+          cropAvailableModes: crop.availableModes,
+          dateWatermarkEnabled: getSpecWatermarkPref(detail.orderNo, spec.id),
+          createdAt: new Date().toISOString(),
+        })
+      } catch (error) {
+        if (cancelled) return
+        console.error('恢复编辑会话失败:', error)
+        router.push('/')
+      }
+    }
+
+    restoreSession()
+    return () => {
+      cancelled = true
+    }
+  }, [hasHydrated, imageId, setCurrentSession, router])
+
+  // 列表加载进 store 后，优先用 store 中的完整图片数据
+  useEffect(() => {
+    if (!hasHydrated) return
     const targetImageId = currentImageId || imageId
-    if (!targetImageId || !currentSession) return
+    const session = useStore.getState().currentSession
+    if (!targetImageId || !session) return
 
     const storeImage = allImages.find(
-      (img) => img.id === targetImageId && img.specId === currentSession.specId,
+      (img) => img.id === targetImageId && img.specId === session.specId,
     )
-
     if (isStoreImageReady(storeImage)) {
-      detailFetchIdRef.current = targetImageId
       setImage(storeImage)
-      setIsLoading(false)
+    }
+  }, [hasHydrated, allImages, currentImageId, imageId, sessionSpecId, isStoreImageReady])
+
+  // 切换照片：优先 store，缺失时请求 detail（被打断后可重试，不用 ref 卡死）
+  useEffect(() => {
+    const targetImageId = currentImageId || imageId
+    if (!hasHydrated || !targetImageId) return
+
+    const session = useStore.getState().currentSession
+    if (!session) return
+
+    const storeImage = useStore.getState().images.find(
+      (img) => img.id === targetImageId && img.specId === session.specId,
+    )
+    if (isStoreImageReady(storeImage)) {
+      setImage(storeImage)
       return
     }
 
-    if (detailFetchIdRef.current === targetImageId) return
-    detailFetchIdRef.current = targetImageId
-
+    const generation = ++loadGenerationRef.current
     let cancelled = false
+
     const loadPhotoData = async () => {
       try {
-        setIsLoading(true)
         const response = await getPhotoDetail(targetImageId)
-        if (cancelled) return
+        if (cancelled || generation !== loadGenerationRef.current) return
 
-        const photoData = buildImageFromPhoto(response.photo, response.orderStatus)
+        const liveSession = useStore.getState().currentSession
+        if (!liveSession) return
+
+        const photoData = buildImageFromPhoto(response.photo, liveSession, response.orderStatus)
         if (photoData) {
           setImage(photoData)
         }
       } catch (error) {
-        if (cancelled) return
+        if (cancelled || generation !== loadGenerationRef.current) return
         console.error('获取图片详情失败:', error)
-        router.push(`/upload?specId=${currentSession.specId}`)
-      } finally {
-        if (!cancelled) setIsLoading(false)
+        const specId = useStore.getState().currentSession?.specId
+        router.push(specId ? `/upload?specId=${specId}` : '/')
       }
     }
 
@@ -189,29 +259,39 @@ function EditPageContent() {
     return () => {
       cancelled = true
     }
-  }, [currentImageId, imageId, currentSession?.specId, allImages, buildImageFromPhoto, isStoreImageReady, router])
+  }, [hasHydrated, currentImageId, imageId, sessionSpecId, buildImageFromPhoto, isStoreImageReady, router])
 
-  // 🚀 如果 images 为空（刷新后），从后端加载图片列表
+  // 🚀 如果 images 为空（刷新后），从后端加载图片列表（每个 spec 只拉一次）
   useEffect(() => {
-    if (!hasHydrated || !currentSession || imagesLoaded) return
-    if (images.length > 0) {
-      // 如果已有图片，不需要加载
-      setImagesLoaded(true)
+    if (!hasHydrated || !sessionSpecId) return
+    if (listFetchedSpecRef.current === sessionSpecId) return
+
+    const hasSpecImages = useStore.getState().images.some(
+      (img) => img.specId === sessionSpecId && (img.thumbnailUrl || img.originalUrl),
+    )
+    if (hasSpecImages) {
+      listFetchedSpecRef.current = sessionSpecId
       return
     }
 
+    listFetchedSpecRef.current = sessionSpecId
+    let cancelled = false
+
     const loadImagesList = async () => {
       try {
-        const specId = currentSession.specId
+        const specId = sessionSpecId
+        const session = useStore.getState().currentSession
+        if (!session || session.specId !== specId) return
 
         console.log('🔄 编辑页刷新后，从后端加载图片列表...')
         const result = await listPhotos(specId)
+        if (cancelled) return
         
         if (result.photos && result.photos.length > 0) {
           const latestImages = useStore.getState().images
           const existingImagesMap = new Map(
             latestImages
-              .filter(img => img.specId === currentSession.specId)
+              .filter(img => img.specId === session.specId)
               .map(img => [img.id, img])
           )
 
@@ -228,8 +308,8 @@ function EditPageContent() {
               let cropHeight = photo.cropInfo.cropHeight || photo.cropInfo.sourceHeight
 
               if (!photo.cropInfo.cropWidth || !photo.cropInfo.cropHeight) {
-                if (photo.cropInfo.styleType === 'cover' && currentSession) {
-                  const canvasAspectRatio = currentSession.canvasWidth / currentSession.canvasHeight
+                if (photo.cropInfo.styleType === 'cover') {
+                  const canvasAspectRatio = session.canvasWidth / session.canvasHeight
                   const imageAspectRatio = photo.cropInfo.sourceWidth / photo.cropInfo.sourceHeight
 
                   if (imageAspectRatio > canvasAspectRatio) {
@@ -257,7 +337,7 @@ function EditPageContent() {
 
             const imageData: Image = {
               id: photo.photoId,
-              specId: currentSession.specId,
+              specId: session.specId,
               originalUrl: photo.url,
               thumbnailUrl: photo.url,
               filename: `photo-${photo.photoId}`,
@@ -302,24 +382,26 @@ function EditPageContent() {
 
           // 批量更新和添加
           if (imagesToUpdate.length > 0) {
-            updateImages(imagesToUpdate)
+            useStore.getState().updateImages(imagesToUpdate)
           }
           if (newImages.length > 0) {
-            addImages(newImages)
+            useStore.getState().addImages(newImages)
           }
           
-          setImagesLoaded(true)
           console.log('✅ 图片列表加载完成:', { 新增: newImages.length, 更新: imagesToUpdate.length })
         }
       } catch (error) {
-        console.error('加载图片列表失败:', error)
-        // 即使失败也标记为已加载，避免重复请求
-        setImagesLoaded(true)
+        if (!cancelled) {
+          console.error('加载图片列表失败:', error)
+        }
       }
     }
 
     loadImagesList()
-  }, [hasHydrated, currentSession, images.length, imagesLoaded, addImages])
+    return () => {
+      cancelled = true
+    }
+  }, [hasHydrated, sessionSpecId])
 
   const handleSave = async (saveData: { cropInfo: SimpleCropInfo | undefined, outputUrl: string }) => {
     // 检查订单是否已锁单
@@ -433,7 +515,7 @@ function EditPageContent() {
   const handlePrevious = () => {
     if (hasPrevious) {
       const prevImage = images[currentIndex - 1]
-      detailFetchIdRef.current = ''
+      loadGenerationRef.current += 1
       // 只更新 URL 参数（用于浏览器历史记录），但不触发页面重新加载
       const url = filter 
         ? `/edit?imageId=${prevImage.id}&filter=${filter}`
@@ -448,7 +530,7 @@ function EditPageContent() {
   const handleNext = () => {
     if (hasNext) {
       const nextImage = images[currentIndex + 1]
-      detailFetchIdRef.current = ''
+      loadGenerationRef.current += 1
       // 只更新 URL 参数（用于浏览器历史记录），但不触发页面重新加载
       const url = filter 
         ? `/edit?imageId=${nextImage.id}&filter=${filter}`
@@ -463,14 +545,14 @@ function EditPageContent() {
   // 🚀 优化：当 URL 中的 imageId 变化时（比如直接访问或刷新），同步更新 currentImageId
   useEffect(() => {
     if (imageId && imageId !== currentImageId) {
-      detailFetchIdRef.current = ''
+      loadGenerationRef.current += 1
       setCurrentImageId(imageId)
     }
   }, [imageId, currentImageId])
 
   const dateWatermarkEnabled = currentSession?.dateWatermarkEnabled ?? false
 
-  if (isLoading || !image || !currentSession) {
+  if (!hasHydrated || !currentSession || !image) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-white animate-spin" />
