@@ -23,8 +23,21 @@ import {
 } from './order-context'
 import { getShopHeaders } from './shop-context'
 
-// API 基础配置
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
+// API 基础配置（开发环境局域网访问时，自动使用当前主机名 + 9999 端口）
+function getApiBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
+  if (process.env.NODE_ENV === 'production') {
+    return configured
+  }
+  if (typeof window !== 'undefined') {
+    const { hostname, protocol } = window.location
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      const apiPort = process.env.NEXT_PUBLIC_API_PORT || '9999'
+      return `${protocol}//${hostname}:${apiPort}`
+    }
+  }
+  return configured
+}
 
 // 统一响应类型
 interface ApiResponse<T> {
@@ -59,7 +72,7 @@ async function request<T>(url: string, config: RequestConfig = {}): Promise<T> {
   const { params, silent = false, skipOrderContext = false, ...init } = config
 
   // 构建完整 URL
-  let fullUrl = `${API_BASE_URL}${url}`
+  let fullUrl = `${getApiBaseUrl()}${url}`
   if (params) {
     const searchParams = new URLSearchParams(params)
     fullUrl += `?${searchParams.toString()}`

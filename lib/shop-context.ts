@@ -1,5 +1,5 @@
 /**
- * 店铺上下文：仅从 URL ?code= 解析，无兜底。
+ * 店铺上下文：从 URL ?code= 解析，无兜底。
  * 请求通过 X-Shop-Code 识别店铺，服务端内部仍用 shop_id。
  */
 
@@ -11,7 +11,7 @@ export function isValidShopCode(code: string | null | undefined): code is string
   return v.length >= 3 && v.length <= 32 && /^[a-zA-Z0-9]+$/.test(v)
 }
 
-/** 从 query string 读取店铺 code（SSR 可传入 search） */
+/** 从 query string 读取店铺 code */
 export function readShopCodeFromSearch(search: string): string {
   const v = new URLSearchParams(search).get(SHOP_CODE_QUERY_KEY)
   return isValidShopCode(v) ? v.trim() : ''
