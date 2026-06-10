@@ -3,7 +3,8 @@
 import { useState, useCallback, useMemo } from 'react'
 import Cropper from 'react-easy-crop'
 import type { Area, Point } from 'react-easy-crop'
-import { buildOssCropUrl } from '@/lib/image-config'
+import { buildOssCropUrl, buildWatermarkedOutputUrl } from '@/lib/image-config'
+import type { DateWatermarkOptions } from '@/lib/date-watermark'
 import { calculateCoverCropSize } from '@/lib/utils'
 import type { SimpleCropInfo } from '@/lib/types'
 
@@ -19,6 +20,8 @@ interface CoverModeEditorProps {
   initialCropInfo?: SimpleCropInfo | null
   /** 编辑用缩略图短边尺寸（默认 800px，加载更快） */
   thumbnailShortEdge?: number
+  /** 日期水印（保存 outputUrl 时拼接 OSS watermark） */
+  watermark?: DateWatermarkOptions
 }
 
 /**
@@ -35,6 +38,7 @@ export function CoverModeEditor({
   onCropChange,
   initialCropInfo,
   thumbnailShortEdge = 800,  // 默认短边 800px，平衡清晰度和加载速度
+  watermark,
 }: CoverModeEditorProps) {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
@@ -110,9 +114,9 @@ export function CoverModeEditor({
       styleType: 'cover',
       croppedAreaPercent: area,
     }
-    const outputUrl = buildOssCropUrl(imageUrl, cropInfo)
+    const outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, { watermark })
     onCropChange(cropInfo, outputUrl)
-  }, [imageUrl, sourceWidth, sourceHeight, onCropChange])
+  }, [imageUrl, sourceWidth, sourceHeight, onCropChange, watermark])
 
   const cropperStyle = useMemo(() => ({
     containerStyle: { backgroundColor: 'black' },

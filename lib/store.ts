@@ -57,15 +57,23 @@ export const useStore = create<StoreState>()(
       // Images
       images: [],
       addImages: (newImages) =>
-        set((state) => ({
-          images: [...state.images, ...newImages],
-          currentSession: state.currentSession
-            ? {
-                ...state.currentSession,
-                currentCount: state.images.length + newImages.length,
-              }
-            : null,
-        })),
+        set((state) => {
+          const existingIds = new Set(state.images.map((img) => img.id))
+          const toAdd = newImages.filter((img) => !existingIds.has(img.id))
+          if (toAdd.length === 0) return state
+          const merged = [...state.images, ...toAdd]
+          return {
+            images: merged,
+            currentSession: state.currentSession
+              ? {
+                  ...state.currentSession,
+                  currentCount: merged.filter(
+                    (img) => img.specId === state.currentSession!.specId,
+                  ).length,
+                }
+              : null,
+          }
+        }),
       updateImage: (id, updates) =>
         set((state) => ({
           images: state.images.map((img) =>

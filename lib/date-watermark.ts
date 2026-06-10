@@ -1,0 +1,155 @@
+import { stripOssImageProcessFromUrl } from './image-config'
+import type { CropMode, SimpleCropInfo } from './types'
+
+/** OSS image/info 返回的 EXIF 字段 */
+interface OssInfoField {
+  value?: string
+}
+
+interface OssImageInfo {
+  DateTimeOriginal?: OssInfoField
+  DateTime?: OssInfoField
+}
+
+// ── 日期水印视觉参数（改这里即可，保存热更新后编辑页/留白/整图 OSS 预览与冲印 outputUrl 同步）──
+/** 距画面右、下边距（占输出图宽/高比例） */
+export const DATE_WATERMARK_MARGIN_RATIO = 0.05
+/** 字号 = 输出图短边 × 此比例（如 0.05 = 短边 5%） */
+export const DATE_WATERMARK_SHORT_EDGE_RATIO = 0.05
+
+const DATE_WATERMARK_MIN_SIZE = 10
+
+/**
+ * 将 EXIF 日期字符串格式化为简单日期水印文本
+ * 例：2023:09:10 10:20:02 → 2023/09/10
+ */
+export function formatShootDate(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const datePart = trimmed.split(/\s+/)[0]
+  const m = datePart.match(/^(\d{4})[:\-/](\d{1,2})[:\-/](\d{1,2})/)
+  if (!m) return null
+  const y = m[1]
+  const mo = m[2].padStart(2, '0')
+  const d = m[3].padStart(2, '0')
+  return `${y}/${mo}/${d}`
+}
+
+/**
+ * 通过阿里云 OSS image/info 获取 EXIF 拍摄日期
+ */
+export async function fetchOssExifDate(originalUrl: string): Promise<string | null> {
+  if (!originalUrl || originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
+    return null
+  }
+  const base = stripOssImageProcessFromUrl(originalUrl)
+  const separator = base.includes('?') ? '&' : '?'
+  const infoUrl = `${base}${separator}x-oss-process=image/info`
+
+  try {
+    const res = await fetch(infoUrl)
+    if (!res.ok) return null
+    const data = (await res.json()) as OssImageInfo
+    const raw = data.DateTimeOriginal?.value || data.DateTime?.value
+    if (!raw) return null
+    return formatShootDate(raw)
+  } catch {
+    return null
+  }
+}
+
+/** OSS 水印文字 URL-safe Base64 编码 */
+export function encodeOssWatermarkText(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  bytes.forEach((b) => { binary += String.fromCharCode(b) })
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+export interface DateWatermarkOptions {
+  text: string
+  /** 水印施加时处理结果的宽高（与 OSS 链 crop/resize 之后一致） */
+  outputWidth?: number
+  outputHeight?: number
+}
+
+/** 留白/整图：用原图尺寸参与水印比例计算（不参与 OSS crop） */
+export function createFullImageCropInfo(
+  sourceWidth: number,
+  sourceHeight: number,
+  styleType: Extract<CropMode, 'lomo' | 'full'> = 'lomo',
+): SimpleCropInfo {
+  return {
+    offsetX: 0,
+    offsetY: 0,
+    cropWidth: sourceWidth,
+    cropHeight: sourceHeight,
+    sourceWidth,
+    sourceHeight,
+    styleType,
+  }
+}
+
+/**
+ * 推算 OSS 链在水印步骤时的输出尺寸（crop 后、resize,s_N 后）
+ */
+export function resolveWatermarkOutputSize(
+  cropInfo?: SimpleCropInfo,
+  shortWidth?: number,
+): { width: number; height: number } {
+  let w = 1200
+  let h = 1200
+
+  if (cropInfo?.styleType === 'cover' && cropInfo.cropWidth && cropInfo.cropHeight) {
+    w = cropInfo.cropWidth
+    h = cropInfo.cropHeight
+  } else if (cropInfo?.sourceWidth && cropInfo?.sourceHeight) {
+    w = cropInfo.sourceWidth
+    h = cropInfo.sourceHeight
+  }
+
+  if (!shortWidth || shortWidth <= 0) {
+    return { width: Math.round(w), height: Math.round(h) }
+  }
+
+  const short = Math.min(w, h)
+  if (short <= 0) {
+    return { width: Math.round(w), height: Math.round(h) }
+  }
+
+  const scale = shortWidth / short
+  return {
+    width: Math.round(w * scale),
+    height: Math.round(h * scale),
+  }
+}
+
+/** 字号：输出图短边 × 固定比例 */
+export function resolveDateWatermarkFontSize(outputWidth: number, outputHeight: number): number {
+  const shortEdge = Math.max(1, Math.min(outputWidth, outputHeight))
+  return Math.max(DATE_WATERMARK_MIN_SIZE, Math.round(shortEdge * DATE_WATERMARK_SHORT_EDGE_RATIO))
+}
+
+/** 边距：右、下各 5% 输出图宽/高（OSS g_se 锚点向内偏移） */
+export function resolveDateWatermarkOffset(outputWidth: number, outputHeight: number): { x: number; y: number } {
+  return {
+    x: Math.max(1, Math.round(outputWidth * DATE_WATERMARK_MARGIN_RATIO)),
+    y: Math.max(1, Math.round(outputHeight * DATE_WATERMARK_MARGIN_RATIO)),
+  }
+}
+
+/**
+ * 构建 OSS 日期水印处理段（不含 image/ 前缀）
+ * 放在 crop/resize 之后，锚点为处理结果图右下角（内容区域）
+ */
+export function buildDateWatermarkParam(options: DateWatermarkOptions): string {
+  const w = options.outputWidth ?? 1200
+  const h = options.outputHeight ?? 1200
+  const fontSize = resolveDateWatermarkFontSize(w, h)
+  const { x, y } = resolveDateWatermarkOffset(w, h)
+  const encoded = encodeOssWatermarkText(options.text)
+  return `watermark,text_${encoded},size_${fontSize},color_FFFFFF,g_se,t_88,x_${x},y_${y},shadow_50`
+}

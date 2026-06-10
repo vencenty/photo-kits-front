@@ -134,5 +134,7 @@ export interface Session {
   ratio: number
   cropDefaultMode?: CropMode
   cropAvailableModes?: CropMode[]
+  /** 客户是否选择添加 EXIF 日期水印（选规格/上传页开关） */
+  dateWatermarkEnabled?: boolean
   createdAt: string
 }

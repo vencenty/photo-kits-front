@@ -24,6 +24,7 @@ import {
   OssSignature
 } from '@/lib/api'
 import { getActiveOrderNo } from '@/lib/order-context'
+import { getSpecWatermarkPref, setSpecWatermarkPref } from '@/lib/spec-watermark-prefs'
 
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
@@ -70,12 +71,20 @@ function UploadPageContent() {
   const [isOrderLocked, setIsOrderLocked] = useState(false) // 订单是否已锁单
 
   const currentSession = useStore((state) => state.currentSession)
+  const setCurrentSession = useStore((state) => state.setCurrentSession)
   const hasHydrated = useStore((state) => state._hasHydrated)
   const allImages = useStore((state) => state.images)
-  const images = useMemo(
-    () => allImages.filter((img) => (img.thumbnailUrl || img.originalUrl) && img.specId === currentSession?.specId),
-    [allImages, currentSession?.specId]
-  )
+  const images = useMemo(() => {
+    const seen = new Set<string>()
+    return allImages.filter((img) => {
+      if (!(img.thumbnailUrl || img.originalUrl) || img.specId !== currentSession?.specId) {
+        return false
+      }
+      if (seen.has(img.id)) return false
+      seen.add(img.id)
+      return true
+    })
+  }, [allImages, currentSession?.specId])
   const imagesById = useMemo(() => new Map(images.map((img) => [img.id, img])), [images])
   const imageIndexById = useMemo(() => new Map(images.map((img, index) => [img.id, index])), [images])
   const addImages = useStore((state) => state.addImages)
@@ -150,7 +159,7 @@ function UploadPageContent() {
       // 如果容器还没有渲染，使用一个保守的估算值
       // 假设屏幕宽度约 375px（移动端），卡片宽度约 115px
       const estimatedCardWidth = 115
-      const estimatedCardHeight = estimatedCardWidth / paperRatio + 50 // 50px 包含编辑按钮和间距
+      const estimatedCardHeight = estimatedCardWidth / paperRatio + 62 // 数量条 + 调整按钮
       return estimatedCardHeight + ROW_GAP
     }
     
@@ -158,13 +167,13 @@ function UploadPageContent() {
     if (containerWidth <= 0) {
       // 容器宽度无效，使用保守估算
       const estimatedCardWidth = 115
-      const estimatedCardHeight = estimatedCardWidth / paperRatio + 50
+      const estimatedCardHeight = estimatedCardWidth / paperRatio + 62
       return estimatedCardHeight + ROW_GAP
     }
     
     const cardWidth = (containerWidth - GAP * (columns - 1)) / columns
-    // 卡片高度 = 图片区域（基于宽高比）+ 编辑按钮高度（py-2.5 ≈ 40px）+ 额外边距（10px）
-    const cardHeight = cardWidth / paperRatio + 50
+    // 卡片高度 = 图片区域 + 数量条 + 调整按钮
+    const cardHeight = cardWidth / paperRatio + 62
     return cardHeight + ROW_GAP
   }, [paperRatio, columns])
 
@@ -304,9 +313,31 @@ function UploadPageContent() {
     }
   }, [currentSession, routeSpecId, router, hasHydrated])
 
+  // 从本地偏好恢复客户选择的日期水印开关
+  useEffect(() => {
+    if (!hasHydrated || !currentSession) return
+    const orderNo = currentSession.orderNo || getActiveOrderNo()
+    if (!orderNo) return
+    const pref = getSpecWatermarkPref(orderNo, currentSession.specId)
+    if (currentSession.dateWatermarkEnabled !== pref) {
+      setCurrentSession({ ...currentSession, dateWatermarkEnabled: pref })
+    }
+  }, [hasHydrated, currentSession, setCurrentSession])
+
+  const handleToggleDateWatermark = useCallback(() => {
+    if (!currentSession || isOrderLocked) return
+    const orderNo = currentSession.orderNo || getActiveOrderNo()
+    if (!orderNo) return
+    const next = !currentSession.dateWatermarkEnabled
+    setSpecWatermarkPref(orderNo, currentSession.specId, next)
+    setCurrentSession({ ...currentSession, dateWatermarkEnabled: next })
+  }, [currentSession, isOrderLocked, setCurrentSession])
+
   // 从后端加载已上传的照片 - 智能缓存版本
   // 🎯 关键：添加 lastFetchTime 到依赖，当 forceRefetch() 被调用时触发重新加载
   useEffect(() => {
+    let cancelled = false
+
     const loadPhotosFromServer = async () => {
       if (!currentSession) return
       
@@ -371,10 +402,13 @@ function UploadPageContent() {
         // 更新最后获取时间
         setLastFetchTime(Date.now())
         
+        if (cancelled) return
+
         if (result.photos && result.photos.length > 0) {
-          // 获取当前 session 已有的图片
+          // 合并时用 store 最新快照，避免闭包 allImages 过期导致重复 addImages
+          const latestImages = useStore.getState().images
           const existingImagesMap = new Map(
-            allImages
+            latestImages
               .filter(img => img.specId === currentSession.specId)
               .map(img => [img.id, img])
           )
@@ -482,6 +516,8 @@ function UploadPageContent() {
             }
           })
 
+          if (cancelled) return
+
           // 批量更新已存在的图片
           if (imagesToUpdate.length > 0) {
             updateImages(imagesToUpdate)
@@ -493,13 +529,21 @@ function UploadPageContent() {
           }
         }
       } catch (error) {
-        console.error('从服务器加载照片失败:', error)
+        if (!cancelled) {
+          console.error('从服务器加载照片失败:', error)
+        }
       } finally {
-        setIsLoadingPhotos(false)
+        if (!cancelled) {
+          setIsLoadingPhotos(false)
+        }
       }
     }
 
     loadPhotosFromServer()
+    return () => {
+      cancelled = true
+      loadedRef.current = false
+    }
   }, [currentSession, hasHydrated, lastFetchTime]) // 🎯 添加 lastFetchTime，当 forceRefetch() 被调用时触发重新加载
 
   // 初始化获取 OSS 签名（静默预获取，不显示 loading）
@@ -1194,6 +1238,31 @@ function UploadPageContent() {
         </div>
       </div>
 
+      {/* 日期水印开关 */}
+      {currentSession && !isOrderLocked && (
+        <div className="desktop-container bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-800 md:text-base">日期水印</p>
+            <p className="text-xs text-gray-400 mt-0.5">编辑保存时从 EXIF 读取拍摄日期，叠加在照片右下角</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!!currentSession.dateWatermarkEnabled}
+            onClick={handleToggleDateWatermark}
+            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+              currentSession.dateWatermarkEnabled ? 'bg-[#ff4d6d]' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                currentSession.dateWatermarkEnabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      )}
+
       {/* 提示横幅 */}
       <div className="desktop-container bg-[#fff8f5] px-4 py-3 flex items-start gap-2">
         <span className="text-xl">🔥</span>
@@ -1343,45 +1412,48 @@ function UploadPageContent() {
                             </div>
                           )}
 
-                          {!isBatchMode && !isOrderLocked && (
-                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
-                              <div className="flex items-center bg-[#e8e8e8] rounded-full">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleCountChange(image.id, -1)
-                                  }}
-                                  className="w-7 h-7 md:w-6 md:h-6 flex items-center justify-center text-gray-600"
-                                >
-                                  <Minus className="w-4 h-4 md:w-3.5 md:h-3.5" />
-                                </button>
-                                <span className="w-6 md:w-5 text-center text-sm md:text-xs font-medium text-gray-700">
-                                  {image.printCount}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleCountChange(image.id, 1)
-                                  }}
-                                  className="w-7 h-7 md:w-6 md:h-6 flex items-center justify-center text-gray-600"
-                                >
-                                  <Plus className="w-4 h-4 md:w-3.5 md:h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* 锁定状态下显示数量，但不可编辑 */}
-                          {!isBatchMode && isOrderLocked && (
-                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
-                              <div className="flex items-center bg-[#e8e8e8] rounded-full px-3 py-1">
-                                <span className="text-sm font-medium text-gray-700">
-                                  ×{image.printCount}
-                                </span>
-                              </div>
-                            </div>
-                          )}
                         </div>
+
+                        {!isBatchMode && !isOrderLocked && (
+                          <div
+                            className="flex items-center justify-center py-1.5 bg-[#faf8f5] border-t border-gray-100"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center bg-[#e8e8e8] rounded-full">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleCountChange(image.id, -1)
+                                }}
+                                className="w-7 h-7 md:w-6 md:h-6 flex items-center justify-center text-gray-600"
+                              >
+                                <Minus className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                              </button>
+                              <span className="w-6 md:w-5 text-center text-sm md:text-xs font-medium text-gray-700">
+                                {image.printCount}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleCountChange(image.id, 1)
+                                }}
+                                className="w-7 h-7 md:w-6 md:h-6 flex items-center justify-center text-gray-600"
+                              >
+                                <Plus className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {!isBatchMode && isOrderLocked && (
+                          <div className="flex items-center justify-center py-1.5 bg-[#faf8f5] border-t border-gray-100">
+                            <div className="flex items-center bg-[#e8e8e8] rounded-full px-3 py-0.5">
+                              <span className="text-sm font-medium text-gray-700">
+                                ×{image.printCount}
+                              </span>
+                            </div>
+                          </div>
+                        )}
 
                         {!isBatchMode && !isOrderLocked && (
                           <button

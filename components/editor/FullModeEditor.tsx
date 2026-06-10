@@ -1,7 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
-import { buildOssCropUrl } from '@/lib/image-config'
+import { buildWatermarkedOutputUrl } from '@/lib/image-config'
+import { createFullImageCropInfo } from '@/lib/date-watermark'
+import type { DateWatermarkOptions } from '@/lib/date-watermark'
 
 interface FullModeEditorProps {
   imageUrl: string
@@ -15,6 +17,7 @@ interface FullModeEditorProps {
   imageCompressOptions: { quality: number; format: string; interlace: number }
   /** 编辑用缩略图短边尺寸（默认 800px） */
   thumbnailShortEdge?: number
+  watermark?: DateWatermarkOptions
 }
 
 /**
@@ -30,6 +33,7 @@ export function FullModeEditor({
   paperAspectRatio,
   imageCompressOptions,
   thumbnailShortEdge = 800,
+  watermark,
 }: FullModeEditorProps) {
   // 计算自适应画布比例：根据照片方向自动调整画布方向，最小化留白
   const adaptiveCanvasRatio = useMemo(() => {
@@ -47,13 +51,19 @@ export function FullModeEditor({
     return paperAspectRatio
   }, [sourceWidth, sourceHeight, paperAspectRatio])
 
-  // 构建编辑用缩略图 URL
+  const sizeInfo = useMemo(
+    () => (sourceWidth && sourceHeight ? createFullImageCropInfo(sourceWidth, sourceHeight, 'full') : undefined),
+    [sourceWidth, sourceHeight],
+  )
+
   const thumbnailUrl = useMemo(() => {
-    return buildOssCropUrl(imageUrl, undefined, {
-      shortWidth: thumbnailShortEdge,
+    return buildWatermarkedOutputUrl(imageUrl, sizeInfo, {
+      forPreview: true,
+      previewShortEdge: thumbnailShortEdge,
       ...imageCompressOptions,
+      watermark,
     })
-  }, [imageUrl, thumbnailShortEdge, imageCompressOptions])
+  }, [imageUrl, sizeInfo, thumbnailShortEdge, imageCompressOptions, watermark])
 
   return (
     <div className="absolute inset-0 bg-neutral-200 flex items-center justify-center">

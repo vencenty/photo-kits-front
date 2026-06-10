@@ -15,6 +15,7 @@ import { getActiveOrderNo, setActiveOrderNo } from '@/lib/order-context'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import { BusinessError, NetworkError, SystemError } from '@/lib/error-handler'
 import type { CropMode } from '@/lib/types'
+import { getSpecWatermarkPref, setSpecWatermarkPref } from '@/lib/spec-watermark-prefs'
 
 interface AddedSize {
   specId: number
@@ -25,6 +26,7 @@ interface AddedSize {
   height: number
   cropDefaultMode: CropMode
   cropAvailableModes: CropMode[]
+  dateWatermarkEnabled: boolean
   imageCount: number
   totalPrintCount: number
 }
@@ -105,11 +107,14 @@ export default function SelectSizePage() {
         height: spec.canvasHeight,
         cropDefaultMode: (sku?.cropDefaultMode || 'lomo') as CropMode,
         cropAvailableModes: (sku?.cropAvailableModes || ['cover', 'lomo', 'full']) as CropMode[],
+        dateWatermarkEnabled: orderNumber
+          ? getSpecWatermarkPref(orderNumber, spec.id)
+          : false,
         imageCount: spec.photoCount || 0,
         totalPrintCount: spec.photoCount || 0,
       }
     },
-    [catalog],
+    [catalog, orderNumber],
   )
 
   useEffect(() => {
@@ -198,6 +203,15 @@ export default function SelectSizePage() {
     }
   }
 
+  const handleToggleWatermark = (specId: number, enabled: boolean, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!orderNumber) return
+    setSpecWatermarkPref(orderNumber, specId, enabled)
+    setAddedSizes((prev) =>
+      prev.map((s) => (s.specId === specId ? { ...s, dateWatermarkEnabled: enabled } : s)),
+    )
+  }
+
   const handleSelectSize = (size: AddedSize) => {
     const currentOrderNo = orderNumber || getActiveOrderNo() || `ORDER-${Date.now()}`
     if (orderNumber) setActiveOrderNo(orderNumber)
@@ -215,6 +229,7 @@ export default function SelectSizePage() {
       ratio: size.width / size.height,
       cropDefaultMode: size.cropDefaultMode,
       cropAvailableModes: size.cropAvailableModes,
+      dateWatermarkEnabled: size.dateWatermarkEnabled,
       createdAt: new Date().toISOString(),
     }
 
@@ -346,7 +361,8 @@ export default function SelectSizePage() {
                 className="bg-white rounded-xl overflow-hidden shadow-sm active:bg-gray-50 transition-colors desktop-shadow desktop-hover"
                 onClick={() => handleSelectSize(size)}
               >
-                <div className="flex items-center px-4 py-3 md:py-4">
+                <div className="px-4 py-3 md:py-4">
+                <div className="flex items-center">
                   {/* 左侧信息 */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -391,6 +407,33 @@ export default function SelectSizePage() {
                     <ChevronRight className="w-5 h-5 text-gray-300 md:w-6 md:h-6" />
                   </div>
                 </div>
+                {!isOrderLocked && (
+                  <div
+                    className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div>
+                      <p className="text-sm text-gray-700 md:text-base">添加日期水印</p>
+                      <p className="text-xs text-gray-400 mt-0.5">从照片 EXIF 读取拍摄日期，叠加在右下角</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={size.dateWatermarkEnabled}
+                      onClick={(e) => handleToggleWatermark(size.specId, !size.dateWatermarkEnabled, e)}
+                      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                        size.dateWatermarkEnabled ? 'bg-[#ff4d6d]' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                          size.dateWatermarkEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
+                </div>
               </div>
             ))}
           </div>
@@ -399,7 +442,7 @@ export default function SelectSizePage() {
         {/* 底部提示 */}
         {!isLoading && addedSizes.length > 0 && (
           <p className="mt-6 text-center text-xs text-gray-400 md:text-sm">
-            点击规格可进入上传页面
+            可先开启日期水印，再点击规格进入上传
           </p>
         )}
       </div>

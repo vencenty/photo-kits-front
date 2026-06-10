@@ -208,9 +208,9 @@ function EditPageContent() {
         const result = await listPhotos(specId)
         
         if (result.photos && result.photos.length > 0) {
-          // 获取当前已有的图片（避免重复）
+          const latestImages = useStore.getState().images
           const existingImagesMap = new Map(
-            images
+            latestImages
               .filter(img => img.specId === currentSession.specId)
               .map(img => [img.id, img])
           )
@@ -468,6 +468,8 @@ function EditPageContent() {
     }
   }, [imageId, currentImageId])
 
+  const dateWatermarkEnabled = currentSession?.dateWatermarkEnabled ?? false
+
   if (isLoading || !image || !currentSession) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -498,6 +500,7 @@ function EditPageContent() {
         canvasHeight={currentSession.canvasHeight}
         cropDefaultMode={currentSession.cropDefaultMode}
         cropAvailableModes={currentSession.cropAvailableModes}
+        dateWatermarkEnabled={dateWatermarkEnabled}
         onSave={handleSave}
         onCancel={() => router.push(`/upload?specId=${currentSession?.specId}`)}
         onPrevious={handlePrevious}

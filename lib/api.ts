@@ -707,6 +707,7 @@ export interface PublicSkuItem {
   aspectRatio: number
   cropDefaultMode: string
   cropAvailableModes: string[]
+  dateWatermarkEnabled: number
   unitPrice: number
   sortOrder: number
 }

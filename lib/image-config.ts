@@ -15,6 +15,7 @@
  */
 
 import { toCdnUrl, isOssUrl } from '@/lib/url'
+import { buildDateWatermarkParam, resolveWatermarkOutputSize, type DateWatermarkOptions } from '@/lib/date-watermark'
 import type { SimpleCropInfo, CropMode } from './types'
 
 /**
@@ -302,6 +303,40 @@ export function stripOssImageProcessFromUrl(url: string): string {
 // 从 types.ts 重新导出，不再重复定义
 export type { SimpleCropInfo, CropMode } from './types'
 
+export interface BuildWatermarkedOutputUrlOptions {
+  /** true：按缩略图链（resize,s_N）算水印比例，与编辑预览一致 */
+  forPreview?: boolean
+  previewShortEdge?: number
+  watermark?: DateWatermarkOptions
+  quality?: number
+  format?: string
+  interlace?: number
+  isLandscape?: boolean
+}
+
+/**
+ * 构建输出图 URL（预览 / 保存冲印共用同一套水印比例算法）
+ * - 预览：forPreview + resize,s_N，水印按缩略图输出尺寸 × 比例
+ * - 保存：无 resize，水印按 crop/原图输出尺寸 × 同一比例 → 冲印观感与预览一致
+ */
+export function buildWatermarkedOutputUrl(
+  imageUrl: string,
+  sizeInfo: SimpleCropInfo | undefined,
+  options?: BuildWatermarkedOutputUrlOptions,
+): string {
+  const shortWidth = options?.forPreview
+    ? (options.previewShortEdge ?? EDITOR_THUMBNAIL_SHORT_EDGE)
+    : undefined
+  return buildOssCropUrl(imageUrl, sizeInfo, {
+    shortWidth,
+    quality: options?.quality,
+    format: options?.format,
+    interlace: options?.interlace,
+    isLandscape: options?.isLandscape,
+    watermark: options?.watermark,
+  })
+}
+
 /**
  * 构建 OSS 裁剪 URL
  * @param originalUrl 原图 URL
@@ -323,6 +358,8 @@ export function buildOssCropUrl(
     quality?: number
     format?: string
     interlace?: number
+    /** 日期水印（OSS watermark，在 crop 之后拼接） */
+    watermark?: DateWatermarkOptions
   }
 ): string {
   if (!originalUrl) return originalUrl
@@ -340,7 +377,7 @@ export function buildOssCropUrl(
     return originalUrl
   }
 
-  const { isLandscape, shortWidth, quality, format, interlace } = options || {}
+  const { isLandscape, shortWidth, quality, format, interlace, watermark } = options || {}
   const params: string[] = []
 
   // 只有满版（cover）才拼接 OSS crop；full / lomo 不应带裁剪参数
@@ -380,6 +417,22 @@ export function buildOssCropUrl(
   // 这样列表页展示时，横图会被旋转90度显示为竖图
   if (isLandscape) {
     params.push('rotate,90')
+  }
+
+  // 日期水印：crop/resize 之后；字号与边距均按输出图宽高比例计算
+  if (watermark?.text) {
+    let outputWidth = watermark.outputWidth
+    let outputHeight = watermark.outputHeight
+    if (outputWidth == null || outputHeight == null) {
+      const size = resolveWatermarkOutputSize(cropInfo, shortWidth)
+      outputWidth = size.width
+      outputHeight = size.height
+    }
+    params.push(buildDateWatermarkParam({
+      text: watermark.text,
+      outputWidth,
+      outputHeight,
+    }))
   }
 
   // 没有新的处理链时：非 OSS 原样返回；OSS 则去掉旧 x-oss-process（避免从 cover 切走后仍带 crop）

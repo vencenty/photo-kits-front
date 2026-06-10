@@ -3,7 +3,14 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Check, Lightbulb, ChevronLeft, ChevronRight, Loader2, Crop, Image as ImageIcon, Frame } from 'lucide-react'
 import { type Image as ImageType } from '@/lib/store'
-import { buildOssCropUrl, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
+import { buildOssCropUrl, buildWatermarkedOutputUrl, EDITOR_THUMBNAIL_SHORT_EDGE } from '@/lib/image-config'
+import { createFullImageCropInfo } from '@/lib/date-watermark'
+import {
+  fetchOssExifDate,
+  DATE_WATERMARK_MARGIN_RATIO,
+  DATE_WATERMARK_SHORT_EDGE_RATIO,
+  type DateWatermarkOptions,
+} from '@/lib/date-watermark'
 import type { CropMode, SimpleCropInfo } from '@/lib/types'
 import { calculateCoverCropSize } from '@/lib/utils'
 import { useImagePreload } from '@/lib/use-image-preload'
@@ -21,6 +28,8 @@ interface ImageEditorProps {
   canvasHeight: number
   cropDefaultMode?: CropMode
   cropAvailableModes?: CropMode[]
+  /** 客户是否选择添加 EXIF 日期水印 */
+  dateWatermarkEnabled?: boolean
   onSave: (saveData: SaveData) => void
   onCancel: () => void
   onPrevious?: () => void
@@ -42,6 +51,7 @@ export default function ImageEditor({
   canvasHeight,
   cropDefaultMode,
   cropAvailableModes,
+  dateWatermarkEnabled = false,
   onSave,
   onCancel,
   onPrevious,
@@ -79,6 +89,20 @@ export default function ImageEditor({
 
   const imageUrl = photoData.originalUrl || photoData.thumbnailUrl || ''
 
+  const [dateWatermarkText, setDateWatermarkText] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!dateWatermarkEnabled || !imageUrl) {
+      setDateWatermarkText(null)
+      return
+    }
+    let cancelled = false
+    fetchOssExifDate(imageUrl).then((text) => {
+      if (!cancelled) setDateWatermarkText(text)
+    })
+    return () => { cancelled = true }
+  }, [dateWatermarkEnabled, imageUrl, photoData.id])
+
   // 切图时按 props 同步裁剪状态（详情由 edit 页统一拉取，此处不再重复请求 detail）
   useEffect(() => {
     const photoId = photoData.id
@@ -105,6 +129,12 @@ export default function ImageEditor({
     }),
     [photoData.width, photoData.height]
   )
+
+  const watermark = useMemo((): DateWatermarkOptions | undefined => {
+    if (!dateWatermarkEnabled || !dateWatermarkText) return undefined
+    // outputShortEdge 由 buildOssCropUrl 按 resize/crop 链自动推算
+    return { text: dateWatermarkText }
+  }, [dateWatermarkEnabled, dateWatermarkText])
 
   // 相纸比例（固定，来自 select-size）
   const paperAspectRatio = useMemo(() => {
@@ -159,6 +189,12 @@ export default function ImageEditor({
   // 预加载前后图片
   useImagePreload(imageUrl, allImages, currentIndex, 5)
 
+  // EXIF 日期加载后，刷新 cover 模式的 outputUrl（补上水印）
+  useEffect(() => {
+    if (mode !== 'cover' || !coverCropInfo || !watermark) return
+    setCoverOutputUrl(buildWatermarkedOutputUrl(imageUrl, coverCropInfo, { watermark }))
+  }, [mode, coverCropInfo, watermark, imageUrl])
+
   // Cover 模式裁剪变化回调
   const handleCoverCropChange = useCallback((cropInfo: SimpleCropInfo | null, outputUrl: string) => {
     setCoverCropInfo(cropInfo)
@@ -211,23 +247,20 @@ export default function ImageEditor({
             height: (cropHeight / sourceSize.height) * 100,
           },
         }
-        outputUrl = buildOssCropUrl(imageUrl, cropInfo)
+        outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, { watermark })
       }
     } else {
       // full 或 lomo 模式（使用整张图片，不需要 croppedAreaPercent）
-      cropInfo = {
-        offsetX: 0,
-        offsetY: 0,
-        cropWidth: sourceSize.width,
-        cropHeight: sourceSize.height,
-        sourceWidth: sourceSize.width,
-        sourceHeight: sourceSize.height,
-        styleType: mode,
-      }
+      cropInfo = createFullImageCropInfo(
+        sourceSize.width,
+        sourceSize.height,
+        mode === 'full' ? 'full' : 'lomo',
+      )
+      outputUrl = buildWatermarkedOutputUrl(imageUrl, cropInfo, { watermark })
     }
 
     onSave({ cropInfo, outputUrl })
-  }, [mode, coverCropInfo, coverOutputUrl, sourceSize, imageUrl, cropAspectRatio, onSave])
+  }, [mode, coverCropInfo, coverOutputUrl, sourceSize, imageUrl, cropAspectRatio, watermark, onSave])
 
   // 渲染当前模式的编辑器
   const renderEditor = () => {
@@ -244,6 +277,7 @@ export default function ImageEditor({
             onCropChange={handleCoverCropChange}
             initialCropInfo={photoData.cropInfo}
             thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
+            watermark={watermark}
           />
         )
       case 'full':
@@ -256,6 +290,7 @@ export default function ImageEditor({
             paperAspectRatio={paperAspectRatio}
             imageCompressOptions={imageCompressOptions}
             thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
+            watermark={watermark}
           />
         )
       case 'lomo':
@@ -268,6 +303,7 @@ export default function ImageEditor({
             paperAspectRatio={paperAspectRatio}
             imageCompressOptions={imageCompressOptions}
             thumbnailShortEdge={EDITOR_THUMBNAIL_SHORT_EDGE}
+            watermark={watermark}
           />
         )
     }
@@ -296,12 +332,19 @@ export default function ImageEditor({
         {mode === 'cover' && (
           <p className="text-center text-red-400 text-sm md:text-xs mt-1">红色虚线区域为图像裁切区域参考，并非绝对精准，照片内容不希望有任何裁切的，一定要选择四周留白样式</p>
         )}
+        {dateWatermarkEnabled && (
+          <p className="text-center text-amber-300/90 text-sm md:text-xs mt-1">
+            {dateWatermarkText
+              ? `已开启日期水印，将叠加拍摄日期 ${dateWatermarkText}`
+              : '已开启日期水印，但未读取到 EXIF 拍摄日期，保存时不添加水印'}
+          </p>
+        )}
       </div>
 
       {/* 编辑区域：PC 上画布可略大 */}
       <div className="flex-1 flex items-center justify-center p-4 md:p-6 relative overflow-hidden min-h-0">
         <div
-          className="relative bg-white shadow-2xl overflow-hidden w-full max-w-[32rem] md:max-w-[36rem] lg:max-w-[42rem]"
+          className="relative bg-white shadow-2xl overflow-hidden w-full max-w-[32rem] md:max-w-[36rem] lg:max-w-[42rem] [container-type:size]"
           style={{
             aspectRatio: paperAspectRatio,
             maxHeight: '100%',
@@ -315,6 +358,19 @@ export default function ImageEditor({
             </div>
           )}
           {renderEditor()}
+          {dateWatermarkEnabled && dateWatermarkText && mode === 'cover' && (
+            <div
+              className="absolute z-20 text-white font-medium pointer-events-none leading-none"
+              style={{
+                right: `${DATE_WATERMARK_MARGIN_RATIO * 100}%`,
+                bottom: `${DATE_WATERMARK_MARGIN_RATIO * 100}%`,
+                fontSize: `${DATE_WATERMARK_SHORT_EDGE_RATIO * 100}cqmin`,
+                textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+              }}
+            >
+              {dateWatermarkText}
+            </div>
+          )}
         </div>
       </div>
 
