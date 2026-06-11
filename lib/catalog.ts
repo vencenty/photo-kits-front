@@ -22,9 +22,9 @@ export function isCatalogLoaded(): boolean {
   return catalog !== null
 }
 
-/** paperTypeId|photoSizeId */
-export function skuKey(paperTypeId: number, photoSizeId: number): string {
-  return `${paperTypeId}|${photoSizeId}`
+/** paperTypeId|paperSizeId */
+export function skuKey(paperTypeId: number, paperSizeId: number): string {
+  return `${paperTypeId}|${paperSizeId}`
 }
 
 export function getSkuById(skuId: number): PublicSkuItem | undefined {
@@ -33,10 +33,10 @@ export function getSkuById(skuId: number): PublicSkuItem | undefined {
 
 export function getSkuByPaperAndSize(
   paperTypeId: number,
-  photoSizeId: number,
+  paperSizeId: number,
 ): PublicSkuItem | undefined {
   return catalog?.skus.find(
-    (s) => s.paperTypeId === paperTypeId && s.photoSizeId === photoSizeId,
+    (s) => s.paperTypeId === paperTypeId && s.paperSizeId === paperSizeId,
   )
 }
 

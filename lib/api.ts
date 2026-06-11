@@ -211,7 +211,7 @@ export interface SpecInfo {
   skuId: number
   paperTypeId: number
   paperName: string
-  photoSizeId: number
+  paperSizeId: number
   sizeName: string
   canvasWidth: number
   canvasHeight: number
@@ -686,7 +686,7 @@ export interface PublicPaperType {
   sortOrder: number
 }
 
-export interface PublicPhotoSize {
+export interface PublicPaperSize {
   id: number
   name: string
   width: number
@@ -698,7 +698,7 @@ export interface PublicPhotoSize {
 export interface PublicSkuItem {
   id: number
   paperTypeId: number
-  photoSizeId: number
+  paperSizeId: number
   paperName: string
   paperDescription: string
   sizeName: string
@@ -714,7 +714,7 @@ export interface PublicSkuItem {
 
 export interface PublicSkuListResponse {
   paperTypes: PublicPaperType[]
-  sizes: PublicPhotoSize[]
+  sizes: PublicPaperSize[]
   skus: PublicSkuItem[]
 }
 

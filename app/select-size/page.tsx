@@ -53,7 +53,7 @@ export default function SelectSizePage() {
   const skuByKey = useMemo(() => {
     const map = new Map<string, PublicSkuListResponse['skus'][number]>()
     catalog?.skus.forEach((sku) => {
-      map.set(skuKey(sku.paperTypeId, sku.photoSizeId), sku)
+      map.set(skuKey(sku.paperTypeId, sku.paperSizeId), sku)
     })
     return map
   }, [catalog])
@@ -86,9 +86,9 @@ export default function SelectSizePage() {
   )
 
   const handleSizeOptionClick = useCallback(
-    (photoSizeId: number) => {
-      setSelectedSizeId(photoSizeId)
-      if (selectedPaperId && !skuByKey.has(skuKey(selectedPaperId, photoSizeId))) {
+    (paperSizeId: number) => {
+      setSelectedSizeId(paperSizeId)
+      if (selectedPaperId && !skuByKey.has(skuKey(selectedPaperId, paperSizeId))) {
         setSelectedPaperId(null)
       }
     },
