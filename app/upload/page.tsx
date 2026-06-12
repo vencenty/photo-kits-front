@@ -24,7 +24,7 @@ import {
 } from '@/lib/api'
 import { getActiveOrderNo } from '@/lib/order-context'
 import { getSpecWatermarkPref, setSpecWatermarkPref } from '@/lib/spec-watermark-prefs'
-import { buildPhotoOutput, simpleCropInfoToServerCropInfo } from '@/lib/auto-photo-output'
+import { buildPhotoOutput, simpleCropInfoToServerCropInfo, resolveIsAdjustedAfterOutput } from '@/lib/auto-photo-output'
 
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
@@ -110,6 +110,10 @@ function UploadPageContent() {
   const [unadjustedImages, setUnadjustedImages] = useState<ImageType[]>([]) // 未调整的照片列表
   const [showBatchCoverConfirmDialog, setShowBatchCoverConfirmDialog] = useState(false)
   const [batchCoverAcknowledgeInput, setBatchCoverAcknowledgeInput] = useState('')
+  const [showWatermarkBatchConfirmDialog, setShowWatermarkBatchConfirmDialog] = useState(false)
+  const [pendingWatermarkEnabled, setPendingWatermarkEnabled] = useState<boolean | null>(null)
+  const [isWatermarkBatchProcessing, setIsWatermarkBatchProcessing] = useState(false)
+  const [watermarkBatchProgress, setWatermarkBatchProgress] = useState('')
 
   // 虚拟滚动相关（列数与 grid-cols-3 md:4 lg:5 xl:6 一致，避免只占半屏）
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -328,13 +332,153 @@ function UploadPageContent() {
   }, [hasHydrated, sessionSpecId, sessionOrderNo, setCurrentSession])
 
   const handleToggleDateWatermark = useCallback(() => {
-    if (!currentSession || isOrderLocked) return
+    if (!currentSession || isOrderLocked || isWatermarkBatchProcessing || isUploading) return
     const orderNo = currentSession.orderNo || getActiveOrderNo()
     if (!orderNo) return
+
     const next = !currentSession.dateWatermarkEnabled
-    setSpecWatermarkPref(orderNo, currentSession.specId, next)
-    setCurrentSession({ ...currentSession, dateWatermarkEnabled: next })
-  }, [currentSession, isOrderLocked, setCurrentSession])
+    const eligibleCount = images.filter(
+      (img) =>
+        img.specId === currentSession.specId &&
+        img.uploadStatus?.ossUploaded &&
+        img.uploadStatus?.backendSynced &&
+        img.originalUrl &&
+        !img.originalUrl.startsWith('data:') &&
+        !img.originalUrl.startsWith('blob:'),
+    ).length
+
+    if (eligibleCount === 0) {
+      setSpecWatermarkPref(orderNo, currentSession.specId, next)
+      setCurrentSession({ ...currentSession, dateWatermarkEnabled: next })
+      return
+    }
+
+    setPendingWatermarkEnabled(next)
+    setShowWatermarkBatchConfirmDialog(true)
+  }, [currentSession, images, isOrderLocked, isWatermarkBatchProcessing, isUploading, setCurrentSession])
+
+  /** 方案 A：对本规格全部已上传照片批量重算 outputUrl 并写回后端 */
+  const applyDateWatermarkToAllPhotos = useCallback(
+    async (enabled: boolean) => {
+      if (!currentSession || isOrderLocked) return
+
+      const canvasW = currentSession.canvasWidth
+      const canvasH = currentSession.canvasHeight
+      const specImages = images.filter(
+        (img) =>
+          img.specId === currentSession.specId &&
+          img.uploadStatus?.ossUploaded &&
+          img.uploadStatus?.backendSynced &&
+          img.originalUrl &&
+          !img.originalUrl.startsWith('data:') &&
+          !img.originalUrl.startsWith('blob:'),
+      )
+
+      if (specImages.length === 0) return
+
+      setIsWatermarkBatchProcessing(true)
+      setWatermarkBatchProgress(`0/${specImages.length}`)
+
+      const defaultMode = cropConfig.defaultMode
+      let completed = 0
+
+      try {
+        const updateResults = await Promise.all(
+          specImages.map(async (img) => {
+            const mode = (img.cropMode || defaultMode) as CropMode
+            const sourceWidth = img.width || img.cropInfo?.sourceWidth || 0
+            const sourceHeight = img.height || img.cropInfo?.sourceHeight || 0
+            const originalUrl = img.originalUrl || ''
+
+            try {
+              const { cropInfo: simpleCropInfo, outputUrl } = await buildPhotoOutput({
+                originalUrl,
+                sourceWidth,
+                sourceHeight,
+                canvasWidth: canvasW,
+                canvasHeight: canvasH,
+                mode,
+                dateWatermarkEnabled: enabled,
+                existingCropInfo: img.cropInfo,
+              })
+
+              const isAdjusted = resolveIsAdjustedAfterOutput(simpleCropInfo, outputUrl)
+
+              const serverPayload: { photoId: string; cropInfo?: CropInfo; outputUrl?: string } = {
+                photoId: img.id,
+                outputUrl,
+              }
+              if (simpleCropInfo) {
+                serverPayload.cropInfo = simpleCropInfoToServerCropInfo(
+                  simpleCropInfo,
+                  canvasW,
+                  canvasH,
+                  originalUrl,
+                  !!img.isLandscape,
+                )
+              }
+
+              return {
+                serverPayload,
+                localUpdate: {
+                  id: img.id,
+                  updates: {
+                    cropInfo: simpleCropInfo,
+                    outputUrl,
+                    isAdjusted,
+                  } as Partial<ImageType>,
+                },
+              }
+            } catch (err) {
+              console.error('批量更新日期水印失败:', img.id, err)
+              return null
+            } finally {
+              completed += 1
+              setWatermarkBatchProgress(`${completed}/${specImages.length}`)
+            }
+          }),
+        )
+
+        const succeeded = updateResults.filter(Boolean) as NonNullable<(typeof updateResults)[number]>[]
+        if (succeeded.length === 0) {
+          alert('日期水印批量更新失败，请稍后重试')
+          return
+        }
+
+        updateImages(succeeded.map((r) => r.localUpdate))
+
+        await batchUpdatePhotos({
+          photos: succeeded.map((r) => r.serverPayload),
+        })
+
+        if (succeeded.length < specImages.length) {
+          alert(
+            `已处理 ${succeeded.length}/${specImages.length} 张，部分照片更新失败，请刷新后重试`,
+          )
+        }
+      } catch (error) {
+        console.error('批量更新日期水印失败:', error)
+        alert('批量更新日期水印失败，请稍后重试')
+      } finally {
+        setIsWatermarkBatchProcessing(false)
+        setWatermarkBatchProgress('')
+      }
+    },
+    [currentSession, images, cropConfig.defaultMode, isOrderLocked, updateImages],
+  )
+
+  const confirmWatermarkBatchApply = useCallback(async () => {
+    if (pendingWatermarkEnabled === null || !currentSession) return
+    const orderNo = currentSession.orderNo || getActiveOrderNo()
+    if (!orderNo) return
+
+    const enabled = pendingWatermarkEnabled
+    setShowWatermarkBatchConfirmDialog(false)
+    setPendingWatermarkEnabled(null)
+    setSpecWatermarkPref(orderNo, currentSession.specId, enabled)
+    setCurrentSession({ ...currentSession, dateWatermarkEnabled: enabled })
+    await applyDateWatermarkToAllPhotos(enabled)
+  }, [pendingWatermarkEnabled, currentSession, applyDateWatermarkToAllPhotos, setCurrentSession])
 
   // 从后端加载已上传的照片（按 photosListVersion 消费 forceRefetch，每版本只拉一次）
   useEffect(() => {
@@ -800,7 +944,7 @@ function UploadPageContent() {
                   cropInfo,
                   cropMode: cropConfig.defaultMode,
                   outputUrl,
-                  isAdjusted: true,
+                  isAdjusted: resolveIsAdjustedAfterOutput(cropInfo, outputUrl),
                 })
               } catch (watermarkErr) {
                 console.error('自动应用日期水印失败:', photoId, watermarkErr)
@@ -884,6 +1028,19 @@ function UploadPageContent() {
 
   const totalPrintCount = useMemo(() => images.reduce((sum, img) => sum + img.printCount, 0), [images])
   const unadjustedCandidates = useMemo(() => images.filter((img) => !img.isAdjusted), [images])
+
+  const watermarkEligibleCount = useMemo(() => {
+    if (!currentSession) return 0
+    return images.filter(
+      (img) =>
+        img.specId === currentSession.specId &&
+        img.uploadStatus?.ossUploaded &&
+        img.uploadStatus?.backendSynced &&
+        img.originalUrl &&
+        !img.originalUrl.startsWith('data:') &&
+        !img.originalUrl.startsWith('blob:'),
+    ).length
+  }, [images, currentSession])
 
   // 检查是否有未完成上传的图片
 
@@ -1077,6 +1234,7 @@ function UploadPageContent() {
           canvasHeight: canvasH,
           mode,
           dateWatermarkEnabled: watermarkOn,
+          existingCropInfo: mode === img.cropMode ? img.cropInfo : undefined,
         })
 
         if (simpleCropInfo?.styleType === 'cover') {
@@ -1105,7 +1263,7 @@ function UploadPageContent() {
             cropMode: mode,
             cropInfo: simpleCropInfo,
             outputUrl,
-            ...(watermarkOn ? { isAdjusted: true } : {}),
+            isAdjusted: resolveIsAdjustedAfterOutput(simpleCropInfo, outputUrl),
           },
         }
       }),
@@ -1118,9 +1276,8 @@ function UploadPageContent() {
     // 使用批量 API 同步到后端（传递计算好的 cropInfo 和 outputUrl）
     try {
       const result = await batchUpdatePhotos({
-        photoIds: targetIds,
         cropMode: mapCropModeToServer(mode),
-        photos: photosWithCropInfo, // 🎯 关键：传递前端计算好的裁切数据
+        photos: photosWithCropInfo,
       })
       console.log(`批量更新成功: ${result.updatedCount} 张照片`)
 
@@ -1242,14 +1399,17 @@ function UploadPageContent() {
         <div className="desktop-container bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 md:text-base">日期水印</p>
-            <p className="text-xs text-gray-400 mt-0.5">开启后，上传与批量裁剪时自动从 EXIF 读取拍摄日期并叠加在右下角</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              切换后对本规格全部已上传照片生效；无 EXIF 拍摄日期的照片不会显示水印
+            </p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={!!currentSession.dateWatermarkEnabled}
+            disabled={isWatermarkBatchProcessing || isUploading}
             onClick={handleToggleDateWatermark}
-            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
               currentSession.dateWatermarkEnabled ? 'bg-[#ff4d6d]' : 'bg-gray-200'
             }`}
           >
@@ -1259,6 +1419,16 @@ function UploadPageContent() {
               }`}
             />
           </button>
+        </div>
+      )}
+
+      {isWatermarkBatchProcessing && (
+        <div className="desktop-container bg-blue-50 px-4 py-3 flex items-center gap-2">
+          <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
+          <p className="text-sm text-blue-600 md:text-base">
+            正在批量{currentSession?.dateWatermarkEnabled ? '添加' : '移除'}日期水印
+            {watermarkBatchProgress ? `（${watermarkBatchProgress}）` : ''}…
+          </p>
         </div>
       )}
 
@@ -1761,6 +1931,59 @@ function UploadPageContent() {
                 }`}
               >
                 确认应用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量开关日期水印确认 */}
+      {showWatermarkBatchConfirmDialog && pendingWatermarkEnabled !== null && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            if (isWatermarkBatchProcessing) return
+            setShowWatermarkBatchConfirmDialog(false)
+            setPendingWatermarkEnabled(null)
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">
+              {pendingWatermarkEnabled ? '为本规格全部照片添加日期水印？' : '移除本规格全部照片的日期水印？'}
+            </h3>
+            <div className="text-sm text-gray-600 leading-relaxed space-y-2">
+              <p>
+                将对当前规格下 <strong className="text-gray-900">{watermarkEligibleCount}</strong> 张已上传照片
+                {pendingWatermarkEnabled ? '尝试添加' : '移除'}日期水印，裁切设置会保留。
+              </p>
+              {pendingWatermarkEnabled && (
+                <p className="text-gray-500">
+                  水印来自 EXIF 拍摄日期；无日期信息的照片不会出现水印。
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                disabled={isWatermarkBatchProcessing}
+                onClick={() => {
+                  setShowWatermarkBatchConfirmDialog(false)
+                  setPendingWatermarkEnabled(null)
+                }}
+                className="flex-1 py-3 border-2 border-gray-200 rounded-full font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={isWatermarkBatchProcessing}
+                onClick={() => void confirmWatermarkBatchApply()}
+                className="flex-1 py-3 rounded-full font-medium bg-[#ff4d6d] text-white hover:bg-[#ff3d5d] transition-colors disabled:opacity-50"
+              >
+                确认
               </button>
             </div>
           </div>

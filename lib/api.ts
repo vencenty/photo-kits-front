@@ -612,42 +612,62 @@ export async function updatePhoto(params: UpdatePhotoParams): Promise<{ message:
   })
 }
 
-export interface BatchUpdatePhotosParams {
+type BatchUpdatePhotoItem = {
+  photoId: string
+  cropInfo?: CropInfo
+  outputUrl?: string
+}
+
+/** 简单模式：photoIds + cropMode */
+type BatchUpdatePhotosSimpleParams = {
   photoIds: string[]
   cropMode?: string
-  /** 每张图片的详细更新数据（包含 cropInfo 和 outputUrl） */
-  photos?: {
-    photoId: string
-    cropInfo?: CropInfo
-    outputUrl?: string
-  }[]
+  photos?: never
 }
+
+/** 精确模式：photos[]，每条含 photoId */
+type BatchUpdatePhotosPreciseParams = {
+  photos: BatchUpdatePhotoItem[]
+  cropMode?: string
+  photoIds?: never
+}
+
+export type BatchUpdatePhotosParams = BatchUpdatePhotosSimpleParams | BatchUpdatePhotosPreciseParams
 
 /**
  * 批量更新照片
- * 后端路由: PUT /api/order/photos/batch
- * 
- * 支持两种模式：
- * 1. 简单模式：只传 photoIds 和 cropMode，服务端计算裁切坐标
- * 2. 精确模式：传 photos 数组，前端已计算好 cropInfo 和 outputUrl，服务端直接使用
- * 
- * 发给服务端的 URL 会统一转为 bucket 源站地址，避免服务端下载走 CDN 产生费用
+ *
+ * 两种模式（二选一）：
+ * 1. 简单模式：photoIds + cropMode
+ * 2. 精确模式：photos[]（含 photoId、cropInfo、outputUrl），无需 photoIds
  */
 export async function batchUpdatePhotos(params: BatchUpdatePhotosParams): Promise<{ updatedCount: number; message: string }> {
-  const body: BatchUpdatePhotosParams = {
-    photoIds: params.photoIds,
-    cropMode: params.cropMode,
-    photos: params.photos?.map((p) => ({
-      photoId: p.photoId,
-      cropInfo: p.cropInfo
-        ? {
-            ...p.cropInfo,
-            originalUrl: p.cropInfo.originalUrl ? toBucketUrl(p.cropInfo.originalUrl) : p.cropInfo.originalUrl,
-          }
-        : p.cropInfo,
-      outputUrl: p.outputUrl ? toBucketUrl(p.outputUrl) : p.outputUrl,
-    })),
+  const mappedPhotos =
+    'photos' in params && params.photos
+      ? params.photos.map((p) => ({
+          photoId: p.photoId,
+          cropInfo: p.cropInfo
+            ? {
+                ...p.cropInfo,
+                originalUrl: p.cropInfo.originalUrl ? toBucketUrl(p.cropInfo.originalUrl) : p.cropInfo.originalUrl,
+              }
+            : p.cropInfo,
+          outputUrl: p.outputUrl ? toBucketUrl(p.outputUrl) : p.outputUrl,
+        }))
+      : undefined
+
+  const body: Record<string, unknown> = {}
+  if (params.cropMode) {
+    body.cropMode = params.cropMode
   }
+  if (mappedPhotos?.length) {
+    body.photos = mappedPhotos
+  } else if ('photoIds' in params && params.photoIds?.length) {
+    body.photoIds = params.photoIds
+  } else {
+    throw new Error('batchUpdatePhotos: 请传 photos 或 photoIds')
+  }
+
   return request<{ updatedCount: number; message: string }>('/v1/order/photo/batchUpdate', {
     method: 'PUT',
     body: JSON.stringify(body),

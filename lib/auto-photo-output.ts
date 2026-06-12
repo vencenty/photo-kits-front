@@ -20,6 +20,50 @@ export interface BuildPhotoOutputParams {
   mode: CropMode
   /** 为 true 时尝试读 EXIF 并拼接 OSS 水印 */
   dateWatermarkEnabled: boolean
+  /** 已有裁剪（编辑页 / 先前保存），cover 满版时优先保留 */
+  existingCropInfo?: SimpleCropInfo | null
+}
+
+/** 是否为有效的满版裁剪框（非整图） */
+export function isValidCoverCropInfo(cropInfo?: SimpleCropInfo | null): boolean {
+  if (!cropInfo || cropInfo.styleType !== 'cover') return false
+  if (!cropInfo.cropWidth || !cropInfo.cropHeight) return false
+  return !isFullImageCrop(cropInfo)
+}
+
+/** 按模式解析用于 outputUrl 的 cropInfo（保留已有满版裁切） */
+export function resolvePhotoOutputCropInfo(
+  mode: CropMode,
+  sourceWidth: number,
+  sourceHeight: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  existingCropInfo?: SimpleCropInfo | null,
+): SimpleCropInfo | undefined {
+  if (mode === 'cover' && sourceWidth && sourceHeight) {
+    if (isValidCoverCropInfo(existingCropInfo)) {
+      return { ...existingCropInfo!, styleType: 'cover' }
+    }
+    return buildDefaultCoverCropInfo(sourceWidth, sourceHeight, canvasWidth, canvasHeight)
+  }
+  if ((mode === 'full' || mode === 'lomo') && sourceWidth && sourceHeight) {
+    return createFullImageCropInfo(
+      sourceWidth,
+      sourceHeight,
+      mode === 'full' ? 'full' : 'lomo',
+    )
+  }
+  return undefined
+}
+
+/** 批量开关水印后是否视为「已调整」 */
+export function resolveIsAdjustedAfterOutput(
+  cropInfo: SimpleCropInfo | undefined,
+  outputUrl: string,
+): boolean {
+  if (isValidCoverCropInfo(cropInfo)) return true
+  if (outputUrl.includes('watermark,text_')) return true
+  return false
 }
 
 export interface BuildPhotoOutputResult {
@@ -107,6 +151,7 @@ export async function buildPhotoOutput(
     canvasHeight,
     mode,
     dateWatermarkEnabled,
+    existingCropInfo,
   } = params
 
   if (!originalUrl || originalUrl.startsWith('data:') || originalUrl.startsWith('blob:')) {
@@ -120,12 +165,14 @@ export async function buildPhotoOutput(
   }
 
   if (mode === 'cover' && sourceWidth && sourceHeight) {
-    const cropInfo = buildDefaultCoverCropInfo(
+    const cropInfo = resolvePhotoOutputCropInfo(
+      mode,
       sourceWidth,
       sourceHeight,
       canvasWidth,
       canvasHeight,
-    )
+      existingCropInfo,
+    )!
     const outputUrl = watermark
       ? buildWatermarkedOutputUrl(originalUrl, cropInfo, {
           watermark: attachCoverWatermarkSize(watermark, cropInfo),
@@ -135,11 +182,14 @@ export async function buildPhotoOutput(
   }
 
   if ((mode === 'full' || mode === 'lomo') && sourceWidth && sourceHeight) {
-    const cropInfo = createFullImageCropInfo(
+    const cropInfo = resolvePhotoOutputCropInfo(
+      mode,
       sourceWidth,
       sourceHeight,
-      mode === 'full' ? 'full' : 'lomo',
-    )
+      canvasWidth,
+      canvasHeight,
+      existingCropInfo,
+    )!
     const outputUrl = watermark
       ? buildWatermarkedOutputUrl(originalUrl, cropInfo, { watermark })
       : buildOssCropUrl(originalUrl, undefined, {})
