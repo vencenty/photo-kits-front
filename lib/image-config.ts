@@ -312,6 +312,8 @@ export interface BuildWatermarkedOutputUrlOptions {
   format?: string
   interlace?: number
   isLandscape?: boolean
+  /** 满版列表预览：横图先 rotate 再叠水印，使水印落在可见裁剪框右下角 */
+  watermarkAfterRotate?: boolean
 }
 
 /**
@@ -334,6 +336,7 @@ export function buildWatermarkedOutputUrl(
     interlace: options?.interlace,
     isLandscape: options?.isLandscape,
     watermark: options?.watermark,
+    watermarkAfterRotate: options?.watermarkAfterRotate,
   })
 }
 
@@ -360,6 +363,8 @@ export function buildOssCropUrl(
     interlace?: number
     /** 日期水印（OSS watermark，在 crop 之后拼接） */
     watermark?: DateWatermarkOptions
+    /** 满版横图预览：rotate 后再叠水印 */
+    watermarkAfterRotate?: boolean
   }
 ): string {
   if (!originalUrl) return originalUrl
@@ -377,7 +382,7 @@ export function buildOssCropUrl(
     return originalUrl
   }
 
-  const { isLandscape, shortWidth, quality, format, interlace, watermark } = options || {}
+  const { isLandscape, shortWidth, quality, format, interlace, watermark, watermarkAfterRotate } = options || {}
   const params: string[] = []
 
   // 只有满版（cover）才拼接 OSS crop；full / lomo 不应带裁剪参数
@@ -413,8 +418,10 @@ export function buildOssCropUrl(
     }
   }
 
-  // 日期水印：crop/resize 之后、rotate 之前；锚在照片原始方向右下角（与保存 outputUrl 一致）
-  if (watermark?.text) {
+  // 日期水印：默认在 rotate 之前（与冲印 outputUrl 一致）
+  // 满版横图列表预览可设 watermarkAfterRotate，使水印落在旋转后可见区域右下角
+  const applyWatermark = () => {
+    if (!watermark?.text) return
     let outputWidth = watermark.outputWidth
     let outputHeight = watermark.outputHeight
     if (outputWidth == null || outputHeight == null) {
@@ -429,9 +436,17 @@ export function buildOssCropUrl(
     }))
   }
 
-  // 列表展示旋转：必须在 watermark 之后，避免水印落在「显示方向」右下角而非照片方向
+  if (watermark?.text && !watermarkAfterRotate) {
+    applyWatermark()
+  }
+
+  // 列表展示旋转：默认在 watermark 之后（冲印 outputUrl 不含 rotate）
   if (isLandscape) {
     params.push('rotate,90')
+  }
+
+  if (watermark?.text && watermarkAfterRotate) {
+    applyWatermark()
   }
 
   // 没有新的处理链时：非 OSS 原样返回；OSS 则去掉旧 x-oss-process（避免从 cover 切走后仍带 crop）

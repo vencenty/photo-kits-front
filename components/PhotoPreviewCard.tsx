@@ -13,10 +13,20 @@ interface PhotoPreviewCardProps {
   aspectRatio: number // 相纸宽高比
   /** 预览时覆盖的裁剪模式（用于批量编辑即时预览） */
   previewCropMode?: CropMode
+  /** 相纸尺寸（mm），满版预览需重算裁剪框 */
+  canvasWidth?: number
+  canvasHeight?: number
   onClick?: () => void
 }
 
-export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick }: PhotoPreviewCardProps) {
+export function PhotoPreviewCard({
+  image,
+  aspectRatio,
+  previewCropMode,
+  canvasWidth,
+  canvasHeight,
+  onClick,
+}: PhotoPreviewCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 如果没有 thumbnailUrl，显示占位符
@@ -49,6 +59,8 @@ export function PhotoPreviewCard({ image, aspectRatio, previewCropMode, onClick 
   const previewUrl = buildListPhotoPreviewUrl(image, {
     previewCropMode,
     isLandscape: effectiveIsLandscape,
+    canvasWidth,
+    canvasHeight,
     shortWidth: 300,
     quality: 70,
     format: 'jpg',

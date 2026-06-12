@@ -6,9 +6,8 @@ import { useShopRouter } from '@/lib/useShopRouter'
 import { ArrowLeft, Plus, X, Minus, Upload, Home, CheckSquare, Loader2 } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore, EditState, type SimpleCropInfo } from '@/lib/store'
-import { buildOssCropUrl } from '@/lib/image-config'
 import { CropInfo } from '@/lib/api'
-import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg, calculateCoverCropSize } from '@/lib/utils'
+import { generatePhotoId, compressImage, getImageDimensions, mapCropModeToServer, mapCropModeFromServer, convertToJpeg } from '@/lib/utils'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import type { Image as ImageType } from '@/lib/store'
 import { PhotoPreviewCard } from '@/components/PhotoPreviewCard'
@@ -25,6 +24,7 @@ import {
 } from '@/lib/api'
 import { getActiveOrderNo } from '@/lib/order-context'
 import { getSpecWatermarkPref, setSpecWatermarkPref } from '@/lib/spec-watermark-prefs'
+import { buildPhotoOutput, simpleCropInfoToServerCropInfo } from '@/lib/auto-photo-output'
 
 // 裁剪模式类型
 type CropMode = 'cover' | 'full' | 'lomo'
@@ -769,6 +769,43 @@ function UploadPageContent() {
               },
             })
             console.log('照片已同步到后端:', photoId)
+
+            const liveSession = useStore.getState().currentSession
+            if (liveSession?.dateWatermarkEnabled && ossUrl) {
+              try {
+                const { cropInfo, outputUrl } = await buildPhotoOutput({
+                  originalUrl: ossUrl,
+                  sourceWidth: dimensions.width,
+                  sourceHeight: dimensions.height,
+                  canvasWidth: liveSession.canvasWidth,
+                  canvasHeight: liveSession.canvasHeight,
+                  mode: cropConfig.defaultMode,
+                  dateWatermarkEnabled: true,
+                })
+                await updatePhoto({
+                  photoId,
+                  cropMode: mapCropModeToServer(cropConfig.defaultMode),
+                  cropInfo: cropInfo
+                    ? simpleCropInfoToServerCropInfo(
+                        cropInfo,
+                        liveSession.canvasWidth,
+                        liveSession.canvasHeight,
+                        ossUrl,
+                        needsRotation,
+                      )
+                    : undefined,
+                  outputUrl,
+                })
+                updateImage(photoId, {
+                  cropInfo,
+                  cropMode: cropConfig.defaultMode,
+                  outputUrl,
+                  isAdjusted: true,
+                })
+              } catch (watermarkErr) {
+                console.error('自动应用日期水印失败:', photoId, watermarkErr)
+              }
+            }
           } catch (error) {
             console.error('同步照片到后端失败:', error)
             // 更新上传状态为失败
@@ -1006,128 +1043,75 @@ function UploadPageContent() {
     if (selectedIds.length === 0 || !batchCropMode) return
     const targetIds = selectedIds
     const mode = batchCropMode
+    const watermarkOn = !!currentSession?.dateWatermarkEnabled
 
-    // 计算相纸比例
     const canvasW = currentSession?.canvasWidth || 127
     const canvasH = currentSession?.canvasHeight || 89
 
-    // 为每张图片计算 cropInfo 和 outputUrl
     const photosWithCropInfo: { photoId: string; cropInfo?: CropInfo; outputUrl?: string }[] = []
 
-    const updates = targetIds.map((id) => {
-      const img = imagesById.get(id)
-      if (!img) return null
+    const updateResults = await Promise.all(
+      targetIds.map(async (id) => {
+        const img = imagesById.get(id)
+        if (!img) return null
 
-      const newEditState: EditState = {
-        mode,
-        scale: 1,
-        x: 0,
-        y: 0,
-        rotation: img.isLandscape ? 90 : 0,
-        canvasWidth: canvasW,
-        canvasHeight: canvasH,
-      }
-
-      // 获取原图尺寸（考虑横图旋转后的尺寸）
-      const sourceWidth = img.width || 0
-      const sourceHeight = img.height || 0
-      const originalUrl = img.originalUrl || ''
-
-      // 计算相纸比例（根据图片方向调整）
-      let targetPaperRatio = canvasW / canvasH
-      if (sourceWidth && sourceHeight) {
-        const imageRatio = sourceWidth / sourceHeight
-        const isImageLandscape = imageRatio > 1
-        const isPaperLandscape = targetPaperRatio > 1
-        // 如果图片和相纸方向不一致，反转相纸比例
-        if ((isImageLandscape && !isPaperLandscape) || (!isImageLandscape && isPaperLandscape)) {
-          targetPaperRatio = 1 / targetPaperRatio
-        }
-      }
-
-      let simpleCropInfo: SimpleCropInfo | undefined
-      let outputUrl = originalUrl
-
-      if (mode === 'cover' && sourceWidth && sourceHeight) {
-        // cover 模式：计算居中裁切坐标
-        const { cropWidth, cropHeight, offsetX, offsetY } = calculateCoverCropSize(
-          sourceWidth,
-          sourceHeight,
-          targetPaperRatio
-        )
-
-        // 计算百分比坐标（用于恢复裁剪位置）
-        const croppedAreaPercent = {
-          x: (offsetX / sourceWidth) * 100,
-          y: (offsetY / sourceHeight) * 100,
-          width: (cropWidth / sourceWidth) * 100,
-          height: (cropHeight / sourceHeight) * 100,
-        }
-
-        simpleCropInfo = {
-          offsetX: Math.round(offsetX),
-          offsetY: Math.round(offsetY),
-          cropWidth: Math.round(cropWidth),
-          cropHeight: Math.round(cropHeight),
-          sourceWidth,
-          sourceHeight,
-          styleType: 'cover',
-          croppedAreaPercent,
-        }
-
-        // 生成提交给服务端的 outputUrl（不带 rotate，旋转由服务端/sync 按 cropInfo.rotateAngle 处理）
-        outputUrl = buildOssCropUrl(originalUrl, simpleCropInfo, {})
-
-        // 准备传给后端的数据
-        const cropInfoForServer: CropInfo = {
+        const newEditState: EditState = {
+          mode,
+          scale: 1,
+          x: 0,
+          y: 0,
+          rotation: img.isLandscape ? 90 : 0,
           canvasWidth: canvasW,
           canvasHeight: canvasH,
-          sourceWidth,
-          sourceHeight,
-          offsetX: Math.round(offsetX),
-          offsetY: Math.round(offsetY),
-          cropWidth: Math.round(cropWidth),
-          cropHeight: Math.round(cropHeight),
-          rotateAngle: img.isLandscape ? 90 : 0,
-          originalUrl,
-          styleType: 'cover',
         }
 
-        photosWithCropInfo.push({
-          photoId: id,
-          cropInfo: cropInfoForServer,
-          outputUrl,
-        })
-      } else if (mode === 'full' || mode === 'lomo') {
-        // full/lomo：不裁切，outputUrl 不带 OSS crop（仅满版才带 crop；原图 URL 上可能残留旧 crop，由 buildOssCropUrl 剥掉）
-        simpleCropInfo = sourceWidth && sourceHeight ? {
-          offsetX: 0,
-          offsetY: 0,
-          cropWidth: sourceWidth,
-          cropHeight: sourceHeight,
+        const sourceWidth = img.width || 0
+        const sourceHeight = img.height || 0
+        const originalUrl = img.originalUrl || ''
+
+        const { cropInfo: simpleCropInfo, outputUrl } = await buildPhotoOutput({
+          originalUrl,
           sourceWidth,
           sourceHeight,
-          styleType: mode,
-        } : undefined
-
-        outputUrl = buildOssCropUrl(originalUrl, undefined, {})
-
-        photosWithCropInfo.push({
-          photoId: id,
-          outputUrl,
+          canvasWidth: canvasW,
+          canvasHeight: canvasH,
+          mode,
+          dateWatermarkEnabled: watermarkOn,
         })
-      }
 
-      return {
-        id,
-        updates: {
-          editState: newEditState,
-          cropMode: mode,
-          cropInfo: simpleCropInfo,
-          outputUrl,
-        },
-      }
-    }).filter(Boolean) as { id: string; updates: Partial<ImageType> }[]
+        if (simpleCropInfo?.styleType === 'cover') {
+          photosWithCropInfo.push({
+            photoId: id,
+            cropInfo: simpleCropInfoToServerCropInfo(
+              simpleCropInfo,
+              canvasW,
+              canvasH,
+              originalUrl,
+              !!img.isLandscape,
+            ),
+            outputUrl,
+          })
+        } else {
+          photosWithCropInfo.push({
+            photoId: id,
+            outputUrl,
+          })
+        }
+
+        return {
+          id,
+          updates: {
+            editState: newEditState,
+            cropMode: mode,
+            cropInfo: simpleCropInfo,
+            outputUrl,
+            ...(watermarkOn ? { isAdjusted: true } : {}),
+          },
+        }
+      }),
+    )
+
+    const updates = updateResults.filter(Boolean) as { id: string; updates: Partial<ImageType> }[]
 
     updateImages(updates)
 
@@ -1258,7 +1242,7 @@ function UploadPageContent() {
         <div className="desktop-container bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 md:text-base">日期水印</p>
-            <p className="text-xs text-gray-400 mt-0.5">编辑保存时从 EXIF 读取拍摄日期，叠加在照片右下角</p>
+            <p className="text-xs text-gray-400 mt-0.5">开启后，上传与批量裁剪时自动从 EXIF 读取拍摄日期并叠加在右下角</p>
           </div>
           <button
             type="button"
@@ -1391,6 +1375,8 @@ function UploadPageContent() {
                     key={image.id}
                     image={image}
                     aspectRatio={paperRatio}
+                    canvasWidth={currentSession?.canvasWidth}
+                    canvasHeight={currentSession?.canvasHeight}
                     previewCropMode={isBatchMode && selectedIdSet.has(image.id) && batchCropMode ? batchCropMode : undefined}
                     onClick={
                       isBatchMode
