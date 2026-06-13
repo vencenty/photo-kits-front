@@ -11,7 +11,8 @@ import {
   type SpecInfo,
 } from '@/lib/api'
 import { preloadCatalog, skuKey, type PublicSkuListResponse } from '@/lib/catalog'
-import { getActiveOrderNo, setActiveOrderNo } from '@/lib/order-context'
+import { setActiveOrderNo } from '@/lib/order-context'
+import { OrderGateLoading, useRequireActiveOrder } from '@/lib/useRequireActiveOrder'
 import { isOrderLocked as checkOrderLocked } from '@/lib/constants'
 import { BusinessError, NetworkError, SystemError } from '@/lib/error-handler'
 import type { CropMode } from '@/lib/types'
@@ -33,7 +34,7 @@ interface AddedSize {
 
 export default function SelectSizePage() {
   const router = useShopRouter()
-  const [orderNumber, setOrderNumber] = useState<string | null>(null)
+  const orderNumber = useRequireActiveOrder()
   const [receiverName, setReceiverName] = useState<string>('')
   const [isOrderLocked, setIsOrderLocked] = useState(false)
   const [addedSizes, setAddedSizes] = useState<AddedSize[]>([])
@@ -116,11 +117,6 @@ export default function SelectSizePage() {
     },
     [catalog, orderNumber],
   )
-
-  useEffect(() => {
-    const activeOrder = getActiveOrderNo()
-    if (activeOrder) setOrderNumber(activeOrder)
-  }, [])
 
   useEffect(() => {
     preloadCatalog()
@@ -209,13 +205,13 @@ export default function SelectSizePage() {
   }
 
   const handleSelectSize = (size: AddedSize) => {
-    const currentOrderNo = orderNumber || getActiveOrderNo() || `ORDER-${Date.now()}`
-    if (orderNumber) setActiveOrderNo(orderNumber)
+    if (!orderNumber) return
+    setActiveOrderNo(orderNumber)
 
     const session: Session = {
       specId: size.specId,
       skuId: size.skuId,
-      orderNo: currentOrderNo,
+      orderNo: orderNumber,
       sizeName: `${size.paperName} ${size.sizeName}`,
       targetCount: 0,
       currentCount: size.imageCount,
@@ -261,6 +257,10 @@ export default function SelectSizePage() {
     } finally {
       setIsDeleting(null)
     }
+  }
+
+  if (!orderNumber) {
+    return <OrderGateLoading />
   }
 
   return (

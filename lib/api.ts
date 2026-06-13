@@ -23,20 +23,28 @@ import {
 } from './order-context'
 import { getShopHeaders } from './shop-context'
 
-// API 基础配置（开发环境局域网访问时，自动使用当前主机名 + 9999 端口）
+/** 生产同域部署：空字符串 → 请求 /api/...（与 p.vencenty.cc 网关配合） */
+const PROD_API_BASE_URL = ''
+const DEV_API_BASE_URL = 'http://localhost:8787'
+
+// API 基础配置（开发环境局域网访问时，自动使用当前主机名 + 8787 端口）
 function getApiBaseUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9999'
+  const configured = process.env.NEXT_PUBLIC_API_URL
   if (process.env.NODE_ENV === 'production') {
+    // 未配置时走同域相对路径，compose / 网关无需写死域名
+    if (configured === undefined || configured === '') {
+      return PROD_API_BASE_URL
+    }
     return configured
   }
   if (typeof window !== 'undefined') {
     const { hostname, protocol } = window.location
     if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      const apiPort = process.env.NEXT_PUBLIC_API_PORT || '9999'
+      const apiPort = process.env.NEXT_PUBLIC_API_PORT || '8787'
       return `${protocol}//${hostname}:${apiPort}`
     }
   }
-  return configured
+  return configured || DEV_API_BASE_URL
 }
 
 // 统一响应类型
